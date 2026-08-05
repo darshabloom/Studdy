@@ -21,3 +21,6 @@ export { auditEvents } from './audit/audit-events';
 export { statusTransitions } from './audit/status-transitions';
 export { domainEvents } from './audit/domain-events';
 export { outboxEntries } from './audit/outbox-entries';
+
+// platform
+export { globalReferenceSeq } from './platform/index';

@@ -1,5 +1,5 @@
 {
-  "id": "0c4555f4-9e5b-4b19-85a4-8f0861a6a04c",
+  "id": "c917b3bd-4644-4582-9953-67cfb3e7da77",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -123,8 +123,12 @@
           "tableFrom": "audit_events",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": ["actor_user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "actor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -274,8 +278,12 @@
           "tableFrom": "auth_identity_links",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -370,8 +378,12 @@
           "tableFrom": "contact_points",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -561,7 +573,9 @@
         "outbox_entries_idempotency_key_unique": {
           "name": "outbox_entries_idempotency_key_unique",
           "nullsNotDistinct": false,
-          "columns": ["idempotency_key"]
+          "columns": [
+            "idempotency_key"
+          ]
         }
       },
       "policies": {},
@@ -645,7 +659,9 @@
         "role_definitions_code_unique": {
           "name": "role_definitions_code_unique",
           "nullsNotDistinct": false,
-          "columns": ["code"]
+          "columns": [
+            "code"
+          ]
         }
       },
       "policies": {},
@@ -746,8 +762,12 @@
           "tableFrom": "status_transitions",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": ["actor_user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "actor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -879,8 +899,12 @@
           "tableFrom": "user_role_assignments",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -889,8 +913,12 @@
           "tableFrom": "user_role_assignments",
           "tableTo": "role_definitions",
           "schemaTo": "permissions",
-          "columnsFrom": ["role_definition_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "role_definition_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -899,8 +927,12 @@
           "tableFrom": "user_role_assignments",
           "tableTo": "users",
           "schemaTo": "identity",
-          "columnsFrom": ["assigned_by_user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "assigned_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1031,7 +1063,9 @@
         "users_reference_unique": {
           "name": "users_reference_unique",
           "nullsNotDistinct": false,
-          "columns": ["reference"]
+          "columns": [
+            "reference"
+          ]
         }
       },
       "policies": {},
@@ -1061,7 +1095,18 @@
     "support": "support",
     "tutors": "tutors"
   },
-  "sequences": {},
+  "sequences": {
+    "platform.global_reference_seq": {
+      "name": "global_reference_seq",
+      "schema": "platform",
+      "increment": "1",
+      "startWith": "10000001",
+      "minValue": "1",
+      "maxValue": "9223372036854775807",
+      "cache": "1",
+      "cycle": false
+    }
+  },
   "roles": {},
   "policies": {},
   "views": {},
