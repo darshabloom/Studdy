@@ -8,7 +8,7 @@ account-recovery secrets are committed to this repository.**
 
 Seeded by `pnpm db:seed` (scenario `clean_registration`). When local Supabase is running,
 matching Supabase Auth users are created so these accounts can sign in; auth emails land
-in the local inbox at http://127.0.0.1:54324.
+in the local inbox at http://127.0.0.1:14324.
 
 Shared local-only password: `Studdy-local-only-1` (synthetic; local environment only;
 defined in `packages/database/src/seed/synthetic-users.ts`).

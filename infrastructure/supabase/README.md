@@ -5,8 +5,8 @@ Environments (brief §11): **Local** → **Studdy Development** → **Studdy Sta
 shared between environments.
 
 - **Local** — `config.toml` here; `pnpm supabase:start` (requires Docker Desktop and the
-  Supabase CLI). Database on `127.0.0.1:54322`, API on `54321`, Studio on `54323`,
-  email inbox on `54324`.
+  Supabase CLI). Database on `127.0.0.1:14322`, API on `14321`, Studio on `14323`,
+  email inbox on `14324`.
 - **Development** — the `studdy` Development cloud project. Connection values live in
   `apps/web/.env.local` / Vercel environment settings, never in the repository. The
   service-role key is server-only and must never reach browser code.

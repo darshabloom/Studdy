@@ -51,19 +51,19 @@ jobs:
       - name: Apply migrations to an empty database
         run: pnpm db:migrate
         env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:14322/postgres
       - name: Load synthetic seed scenario
         run: pnpm db:seed
         env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:14322/postgres
       - name: Integration tests (includes RLS-enabled assertions)
         run: pnpm test:integration
         env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:14322/postgres
       - name: Migration idempotency — second run is a no-op
         run: pnpm db:migrate
         env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:14322/postgres
 
   e2e:
     name: Playwright end-to-end

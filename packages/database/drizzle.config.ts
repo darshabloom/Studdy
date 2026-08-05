@@ -11,7 +11,7 @@ export default defineConfig({
   schema: './src/schema/index.ts',
   out: './migrations/generated',
   dbCredentials: {
-    url: process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
+    url: process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:14322/postgres',
   },
   schemaFilter: [
     'identity',
