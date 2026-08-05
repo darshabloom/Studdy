@@ -1,0 +1,50 @@
+{
+  "$comment": "Intentional RLS classification for every application table (brief §8: CI fails if a new exposed table lacks a classification). Classifications: own_record_read | catalogue_read | server_only | public_view_backed | family_scope | tutor_scope | organisation_scope | manager_scope.",
+  "tables": {
+    "identity.users": {
+      "classification": "own_record_read",
+      "policy": "user_read_own_record",
+      "notes": "Own permanent user record; writes are server-authoritative."
+    },
+    "identity.auth_identity_links": {
+      "classification": "own_record_read",
+      "policy": "user_read_own_auth_links",
+      "notes": "Bridge to Supabase auth; own links only."
+    },
+    "identity.contact_points": {
+      "classification": "own_record_read",
+      "policy": "user_read_own_contact_points",
+      "notes": "Spec §13.7 policy naming example."
+    },
+    "identity.user_role_assignments": {
+      "classification": "own_record_read",
+      "policy": "user_read_own_role_assignments",
+      "notes": "Workspace resolution re-checks server-side; RLS is the second layer."
+    },
+    "permissions.role_definitions": {
+      "classification": "catalogue_read",
+      "policy": "authenticated_read_role_definitions",
+      "notes": "Active role catalogue readable by signed-in users."
+    },
+    "audit.audit_events": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Sensitive (spec §13.4): RLS enabled, no browser policy, append-only."
+    },
+    "audit.status_transitions": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Server-only in package one."
+    },
+    "audit.domain_events": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Server-only."
+    },
+    "audit.outbox_entries": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Sensitive (webhook/event plumbing); server-only."
+    }
+  }
+}

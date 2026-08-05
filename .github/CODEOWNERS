@@ -1,0 +1,12 @@
+# CODEOWNERS — Blueprint §27: explicit owner review is mandatory for
+# migrations, permissions, payments and infrastructure.
+
+* @darshabloom
+
+/packages/database/migrations/ @darshabloom
+/packages/database/src/schema/ @darshabloom
+/packages/permissions/ @darshabloom
+/packages/domain/src/payments/ @darshabloom
+/packages/integrations/src/payments/ @darshabloom
+/infrastructure/ @darshabloom
+/.github/ @darshabloom

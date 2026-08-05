@@ -6,13 +6,13 @@ You are helping me build the real Studdy platform. This is not a disposable prot
 
 Studdy is a public multi-tutor platform that combines:
 
-* A trusted tutor marketplace
-* A tutor operating system
-* Booking, availability and payment management
-* A continuous student learning record
-* Homework, progress, goals and lesson summaries
-* Parent and student visibility
-* Tutor onboarding, verification and administration
+- A trusted tutor marketplace
+- A tutor operating system
+- Booking, availability and payment management
+- A continuous student learning record
+- Homework, progress, goals and lesson summaries
+- Parent and student visibility
+- Tutor onboarding, verification and administration
 
 You are expected to produce working front-end and back-end code inside the real Studdy repository, following the supplied product, design, architecture, permission and database documents.
 

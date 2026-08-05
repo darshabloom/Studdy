@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import pypdf; print\\('pypdf ok'\\)\")",
+      "Bash(python -c \"import fitz; print\\('pymupdf ok'\\)\")",
+      "Bash(pip install *)",
+      "Bash(node \"C:/Users/darsh/AppData/Local/Temp/claude/E--ExternalStorage-Projects-Studdy/0cbd4b09-d469-4105-8384-65e18ed64c83/scratchpad/gen-workspaces.mjs\")",
+      "Bash(printf '# Inngest\\\\n\\\\nDurable background work \\(ADR-0003\\). First functions land with the booking slices; the directory is reserved so enabling them needs no restructuring.\\\\n')",
+      "Bash(rm -f infrastructure/inngest/.gitkeep infrastructure/vercel/.gitkeep)",
+      "Bash(pnpm install *)",
+      "PowerShell(Get-Volume | Where-Object DriveLetter | Select-Object DriveLetter, FileSystemType, @{n='FreeGB';e={[math]::Round\\($_.SizeRemaining/1GB,1\\)}}, @{n='SizeGB';e={[math]::Round\\($_.Size/1GB,1\\)}})",
+      "PowerShell(Start-Process powershell.exe -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','E:\\\\ExternalStorage\\\\StuddyDev-setup.ps1' -Verb RunAs -Wait; Get-Volume -DriveLetter S | Select-Object DriveLetter, FileSystemType, @{n='FreeGB';e={[math]::Round\\($_.SizeRemaining/1GB,1\\)}})",
+      "PowerShell(robocopy 'E:\\\\ExternalStorage\\\\Projects\\\\Studdy' 'S:\\\\Studdy' /E /XD node_modules .turbo .next /NFL /NDL /NJH | Select-Object -Last 8; if \\($LASTEXITCODE -le 7\\) { Write-Host \"robocopy OK \\(code $LASTEXITCODE\\)\" } else { throw \"robocopy failed: $LASTEXITCODE\" })"
+    ]
+  }
+}
