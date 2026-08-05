@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+packages/database/migrations/generated/
+.next/
+dist/
+.turbo/
+coverage/
+playwright-report/
+test-results/
