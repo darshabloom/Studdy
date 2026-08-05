@@ -1,0 +1,111 @@
+/*
+ * Studdy design tokens as CSS custom properties + Tailwind v4 theme.
+ * Source of truth mirrors src/tokens/*.ts — keep in sync (unit-tested values).
+ * Token values are authored for PR1 and pending approval via preview.
+ */
+
+@theme {
+  /* Brand */
+  --color-brand-purple-deep: #2e1065;
+  --color-brand-purple: #6d28d9;
+  --color-brand-purple-mid: #7c3aed;
+  --color-brand-lavender: #ede9fe;
+  --color-brand-green-deep: #14532d;
+  --color-brand-green: #15803d;
+  --color-brand-green-pale: #dcfce7;
+
+  /* Surfaces (warm neutrals) */
+  --color-surface-page: #faf8f5;
+  --color-surface-card: #ffffff;
+  --color-surface-card-secondary: #f5f2ed;
+  --color-surface-border: #e7e2da;
+  --color-surface-warning-tint: #fef3c7;
+  --color-surface-critical-tint: #fee2e2;
+
+  /* Text */
+  --color-text-primary: #1c1917;
+  --color-text-secondary: #57534e;
+  --color-text-muted: #6f6862;
+  --color-text-on-brand: #ffffff;
+
+  /* Interactive */
+  --color-action-primary: #6d28d9;
+  --color-action-primary-hover: #5b21b6;
+  --color-action-primary-active: #4c1d95;
+  --color-focus-ring: #7c3aed;
+
+  /* Semantic status */
+  --color-status-information: #1d4ed8;
+  --color-status-information-bg: #dbeafe;
+  --color-status-information-border: #93c5fd;
+  --color-status-success: #15803d;
+  --color-status-success-bg: #dcfce7;
+  --color-status-success-border: #86efac;
+  --color-status-warning: #b45309;
+  --color-status-warning-bg: #fef3c7;
+  --color-status-warning-border: #fcd34d;
+  --color-status-risk: #c2410c;
+  --color-status-risk-bg: #ffedd5;
+  --color-status-risk-border: #fdba74;
+  --color-status-critical: #b91c1c;
+  --color-status-critical-bg: #fee2e2;
+  --color-status-critical-border: #fca5a5;
+  --color-status-neutral: #57534e;
+  --color-status-neutral-bg: #f5f5f4;
+  --color-status-neutral-border: #d6d3d1;
+  --color-status-restricted: #475569;
+  --color-status-restricted-bg: #f1f5f9;
+  --color-status-restricted-border: #cbd5e1;
+
+  /* Spacing scale (doc 01 §7.2) */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 24px;
+  --spacing-6: 32px;
+  --spacing-7: 48px;
+  --spacing-8: 64px;
+  --spacing-9: 96px;
+
+  /* Radii */
+  --radius-gentle: 6px;
+  --radius-medium: 10px;
+  --radius-pill: 999px;
+
+  /* Shadows — overlay only; cards/tables carry none */
+  --shadow-overlay: 0 8px 24px rgb(28 25 23 / 0.14), 0 2px 6px rgb(28 25 23 / 0.08);
+
+  /* Typography — app layers set --font-inter / --font-fraunces via next/font. */
+  --font-sans: var(--font-inter, 'Inter'), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces, 'Fraunces'), Georgia, ui-serif, serif;
+
+  /* Breakpoints */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Focus visibly stronger than hover (doc 01 §6). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-gentle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

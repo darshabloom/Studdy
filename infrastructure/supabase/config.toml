@@ -1,0 +1,46 @@
+# Supabase local development configuration (brief §11 — Local environment).
+# Started via `pnpm supabase:start` (supabase start --workdir infrastructure).
+# Local only: no cloud credentials live here.
+
+project_id = "studdy-local"
+
+[api]
+enabled = true
+port = 14321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 14322
+shadow_port = 14320
+major_version = 15
+
+[studio]
+enabled = true
+port = 14323
+
+# Local email testing inbox — auth emails land here, nothing is sent for real.
+[inbucket]
+enabled = true
+port = 14324
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/verify"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[analytics]
+enabled = false

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  STUDDY_ENVIRONMENT: local
+  NEXT_PUBLIC_STUDDY_ENVIRONMENT: local
+
+jobs:
+  checks:
+    name: Typecheck, lint, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format
+      - run: pnpm test
+      - run: pnpm check:rls
+      - run: pnpm build
+
+  database:
+    name: Migrations, seeds, integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase
+        run: supabase start --workdir infrastructure
+      - name: Apply migrations to an empty database
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:14322/postgres
+      - name: Load synthetic seed scenario
+        run: pnpm db:seed
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:14322/postgres
+      - name: Integration tests (includes RLS-enabled assertions)
+        run: pnpm test:integration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:14322/postgres
+      - name: Migration idempotency — second run is a no-op
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:14322/postgres
+
+  e2e:
+    name: Playwright end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @studdy/web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
+
+  secret-scan:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

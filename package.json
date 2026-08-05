@@ -1,0 +1,48 @@
+{
+  "name": "studdy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Studdy — the platform for better tutoring.",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22 <25",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "test:e2e": "turbo run test:e2e",
+    "db:generate": "pnpm --filter @studdy/database db:generate",
+    "db:migrate": "pnpm --filter @studdy/database db:migrate",
+    "db:seed": "pnpm --filter @studdy/database db:seed",
+    "db:reset": "pnpm --filter @studdy/database db:reset",
+    "supabase:start": "supabase start --workdir infrastructure",
+    "supabase:stop": "supabase stop --workdir infrastructure",
+    "check:rls": "node scripts/check-rls-classification.mjs",
+    "check:boundaries": "turbo run lint --filter=@studdy/domain"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.0",
+    "eslint": "^9.30.0",
+    "prettier": "^3.6.0",
+    "supabase": "^2.111.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.35.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@tailwindcss/oxide",
+      "esbuild",
+      "sharp",
+      "supabase"
+    ]
+  },
+  "type": "module"
+}

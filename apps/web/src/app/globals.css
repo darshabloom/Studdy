@@ -1,0 +1,8 @@
+@import 'tailwindcss';
+@import '@studdy/design-system/styles/tokens.css';
+
+body {
+  background-color: var(--color-surface-page);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
