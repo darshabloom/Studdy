@@ -12,6 +12,7 @@ export { users } from './identity/users';
 export { authIdentityLinks } from './identity/auth-identity-links';
 export { contactPoints } from './identity/contact-points';
 export { userRoleAssignments } from './identity/user-role-assignments';
+export { userPreferences } from './identity/user-preferences';
 
 // permissions
 export { roleDefinitions } from './permissions/role-definitions';

@@ -1,6 +1,31 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { assertDestructiveCommandAllowed } from '@studdy/configuration';
 import { seedCleanRegistration } from './scenarios/clean-registration';
+
+// Local convenience: load apps/web/.env.local so seeding can create Supabase
+// auth users without manually exporting env vars. Explicit env always wins.
+try {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+  const envFile = readFileSync(join(repoRoot, 'apps', 'web', '.env.local'), 'utf8');
+  for (const line of envFile.split('\n')) {
+    const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
+    if (match !== null && match[1] !== undefined && process.env[match[1]] === undefined) {
+      process.env[match[1]] = match[2];
+    }
+  }
+} catch {
+  // No .env.local — CI and cloud environments provide env directly.
+}
+
+if (process.env['SUPABASE_SERVICE_ROLE_KEY'] === undefined) {
+  console.warn(
+    'WARNING: SUPABASE_SERVICE_ROLE_KEY is not set — synthetic accounts will be seeded ' +
+      'without Supabase Auth users and will NOT be able to sign in.',
+  );
+}
 
 /**
  * Scenario-based seeding (Blueprint §5): `pnpm db:seed --scenario clean_registration`.

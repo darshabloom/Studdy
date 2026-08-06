@@ -17,6 +17,8 @@ export const users = identitySchema.table('users', {
     .default(sql`'USER-' || lpad(nextval('platform.global_reference_seq')::text, 8, '0')`),
   legalName: text('legal_name'),
   preferredName: text('preferred_name'),
+  /** Collected at /welcome (approved decision, 6 Aug 2026). Legal name stays deferred. */
+  familyName: text('family_name'),
   displayName: text('display_name').notNull(),
   dateOfBirth: date('date_of_birth'),
   countryCode: char('country_code', { length: 2 }).notNull(),

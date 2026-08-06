@@ -3,6 +3,7 @@ import { ensureIdentityForAuthUser } from '@studdy/database';
 import type { ActiveRoleAssignment } from '@studdy/domain';
 import { availableWorkspaces } from '@studdy/domain/identity';
 import type { RoleCode, WorkspaceCode } from '@studdy/permissions';
+import { WORKSPACE_CODES } from '@studdy/permissions';
 import { createSupabaseServerClient } from '../supabase/server';
 
 export interface ResolvedIdentity {
@@ -11,7 +12,11 @@ export interface ResolvedIdentity {
   readonly studdyUserId: string | null;
   readonly displayName: string | null;
   readonly roleAssignments: readonly ActiveRoleAssignment[];
+  readonly pendingRoleCodes: readonly string[];
   readonly workspaces: readonly WorkspaceCode[];
+  readonly lastActiveWorkspaceCode: WorkspaceCode | null;
+  /** True when the user has not completed /welcome (no live role assignment). */
+  readonly needsSetup: boolean;
   /** True when the database was reachable — otherwise workspace data is unknown. */
   readonly databaseAvailable: boolean;
 }
@@ -36,7 +41,10 @@ export async function resolveIdentity(): Promise<ResolvedIdentity | null> {
     studdyUserId: null,
     displayName: null,
     roleAssignments: [],
+    pendingRoleCodes: [],
     workspaces: [],
+    lastActiveWorkspaceCode: null,
+    needsSetup: false,
     databaseAvailable: false,
   };
 
@@ -62,13 +70,22 @@ export async function resolveIdentity(): Promise<ResolvedIdentity | null> {
       scopeId: assignment.scopeId,
     }));
 
+    const saved = record.lastActiveWorkspaceCode;
+    const savedWorkspace =
+      saved !== null && (WORKSPACE_CODES as readonly string[]).includes(saved)
+        ? (saved as WorkspaceCode)
+        : null;
+
     return {
       authUserId: user.id,
       email: user.email ?? null,
       studdyUserId: record.studdyUserId,
       displayName: record.displayName,
       roleAssignments: active,
+      pendingRoleCodes: record.pendingRoleCodes,
       workspaces: availableWorkspaces(active),
+      lastActiveWorkspaceCode: savedWorkspace,
+      needsSetup: !record.hasAnyRoleAssignment,
       databaseAvailable: true,
     };
   } catch {

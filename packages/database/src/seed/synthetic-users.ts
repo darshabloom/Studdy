@@ -7,6 +7,8 @@ export interface SyntheticUser {
   readonly email: string;
   readonly displayName: string;
   readonly roleCodes: readonly string[];
+  /** Assignment status per role code; defaults to active. */
+  readonly roleStatus?: Readonly<Record<string, 'active' | 'pending' | 'suspended'>>;
   /** Deterministic auth UUID used when Supabase Auth is not seeding (CI plain Postgres). */
   readonly deterministicAuthId: string;
 }
@@ -72,6 +74,15 @@ export const SYNTHETIC_USERS: readonly SyntheticUser[] = [
     email: 'restricted.tutor@local.studdy.test',
     displayName: 'Synthetic Restricted Tutor',
     roleCodes: ['tutor'],
+    roleStatus: { tutor: 'suspended' },
     deterministicAuthId: '00000000-0000-4000-9000-000000000010',
+  },
+  {
+    // Multi-role account exercising the workspace chooser (documented
+    // extension of the brief §12 list).
+    email: 'parent.tutor@local.studdy.test',
+    displayName: 'Synthetic Parent-Tutor',
+    roleCodes: ['parent_guardian', 'tutor'],
+    deterministicAuthId: '00000000-0000-4000-9000-000000000011',
   },
 ] as const;

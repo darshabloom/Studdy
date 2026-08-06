@@ -7,6 +7,10 @@ export {
 export * as schema from './schema/index';
 export {
   ensureIdentityForAuthUser,
+  completeAccountSetup,
+  setLastActiveWorkspace,
+  recordAuthAuditEvent,
+  type CompleteAccountSetupInput,
   type EnsureIdentityInput,
   type IdentityResolutionRecord,
   type IdentityRoleAssignmentRecord,

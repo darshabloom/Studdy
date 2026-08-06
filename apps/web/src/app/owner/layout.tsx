@@ -16,7 +16,7 @@ export const metadata = { title: 'Platform Owner workspace' };
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <WorkspaceChrome accepts={['platform_owner']} navItems={NAV_ITEMS} homeHref="/owner">
+    <WorkspaceChrome requireMfa accepts={['platform_owner']} navItems={NAV_ITEMS} homeHref="/owner">
       {children}
     </WorkspaceChrome>
   );
