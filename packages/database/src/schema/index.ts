@@ -25,3 +25,22 @@ export { outboxEntries } from './audit/outbox-entries';
 
 // platform
 export { globalReferenceSeq } from './platform/index';
+
+// families
+export { familyAccounts } from './families/family-accounts';
+export { familyMemberships } from './families/family-memberships';
+
+// students
+export { studentProfiles } from './students/student-profiles';
+export { studentSubjectSections } from './students/student-subject-sections';
+export { subjectSectionShortlistEntries } from './students/subject-section-shortlist-entries';
+
+// tutors
+export { tutorProfiles } from './tutors/tutor-profiles';
+export { tutorVerifications } from './tutors/tutor-verifications';
+
+// services
+export { services, serviceVersions } from './services/services';
+
+// platform reference data
+export { subjects } from './platform/subjects';

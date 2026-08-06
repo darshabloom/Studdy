@@ -50,6 +50,56 @@
       "classification": "server_only",
       "policy": null,
       "notes": "Sensitive (webhook/event plumbing); server-only."
+    },
+    "families.family_accounts": {
+      "classification": "family_scope",
+      "policy": "member_read_own_family_account",
+      "notes": "Readable by active members of that family only."
+    },
+    "families.family_memberships": {
+      "classification": "family_scope",
+      "policy": "member_read_own_family_memberships",
+      "notes": "Basis of family scope; own families only."
+    },
+    "students.student_profiles": {
+      "classification": "family_scope",
+      "policy": "family_or_self_read_student_profiles",
+      "notes": "Dependent via family link; independent via own user_id."
+    },
+    "students.student_subject_sections": {
+      "classification": "family_scope",
+      "policy": "family_or_self_read_subject_sections",
+      "notes": "Inherits accessible student profiles."
+    },
+    "students.subject_section_shortlist_entries": {
+      "classification": "family_scope",
+      "policy": "family_or_self_read_shortlist_entries",
+      "notes": "Saved shortlist; inherits subject-section scope. Cap of 3 enforced by CHECK + partial unique index."
+    },
+    "tutors.tutor_profiles": {
+      "classification": "public_view_backed",
+      "policy": "public_read_visible_tutor_profiles",
+      "notes": "Authenticated read of publicly visible tutors only. NO anon grant — anon reads public.public_tutor_search."
+    },
+    "tutors.tutor_verifications": {
+      "classification": "public_view_backed",
+      "policy": "public_read_visible_tutor_verifications",
+      "notes": "Labels for visible tutors; no anon grant."
+    },
+    "services.services": {
+      "classification": "public_view_backed",
+      "policy": "public_read_published_services",
+      "notes": "Published services only; no anon grant."
+    },
+    "services.service_versions": {
+      "classification": "public_view_backed",
+      "policy": "public_read_current_service_versions",
+      "notes": "Current versions of published services; no anon grant."
+    },
+    "platform.subjects": {
+      "classification": "catalogue_read",
+      "policy": "anyone_read_active_subjects",
+      "notes": "Reference data; readable by anon and authenticated."
     }
   }
 }

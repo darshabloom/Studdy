@@ -8,14 +8,26 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
  * layer only — every workspace layout re-resolves identity, role assignments
  * and workspace server-side. Entering a protected URL is never sufficient.
  */
-const PROTECTED_PREFIXES = ['/parent', '/tutor', '/student', '/organisation', '/manager', '/owner'];
+const PROTECTED_PREFIXES = [
+  '/parent',
+  '/tutor',
+  '/student',
+  '/organisation',
+  '/manager',
+  '/owner',
+  '/shortlist',
+  '/welcome',
+];
 
 export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const isProtected = PROTECTED_PREFIXES.some((prefix) =>
-    request.nextUrl.pathname.startsWith(prefix),
+  // Segment-aware: a bare prefix test would treat the PUBLIC /tutors
+  // discovery page as the protected /tutor workspace.
+  const { pathname } = request.nextUrl;
+  const isProtected = PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 
   if (url === undefined || anonKey === undefined) {

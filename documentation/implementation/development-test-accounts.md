@@ -38,3 +38,15 @@ Available now: `clean_registration`. Planned (land with their slices):
 Development cloud accounts use test email addresses controlled by Darsha (Parent,
 Independent student, Tutor A/B/C, Platform Manager, Platform Owner). To be created when
 the Development environment is wired up; recorded here **without** passwords.
+
+## Seeded tutors (scenario: clean_registration / discovery_tutors)
+
+All carry source_type_code = development_seed and are labelled as example profiles in the
+interface. The public view deliberately does NOT expose that code.
+
+| Tutor                    | Subjects              | Years | Format             | From | Visibility                                               |
+| ------------------------ | --------------------- | ----- | ------------------ | ---- | -------------------------------------------------------- |
+| Aroha (tutor.a)          | Mathematics           | 7-10  | Online             | $35  | Public, new to Studdy                                    |
+| James (tutor.b)          | Mathematics, Calculus | 10-13 | Online + in person | $55  | Public, experienced                                      |
+| Mei (tutor.c)            | English               | 7-12  | Online             | $40  | Public                                                   |
+| Riley (restricted.tutor) | Mathematics           | 7-13  | Online             | $10  | SUSPENDED — negative fixture, must never appear publicly |

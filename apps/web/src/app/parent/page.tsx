@@ -1,10 +1,16 @@
-import { EmptyState } from '@studdy/design-system';
+import { redirect } from 'next/navigation';
+import { SupportDashboard } from '@/components/dashboard/support-dashboard';
+import { resolveDiscoveryContext } from '@/lib/discovery/context';
 
-export default function Page() {
+export default async function ParentDashboardPage() {
+  const context = await resolveDiscoveryContext();
+  if (context === null) redirect('/sign-in?next=%2Fparent');
+
   return (
-    <EmptyState
-      title="Welcome to your parent workspace"
-      description="Students, bookings and progress will appear here. Family and student onboarding is the next release — after that you will add a student, discover tutors and send your first lesson requests."
+    <SupportDashboard
+      context={context}
+      addStudentHref="/parent/students/new"
+      addSubjectHref="/parent/subjects/new"
     />
   );
 }

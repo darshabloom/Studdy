@@ -49,7 +49,8 @@ test.describe('identity and authentication flows', () => {
     await page.getByRole('button', { name: 'Continue' }).click();
 
     await expect(page).toHaveURL(/\/parent/);
-    await expect(page.getByText('Welcome to your parent workspace')).toBeVisible();
+    // The parent dashboard now opens on the add-a-student empty state.
+    await expect(page.getByText('Add your first student')).toBeVisible();
   });
 
   test('independent student under-18 is refused; 18+ declaration proceeds', async ({ page }) => {

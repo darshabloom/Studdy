@@ -39,10 +39,10 @@ export default defineConfig({
     {
       name: 'mobile-chromium',
       use: { ...devices['Pixel 7'] },
-      // Identity flows mutate shared seeded accounts (preferences, sessions);
-      // running them concurrently in two projects races. Functional flow
-      // coverage runs on desktop; mobile keeps layout-facing specs.
-      testIgnore: /identity-flows/,
+      // Journey specs mutate shared seeded accounts; running them concurrently
+      // in two projects races. Functional coverage runs on desktop; mobile
+      // keeps the read-only layout specs.
+      testIgnore: /identity-flows|family-students-discovery/,
     },
   ],
   webServer: {
