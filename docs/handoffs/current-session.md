@@ -42,6 +42,14 @@ request and temporary-hold experience, the Fable security review with its findin
 and the full suite run. **Do not merge without explicit approval.**
 **Working tree:** clean. Nothing is waiting to be committed.
 
+> **CI has not run on this branch.** There are zero GitHub Actions runs for
+> `feat/intended-lesson-request` — not a broken workflow (`CI` is active and ran
+> successfully on PR3's branch), most likely exhausted Actions minutes or a repository
+> restriction. **Check the Actions tab and billing before relying on CI.** All verification
+> reported for this branch was run locally against a real database. The one thing local
+> runs do not fully substitute for is proving migrations apply from an empty database on a
+> fresh CI Supabase instance.
+
 **Merged so far:** PR1 bootstrap (`91931e5`), PR2 identity (`d3116ed`), PR3 family/students/discovery (`51c0135`).
 
 **Repository location: `S:\Studdy`.** Not `E:\ExternalStorage\Projects\Studdy` — that path
