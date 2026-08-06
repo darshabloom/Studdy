@@ -103,6 +103,11 @@ export default async function TutorsPage({
               <span className="font-medium text-text-primary">{student.preferredName}</span> —{' '}
               {activeSection.subjectDisplayName}
             </p>
+          ) : context !== null ? (
+            <p className="mt-2 text-text-secondary">
+              Browsing all tutors. Choose a subject from your dashboard to save a shortlist for a
+              particular student.
+            </p>
           ) : (
             <p className="mt-2 text-text-secondary">
               Browse tutors on Studdy. Sign in and add a subject to save a shortlist.
@@ -119,6 +124,25 @@ export default async function TutorsPage({
                 <Link href={`/shortlist/${activeSection.subjectSectionId}`}>Review shortlist</Link>
               </Button>
             ) : null}
+          </div>
+        ) : context !== null && context.subjectSections.length > 0 ? (
+          // Signed in with subjects but browsing unscoped: offer the context.
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-text-secondary">Shortlist for:</span>
+            {context.subjectSections.slice(0, 3).map((candidate) => {
+              const owner = context.students.find(
+                (person) => person.studentProfileId === candidate.studentProfileId,
+              );
+              return (
+                <Button key={candidate.subjectSectionId} variant="secondary" size="sm" asChild>
+                  <Link href={`/tutors?section=${candidate.subjectSectionId}`}>
+                    {owner === undefined
+                      ? candidate.subjectDisplayName
+                      : `${owner.preferredName} · ${candidate.subjectDisplayName}`}
+                  </Link>
+                </Button>
+              );
+            })}
           </div>
         ) : null}
       </div>

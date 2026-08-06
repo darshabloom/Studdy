@@ -42,7 +42,7 @@ export default defineConfig({
       // Journey specs mutate shared seeded accounts; running them concurrently
       // in two projects races. Functional coverage runs on desktop; mobile
       // keeps the read-only layout specs.
-      testIgnore: /identity-flows|family-students-discovery/,
+      testIgnore: /identity-flows|family-students-discovery|discovery-presentation/,
     },
   ],
   webServer: {
