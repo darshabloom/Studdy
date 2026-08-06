@@ -1,7 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { createDatabaseClient } from '../../client';
-import { authIdentityLinks, roleDefinitions, userRoleAssignments, users } from '../../schema/index';
+import {
+  authIdentityLinks,
+  roleDefinitions,
+  userPreferences,
+  userRoleAssignments,
+  users,
+} from '../../schema/index';
 import { LOCAL_SYNTHETIC_PASSWORD, SYNTHETIC_USERS } from '../synthetic-users';
 
 /** The nine role definitions (Permissions doc; see @studdy/permissions). */
@@ -85,10 +91,26 @@ export async function seedCleanRegistration(): Promise<void> {
     for (const synthetic of SYNTHETIC_USERS) {
       const authId = await resolveAuthId(synthetic.email, synthetic.deterministicAuthId);
 
-      const [existingLink] = await db
+      let [existingLink] = await db
         .select()
         .from(authIdentityLinks)
         .where(eq(authIdentityLinks.providerSubjectId, authId));
+
+      if (existingLink === undefined) {
+        // Heal links seeded before Supabase Auth was available: same email,
+        // deterministic subject id → repoint at the real auth user.
+        const [byEmail] = await db
+          .select()
+          .from(authIdentityLinks)
+          .where(eq(authIdentityLinks.authenticationEmail, synthetic.email));
+        if (byEmail !== undefined) {
+          await db
+            .update(authIdentityLinks)
+            .set({ providerSubjectId: authId })
+            .where(eq(authIdentityLinks.id, byEmail.id));
+          existingLink = { ...byEmail, providerSubjectId: authId };
+        }
+      }
 
       let userId: string;
       if (existingLink !== undefined) {
@@ -115,18 +137,36 @@ export async function seedCleanRegistration(): Promise<void> {
       for (const roleCode of synthetic.roleCodes) {
         const roleDefinitionId = roleIdByCode.get(roleCode);
         if (roleDefinitionId === undefined) throw new Error(`Unknown role code ${roleCode}`);
+        const statusCode = synthetic.roleStatus?.[roleCode] ?? 'active';
         const existing = await db
-          .select({ id: userRoleAssignments.id })
+          .select({ id: userRoleAssignments.id, statusCode: userRoleAssignments.statusCode })
           .from(userRoleAssignments)
-          .where(eq(userRoleAssignments.userId, userId));
-        if (existing.length === 0) {
+          .where(
+            and(
+              eq(userRoleAssignments.userId, userId),
+              eq(userRoleAssignments.roleDefinitionId, roleDefinitionId),
+            ),
+          );
+        const [current] = existing;
+        if (current === undefined) {
           await db.insert(userRoleAssignments).values({
             userId,
             roleDefinitionId,
+            statusCode,
+            workspaceEnabled: statusCode === 'active',
             assignmentReasonCode: 'development_seed',
           });
+        } else if (current.statusCode !== statusCode) {
+          await db
+            .update(userRoleAssignments)
+            .set({ statusCode, workspaceEnabled: statusCode === 'active' })
+            .where(eq(userRoleAssignments.id, current.id));
         }
       }
+      // clean_registration means clean: no saved workspace preference, so the
+      // chooser behaviour is deterministic for multi-role synthetic accounts.
+      await db.delete(userPreferences).where(eq(userPreferences.userId, userId));
+
       console.log(`seeded ${synthetic.email}`);
     }
   } finally {

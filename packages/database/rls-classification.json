@@ -16,6 +16,11 @@
       "policy": "user_read_own_contact_points",
       "notes": "Spec §13.7 policy naming example."
     },
+    "identity.user_preferences": {
+      "classification": "own_record_read",
+      "policy": "user_read_own_preferences",
+      "notes": "Last active workspace and future interface preferences; server-side writes only."
+    },
     "identity.user_role_assignments": {
       "classification": "own_record_read",
       "policy": "user_read_own_role_assignments",

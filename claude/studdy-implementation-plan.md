@@ -38,6 +38,17 @@ Scope per brief §5, built following Blueprint (doc 05) §28's ten-step bootstra
 - Homepage: brief's minimal shell wins for PR1. Hero headline candidate from doc 14: "Find the right tutor. Understand every step of their progress." Example tutor cards must be clearly labelled as examples. Do not ship the "pronounced Tutor-in" copy artefact found in docs 13/14. "How it works" copy must describe the multi-tutor request flow, not the single-tutor flow printed in doc 14.
 - PR1 exclusions: everything in brief §5's excluded list.
 
+## Approved decisions for feat/identity-and-authentication (6 Aug 2026)
+
+1. Independent student: 18+ self-declaration required; under-18 directed to family path. Launch product rule only — review before production (documentation/product/independent-student-eligibility.md).
+2. MFA: TOTP now, enforced ONLY for platform_manager and platform_owner; architecture role-agnostic for later extension.
+3. Names: sign-up stays email+password; /welcome collects preferred/display name + family name; legal name deferred to regulated processes.
+4. Passwords: min 10 chars, no composition rules, long passphrases allowed.
+5. First workspace: 1 workspace auto-redirect; several + saved preference restore; several + none -> chooser screen, choice saved. No silent priority order.
+6. Corrections: tutor self-registration = pending application state only (no active tutor role, no student data); manager/owner invitation/seed/authorised-assignment only; one auth system; status transitions ONLY for governed transitions (not password-reset requests etc.); auth audit events never contain provider password/token detail; service-role key server-only, never via chat.
+
+PR1 merged to main as 91931e5 (squash) on 6 Aug 2026 with explicit approval.
+
 ## PR sequence after PR1
 
 Each ends with PULL REQUEST READY FOR APPROVAL; no merge without explicit approval.
