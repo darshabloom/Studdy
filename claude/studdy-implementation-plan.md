@@ -1,21 +1,40 @@
 # Studdy — Implementation Plan and Session State
 
-Last updated: 5 August 2026 (NZT). Written by Claude for continuity across sessions.
+Last updated: 7 August 2026 (NZT). Written by Claude for continuity across sessions.
 
 Companion documents in this project:
 
 - `claude/studdy-fable-handoff-brief.md` — the handoff brief verbatim. Authority rank 1.
 - `claude/studdy-planning-pack-digest.md` — extracted specifics from all 14 planning PDFs (schemas, tables, statuses, tokens, routes, entity names, conflicts, gaps). Read this before implementation.
-- The 14 source PDFs themselves are added to project knowledge by Darsha/Marina; the Projects API rejects binary uploads from a session, so Claude cannot upload them. If they are present, prefer the PDFs over the digest for exact wording.
+- All 14 source documents are now preserved in the repository as Markdown under
+  `docs/source-material/`, extracted from the original PDFs on 7 August 2026. Prefer those
+  over the digest for exact wording; see `docs/source-material/README.md` for the index,
+  status and which decisions override each.
 
 ## Current status
 
-- All 14 planning documents read in full. Handoff acknowledgement delivered to Marina/Darsha; "begin PR1" approval given on 5 August 2026.
-- **Working copy moved to `S:\Studdy`** — the original target `E:\ExternalStorage\Projects\Studdy` is on an exFAT drive which cannot store symlinks, so pnpm workspaces cannot install there. With Marina's approval (5 Aug 2026), an NTFS virtual disk (`E:\ExternalStorage\StuddyDev.vhdx`, 128 GB expandable) is mounted as `S:` with an auto-mount scheduled task at logon ("Mount StuddyDev Disk"). Any future session works in `S:\Studdy`.
-- Commit identity (repo-local): `darshabloom <238143336+darshabloom@users.noreply.github.com>` — GitHub's email-privacy protection rejects the real address; the noreply form attributes commits to darshabloom.
-- Legacy repo `github.com/TreeToppr/darsha-tutoring` cloned read-only into session scratchpad for later audit.
-- PR1 (`feat/bootstrap-and-product-shell`) built and verified locally: typecheck 9/9, lint 9/9, prettier clean, 48 unit tests passing (incl. WCAG AA contrast proofs), production build clean, 20/20 Playwright e2e passing (desktop + mobile), RLS classification gate passing. Drizzle migration generated (9 tables).
-- Toolchain on Marina's machine: Node v24.12.0, npm 11.12.1, pnpm 10.34.5 (installed via npm -g), Playwright chromium installed. Docker Desktop and Supabase CLI NOT installed — local Supabase cannot start until installed (ACTION REQUIRED); the CI database job proves migrate+seed+integration on Linux in the meantime. GitHub CLI not installed (PRs opened via REST API using the stored git credential).
+> **Superseded for day-to-day use.** The living handoff is
+> `docs/handoffs/current-session.md`; the build ledger is
+> `documentation/implementation/build-ledger.md`; approved decisions are in
+> `docs/decisions/`. This file is kept for its record of the early conflicts and
+> environment history. Updated 7 August 2026.
+
+- **Merged to main:** PR1 bootstrap (`91931e5`), PR2 identity (`d3116ed`), PR3
+  family/students/discovery (`51c0135`).
+- **In review:** PR #14, branch `feat/intended-lesson-request`, commit `660ce1d` —
+  Intended Lesson Requests, fan-out, holds, withdrawal and expiry. Awaiting approval.
+- **Working copy is `S:\Studdy`** — an NTFS virtual disk mounted at logon by the scheduled
+  task "Mount StuddyDev Disk". The original `E:\ExternalStorage\Projects\Studdy` is exFAT
+  and cannot store the symlinks pnpm workspaces need; a stale copy remains there and should
+  be ignored.
+- Commit identity (repo-local): `darshabloom <238143336+darshabloom@users.noreply.github.com>`,
+  because GitHub's email-privacy protection rejects the real address.
+- **Toolchain now complete:** Node 24, pnpm 10, Docker Desktop, project-local Supabase CLI,
+  Playwright chromium. Local Supabase runs on ports 14321–14324 (Windows reserves the 543xx
+  range). GitHub CLI is installed but unauthenticated; pull requests are opened via the REST
+  API using the stored git credential.
+- Legacy repo `github.com/TreeToppr/darsha-tutoring` cloned read-only for the migration
+  audit, which has not started.
 
 ## Environment facts
 
