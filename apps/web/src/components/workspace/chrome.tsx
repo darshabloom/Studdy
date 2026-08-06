@@ -11,6 +11,8 @@ export interface WorkspaceChromeProps {
   /** Workspaces that may enter this shell (student accepts both student kinds). */
   accepts: readonly WorkspaceCode[];
   navItems: readonly string[];
+  /** Destinations that actually exist, rendered above the pending ones. */
+  navLinks?: readonly { label: string; href: string }[];
   homeHref: string;
   /** TOTP MFA required to enter (Platform Manager / Owner — approved 6 Aug 2026). */
   requireMfa?: boolean;
@@ -24,6 +26,7 @@ export interface WorkspaceChromeProps {
 export async function WorkspaceChrome({
   accepts,
   navItems,
+  navLinks = [],
   homeHref,
   requireMfa = false,
   children,
@@ -68,6 +71,11 @@ export async function WorkspaceChrome({
       <Link href={homeHref}>
         <SidebarItem active>Home</SidebarItem>
       </Link>
+      {navLinks.map((link) => (
+        <Link key={link.href} href={link.href}>
+          <SidebarItem>{link.label}</SidebarItem>
+        </Link>
+      ))}
       {navItems.map((item) => (
         <SidebarItem key={item}>
           {item}

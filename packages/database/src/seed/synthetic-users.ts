@@ -52,6 +52,21 @@ export const SYNTHETIC_USERS: readonly SyntheticUser[] = [
     roleCodes: ['dependent_student'],
     deterministicAuthId: '00000000-0000-4000-9000-000000000006',
   },
+  // Dedicated to the lesson-request journeys. Playwright runs spec FILES in
+  // parallel, so a journey spec that mutates a shared account races other
+  // specs; these accounts belong to one spec only.
+  {
+    email: 'parent.requests@local.studdy.test',
+    displayName: 'Synthetic Request Parent',
+    roleCodes: ['parent_guardian'],
+    deterministicAuthId: '00000000-0000-4000-9000-000000000011',
+  },
+  {
+    email: 'student.requests@local.studdy.test',
+    displayName: 'Synthetic Request Student',
+    roleCodes: ['independent_student'],
+    deterministicAuthId: '00000000-0000-4000-9000-000000000012',
+  },
   {
     email: 'tutor.a@local.studdy.test',
     displayName: 'Synthetic Tutor A',

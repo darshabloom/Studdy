@@ -5,6 +5,11 @@ import { parseArgs } from 'node:util';
 import { assertDestructiveCommandAllowed } from '@studdy/configuration';
 import { seedCleanRegistration } from './scenarios/clean-registration';
 import { seedDiscoveryTutors } from './scenarios/discovery-tutors';
+import {
+  seedExpiredRequest,
+  seedMultiTutorRequestPending,
+  seedRequestRules,
+} from './scenarios/request-scenarios';
 
 // Local convenience: load apps/web/.env.local so seeding can create Supabase
 // auth users without manually exporting env vars. Explicit env always wins.
@@ -37,8 +42,14 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
   clean_registration: async () => {
     await seedCleanRegistration();
     await seedDiscoveryTutors();
+    // Request configuration is always seeded: deadlines must be versioned
+    // before any request can snapshot a deadline rule version.
+    await seedRequestRules();
   },
   discovery_tutors: seedDiscoveryTutors,
+  request_rules: seedRequestRules,
+  multi_tutor_request_pending: seedMultiTutorRequestPending,
+  request_expired: seedExpiredRequest,
 };
 
 async function main(): Promise<void> {

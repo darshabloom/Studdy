@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./identity": "./src/identity/index.ts",
     "./discovery": "./src/discovery/index.ts",
-    "./students": "./src/students/index.ts"
+    "./students": "./src/students/index.ts",
+    "./bookings": "./src/bookings/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
