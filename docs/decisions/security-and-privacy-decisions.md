@@ -203,6 +203,18 @@ reference, tutor, student or family.
 **Environment variable required (name only).** `CRON_SECRET`. Must be set in any deployed
 environment before the schedule does anything; without it the endpoint fails closed.
 
+**Amendment (7 August 2026) — no scheduler is attached.** The Vercel Cron schedule
+(`*/15 * * * *`) was removed from the branch. The Hobby plan permits a once-daily schedule
+only, and any more frequent expression fails the deployment. Slowing expiry to once a day
+would have weakened the product to fit a hosting plan — Studdy's deadlines are hour-based
+([PD-012](approved-product-decisions.md)) — so the schedule was deleted instead. The route,
+its authentication, batching, idempotency and tests are all retained unchanged. **Inngest
+is the required production invocation mechanism**; a paid Vercel plan is the alternative.
+See [`documentation/operations/scheduled-jobs.md`](../../documentation/operations/scheduled-jobs.md).
+
+Nothing about the security posture changes: the endpoint still fails closed, still refuses
+`GET`, and is now simply unreachable on a schedule rather than reachable on one.
+
 ---
 
 ## Standing rules

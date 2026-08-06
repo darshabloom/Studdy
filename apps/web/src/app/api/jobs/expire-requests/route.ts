@@ -10,8 +10,13 @@ import { createLogger } from '@studdy/observability';
  * the business command. All expiry logic — which requests are due, how holds
  * are released, what is written and in what transaction — lives in
  * `expireOverdueRequests`, which knows nothing about HTTP or any scheduler.
- * Vercel Cron calls it today; Inngest can call the same function later with no
- * change to the domain.
+ *
+ * Nothing invokes this route automatically yet. The Vercel Cron schedule was
+ * removed because the Hobby plan allows once-daily execution only, which is too
+ * coarse for hour-based request deadlines — the frequency was not reduced to
+ * fit. Inngest is the required production mechanism; any scheduler able to make
+ * an authenticated POST is sufficient, and none of them touch the domain.
+ * See documentation/operations/scheduled-jobs.md.
  *
  * Authentication: a server-only shared secret in the `Authorization` header,
  * never a query string (query strings land in access logs, browser history and

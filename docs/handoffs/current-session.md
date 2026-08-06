@@ -165,6 +165,11 @@ Guarantees enforced by the database rather than application logic:
 **Routes added:** `/requests`, `/requests/new`, `/requests/[reference]`, `/tutor/requests`,
 `/api/jobs/expire-requests`. Entry point added to `/shortlist/[subjectSectionId]`.
 
+**Expiry has no scheduler attached.** The Vercel Cron entry was removed — the Hobby plan
+allows a once-daily schedule only, which is too coarse for hour-based deadlines, and the
+frequency was deliberately not reduced to fit. Inngest is the required production
+mechanism. See `documentation/operations/scheduled-jobs.md`.
+
 **Commands:** `createIntendedLessonRequest` (all-or-nothing fan-out; ILR, tutor requests,
 holds, audit, transitions, domain event and outbox entries in one transaction),
 `withdrawRequest`, `expireOverdueRequests` (idempotent, batched, scheduler-independent).
