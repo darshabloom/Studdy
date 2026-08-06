@@ -33,11 +33,14 @@ current; they are not duplicates.
 ## 2. Where the work is
 
 **Branch:** `feat/intended-lesson-request`
-**Latest commit:** `660ce1d` — _feat: intended lesson requests, fan-out, holds, withdrawal and expiry_
-**Open pull request:** [#14](https://github.com/darshabloom/Studdy/pull/14) — awaiting the owner's review. **Do not merge without explicit approval.**
-**Working tree:** clean at the time of writing, apart from the documentation added by this
-checkpoint. Nothing is waiting to be committed before context reduction other than these
-docs.
+**Latest commit:** `64c8ad6` — _docs: preserve source material and add a durable session checkpoint_
+(code commit `660ce1d` — _feat: intended lesson requests, fan-out, holds, withdrawal and expiry_)
+**Open pull request:** [#14](https://github.com/darshabloom/Studdy/pull/14) — **ready for the
+owner's review.** Every item of the approved branch scope is complete: the protected expiry
+route, the seeded request scenarios, both end-to-end booking journeys, the tutor read-only
+request and temporary-hold experience, the Fable security review with its findings applied,
+and the full suite run. **Do not merge without explicit approval.**
+**Working tree:** clean. Nothing is waiting to be committed.
 
 **Merged so far:** PR1 bootstrap (`91931e5`), PR2 identity (`d3116ed`), PR3 family/students/discovery (`51c0135`).
 
@@ -217,3 +220,26 @@ Before starting 2 or 3, confirm with the owner: the provisional deadline and hol
 - Model use: Opus for implementation; Fable for focused security reviews of migrations,
   policies and privacy boundaries before they are finalised; Sonnet for repetitive work
   once an approved pattern exists.
+
+---
+
+## 10. The prompt to start a fresh session
+
+Paste this verbatim. It is recorded here so it survives the loss of the conversation that
+produced this checkpoint.
+
+```
+Continue the Studdy build. Read docs/handoffs/current-session.md first, then
+claude/studdy-fable-handoff-brief.md and docs/decisions/. Work in S:\Studdy.
+
+Current state: branch feat/intended-lesson-request, commit 64c8ad6.
+PR #14 is ready for my review. Do not merge without my explicit approval.
+
+Confirm you have read the handoff and tell me: the approved seven Tutor Request
+statuses, what is in and out of scope for this branch, and the next task in order.
+Do not start implementation until I approve.
+```
+
+If the branch has moved on since this file was written, correct the commit and the
+pull-request line before using it — and use **"PR #N is open and in progress"** instead of
+"ready for my review" whenever any part of that branch's approved scope is still unfinished.
