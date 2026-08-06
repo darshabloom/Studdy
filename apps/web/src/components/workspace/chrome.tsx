@@ -4,18 +4,8 @@ import { Alert, RestrictedState, SidebarItem, WorkspaceShell } from '@studdy/des
 import { ROLE_DISPLAY_NAMES, type WorkspaceCode } from '@studdy/permissions';
 import type { ReactNode } from 'react';
 import { resolveIdentity } from '@/lib/identity/resolve';
-import { chooseWorkspaceAction, signOutAction } from '@/lib/auth/actions';
+import { WORKSPACE_LABELS, WorkspaceTopBar } from '@/components/layout/workspace-top-bar';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-
-const WORKSPACE_LABELS: Record<WorkspaceCode, string> = {
-  parent: 'Parent',
-  tutor: 'Tutor',
-  dependent_student: 'Student',
-  independent_student: 'Student',
-  organisation: 'Organisation',
-  platform_manager: 'Platform Manager',
-  platform_owner: 'Platform Owner',
-};
 
 export interface WorkspaceChromeProps {
   /** Workspaces that may enter this shell (student accepts both student kinds). */
@@ -64,49 +54,13 @@ export async function WorkspaceChrome({
   // (workspace chooser and the switcher below) — never during render, because
   // Next.js prefetches links and would silently overwrite the preference.
   const currentLabel = WORKSPACE_LABELS[enteredWorkspace ?? accepts[0]!];
-  const otherWorkspaces = identity.workspaces.filter((workspace) => !accepts.includes(workspace));
 
   const topBar = (
-    <div className="flex items-center justify-between gap-4 px-4 py-2">
-      <div className="flex items-center gap-3">
-        <Link href="/" className="font-display text-xl font-semibold text-brand-purple-deep">
-          Studdy
-        </Link>
-        <nav aria-label="Workspaces" className="flex items-center gap-1 text-sm">
-          <span className="rounded-[var(--radius-pill)] bg-brand-lavender px-3 py-1 font-medium text-brand-purple">
-            {currentLabel}
-          </span>
-          {otherWorkspaces.map((workspace) => (
-            <form key={workspace} action={chooseWorkspaceAction} className="inline">
-              <input type="hidden" name="workspace" value={workspace} />
-              <button
-                type="submit"
-                className="rounded-[var(--radius-pill)] px-3 py-1 text-text-secondary hover:bg-surface-card-secondary"
-              >
-                {WORKSPACE_LABELS[workspace]}
-              </button>
-            </form>
-          ))}
-        </nav>
-      </div>
-      <div className="flex items-center gap-3">
-        <span
-          aria-hidden="true"
-          className="text-sm text-text-muted"
-          title="Notifications (coming soon)"
-        >
-          🔔
-        </span>
-        <span className="hidden text-sm text-text-secondary sm:inline">
-          {identity.displayName ?? identity.email}
-        </span>
-        <form action={signOutAction}>
-          <button type="submit" className="text-sm font-medium text-brand-purple hover:underline">
-            Sign out
-          </button>
-        </form>
-      </div>
-    </div>
+    <WorkspaceTopBar
+      currentWorkspace={enteredWorkspace ?? accepts[0] ?? null}
+      workspaces={identity.workspaces}
+      accountLabel={identity.displayName ?? identity.email ?? 'Your account'}
+    />
   );
 
   const sidebar = (

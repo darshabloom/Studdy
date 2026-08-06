@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { assertDestructiveCommandAllowed } from '@studdy/configuration';
 import { seedCleanRegistration } from './scenarios/clean-registration';
+import { seedDiscoveryTutors } from './scenarios/discovery-tutors';
 
 // Local convenience: load apps/web/.env.local so seeding can create Supabase
 // auth users without manually exporting env vars. Explicit env always wins.
@@ -33,7 +34,11 @@ if (process.env['SUPABASE_SERVICE_ROLE_KEY'] === undefined) {
  * land with their slices (brief §12).
  */
 const SCENARIOS: Record<string, () => Promise<void>> = {
-  clean_registration: seedCleanRegistration,
+  clean_registration: async () => {
+    await seedCleanRegistration();
+    await seedDiscoveryTutors();
+  },
+  discovery_tutors: seedDiscoveryTutors,
 };
 
 async function main(): Promise<void> {

@@ -15,6 +15,13 @@
       "when": 1785969091663,
       "tag": "0001_fantastic_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785987867892,
+      "tag": "0002_naive_ben_parker",
+      "breakpoints": true
     }
   ]
 }
