@@ -184,6 +184,18 @@ later expiry sweep, expiry idempotency, per-tutor pricing, and the privacy asser
 
 - **`locator.count()` in Playwright does not auto-wait.** Any conditional branch in a spec
   must first wait for the page to render, or the branch is silently skipped.
+- **Turborepo runs in strict env mode**, so a task receives only the variables its
+  `turbo.json` entry declares. Anything the e2e suite needs must be listed under
+  `test:e2e`, or it is stripped before Playwright starts. This is invisible locally because
+  `playwright.config.ts` reads `.env.local` off disk itself — so locally every variable
+  arrives by a path that does not exist in CI. Adding a variable to the workflow alone does
+  nothing. Verify by running with a deliberately wrong value: if nothing fails, it is being
+  stripped and a fallback is in use.
+- **An e2e journey must survive being run twice.** A Playwright retry of a `mode: 'serial'`
+  file re-runs earlier tests against state they already mutated, so any step that assumes a
+  pristine account fails on a retry — and reports the wrong cause. Two real instances: a
+  shortlisted tutor renders "On your shortlist" instead of the add button, and re-booking an
+  identical slot is correctly refused because the previous hold is still live.
 - **A `'use server'` file may only export async functions.** Exporting a constant breaks
   the production build but not typecheck — it surfaces only at `pnpm build`.
 - **Drizzle wraps driver errors**, so a Postgres SQLSTATE sits on the `cause` chain, not on

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 
 /**
  * End-to-end journeys for the Intended Lesson Request slice.
@@ -31,6 +31,28 @@ async function signIn(page: Page, email: string): Promise<void> {
 function futureDateValue(daysAhead: number): string {
   const date = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
   return date.toISOString().slice(0, 10);
+}
+
+/**
+ * A lesson date unique to this attempt.
+ *
+ * A sent request leaves a live hold on the tutor's calendar, and the platform
+ * is correct to refuse a second request overlapping it — that is PD-010 and the
+ * GiST exclusion constraint doing their job. So an attempt that re-books the
+ * identical slot fails on a rule the application is right to enforce, and the
+ * real failure is masked by a misleading one.
+ *
+ * A family sending another request while the first is still live would pick a
+ * different time, so each attempt does too. Whole weeks keep the same weekday,
+ * so weekly availability rules still match, and moving further out only
+ * increases notice — there is no maximum booking horizon to breach.
+ *
+ * Cleaning up at the end of the journey instead would not survive a failure
+ * midway, which is precisely when the next attempt runs.
+ */
+function attemptDateValue(testInfo: TestInfo, baseDaysAhead: number): string {
+  const attempt = testInfo.repeatEachIndex * 8 + testInfo.retry;
+  return futureDateValue(baseDaysAhead + attempt * 7);
 }
 
 /**
@@ -90,9 +112,21 @@ async function shortlistAndCompose(page: Page, dashboard: string): Promise<void>
   await ensureSubjectNeed(page, dashboard);
 
   await expect(page).toHaveURL(/\/tutors/);
-  const addToShortlist = page.getByRole('button', { name: 'Add to shortlist' }).first();
-  await expect(addToShortlist).toBeVisible({ timeout: 15_000 });
-  await addToShortlist.click();
+
+  // Readiness here is "the tutor list has rendered", and a rendered tutor shows
+  // one of two controls: the add button, or the badge saying it is already on
+  // the shortlist. Waiting only for the button assumed a pristine account, so
+  // any second run — including a Playwright retry after an unrelated failure
+  // elsewhere in this serial file — waited 15s for a control the application is
+  // correct never to show twice, and failed with a misleading timeout.
+  // Note count() does not auto-wait, so the combined locator must settle first.
+  const addToShortlist = page.getByRole('button', { name: 'Add to shortlist' });
+  const onShortlist = page.getByText('On your shortlist');
+  await expect(addToShortlist.or(onShortlist).first()).toBeVisible({ timeout: 15_000 });
+
+  if ((await addToShortlist.count()) > 0) {
+    await addToShortlist.first().click();
+  }
 
   await expect(page.getByRole('link', { name: 'Review shortlist' }).first()).toBeVisible();
   await page.getByRole('link', { name: 'Review shortlist' }).first().click();
@@ -104,7 +138,7 @@ test.describe.configure({ mode: 'serial' });
 test.describe('lesson requests', () => {
   test.skip(!supabaseConfigured, 'Requires local Supabase (pnpm supabase:start)');
 
-  test('parent: shortlist → compose → send → awaiting responses', async ({ page }) => {
+  test('parent: shortlist → compose → send → awaiting responses', async ({ page }, testInfo) => {
     await signIn(page, REQUEST_PARENT);
     await shortlistAndCompose(page, '/parent');
 
@@ -115,7 +149,7 @@ test.describe('lesson requests', () => {
     await expect(page.getByText('You will not be charged when requests are sent')).toBeVisible();
     await expect(page.getByText('your card will not be charged')).toHaveCount(0);
 
-    await page.getByLabel('Lesson date').fill(futureDateValue(6));
+    await page.getByLabel('Lesson date').fill(attemptDateValue(testInfo, 6));
     await page.getByLabel('Start time').fill('16:00');
     await page.getByRole('button', { name: /Send request to/ }).click();
 
@@ -140,13 +174,13 @@ test.describe('lesson requests', () => {
     await expect(page.getByText('Your shortlist is still saved')).toBeVisible();
   });
 
-  test('independent student: same journey through the same screens', async ({ page }) => {
+  test('independent student: same journey through the same screens', async ({ page }, testInfo) => {
     await signIn(page, REQUEST_STUDENT);
     await shortlistAndCompose(page, '/student');
 
     await page.getByRole('link', { name: /Send request/i }).click();
     await expect(page.getByRole('heading', { name: 'Send your lesson request' })).toBeVisible();
-    await page.getByLabel('Lesson date').fill(futureDateValue(7));
+    await page.getByLabel('Lesson date').fill(attemptDateValue(testInfo, 7));
     await page.getByLabel('Start time').fill('15:30');
     await page.getByRole('button', { name: /Send request to/ }).click();
 
