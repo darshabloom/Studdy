@@ -34,7 +34,9 @@
         "NEXT_PUBLIC_STUDDY_ENVIRONMENT",
         "NEXT_PUBLIC_SUPABASE_URL",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-        "CRON_SECRET"
+        "CRON_SECRET",
+        "DATABASE_URL",
+        "MAILPIT_URL"
       ]
     }
   }
