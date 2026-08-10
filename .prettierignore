@@ -6,3 +6,6 @@ dist/
 coverage/
 playwright-report/
 test-results/
+
+# Preserved source material: never reformat, it must stay faithful to the original.
+docs/source-material/

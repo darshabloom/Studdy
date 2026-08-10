@@ -100,6 +100,26 @@
       "classification": "catalogue_read",
       "policy": "anyone_read_active_subjects",
       "notes": "Reference data; readable by anon and authenticated."
+    },
+    "bookings.intended_lesson_requests": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Server-only: request-slice tables carry no anon/authenticated grant. Column grants are role-level and cannot distinguish a parent from a tutor, so the tutor-privacy boundary is enforced by server-side projections. RLS enabled as fail-closed second layer. The ILR is never visible to any tutor."
+    },
+    "bookings.tutor_requests": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Server-only: request-slice tables carry no anon/authenticated grant. Column grants are role-level and cannot distinguish a parent from a tutor, so the tutor-privacy boundary is enforced by server-side projections. RLS enabled as fail-closed second layer. Tutor projection never selects intended_lesson_request_id, position or close_reason_code."
+    },
+    "availability.tutor_time_reservations": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Server-only: request-slice tables carry no anon/authenticated grant. Column grants are role-level and cannot distinguish a parent from a tutor, so the tutor-privacy boundary is enforced by server-side projections. RLS enabled as fail-closed second layer. Overlap prevented by GiST exclusion constraint."
+    },
+    "platform.rule_settings": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Deadline and gate configuration is internal; never browser-readable."
     }
   }
 }

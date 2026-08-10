@@ -39,3 +39,31 @@ export {
   type ShortlistEntryRow,
   type ShortlistAddOutcome,
 } from './repositories/discovery';
+export {
+  createIntendedLessonRequest,
+  withdrawRequest,
+  expireOverdueRequests,
+  currentRequestRules,
+  subjectSectionOwner,
+  SlotUnavailableError,
+  RequestValidationError,
+  type CreateIntendedLessonRequestInput,
+  type CreatedIntendedLessonRequest,
+  type WithdrawInput,
+  type ExpireRequestsResult,
+} from './repositories/lesson-requests';
+export {
+  listRequestsForStudents,
+  findRequestForStudents,
+  listRequestsForTutor,
+  findRequestForTutor,
+  tutorProfileForUser,
+  type FamilyRequestView,
+  type FamilyTutorRequestView,
+  type TutorRequestView,
+} from './repositories/request-projections';
+export {
+  loadRequestRules,
+  setRuleSetting,
+  type LoadedRequestRules,
+} from './repositories/rule-settings';

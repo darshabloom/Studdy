@@ -1,2 +1,2 @@
-// Tables for the bookings schema land with their slice (Database spec §2.2).
-export {};
+export { intendedLessonRequests } from './intended-lesson-requests';
+export { tutorRequests } from './tutor-requests';

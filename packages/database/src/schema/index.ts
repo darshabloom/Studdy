@@ -44,3 +44,9 @@ export { services, serviceVersions } from './services/services';
 
 // platform reference data
 export { subjects } from './platform/subjects';
+
+// requests and holds (feat/intended-lesson-request)
+export { ruleSettings } from './platform/rule-settings';
+export { intendedLessonRequests } from './bookings/intended-lesson-requests';
+export { tutorRequests } from './bookings/tutor-requests';
+export { tutorTimeReservations } from './availability/tutor-time-reservations';

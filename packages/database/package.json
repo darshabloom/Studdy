@@ -21,7 +21,8 @@
     "@studdy/configuration": "workspace:*",
     "@supabase/supabase-js": "^2.50.0",
     "drizzle-orm": "^0.44.0",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "@studdy/domain": "workspace:*"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",

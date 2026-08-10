@@ -9,6 +9,7 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
  * and workspace server-side. Entering a protected URL is never sufficient.
  */
 const PROTECTED_PREFIXES = [
+  '/requests',
   '/parent',
   '/tutor',
   '/student',
