@@ -144,6 +144,43 @@ The local values are the Supabase CLI's standard demo keys, printed by
 
 ## 6. What `feat/intended-lesson-request` delivered
 
+> ### PARTLY SUPERSEDED — read before building on this branch
+>
+> On 7 August 2026, after manually reviewing the parent and tutor journeys, the owner
+> approved a redesign: **[docs/design/multi-time-availability-redesign.md](../design/multi-time-availability-redesign.md)**.
+>
+> **Superseded by that design — do not extend:**
+>
+> - The **single-time composer.** A family no longer proposes one universal lesson time.
+>   Requests carry 2–5 acceptable times, and each tutor is offered only the subset they can
+>   actually do. `intended_lesson_requests.proposed_start_at/proposed_end_at` move out to a
+>   new `bookings.request_time_options` table.
+> - **Hold-at-send.** Sending a Tutor Request will create **no** calendar reservation. One
+>   reservation is created when a tutor accepts one offered time, revalidated atomically at
+>   that moment.
+> - **PD-010 as written.** Fan-out stays atomic, but its precondition becomes "every invited
+>   tutor has at least one currently offerable time" rather than "every tutor's hold
+>   succeeded".
+>
+> **Remains authoritative — the redesign builds directly on it:**
+>
+> - `availability.tutor_time_reservations` and its **GiST exclusion constraint**. Kept
+>   exactly as built; the redesign leans on it harder than this branch does.
+> - All **seven Tutor Request statuses**, including every family-side and system-side ending
+>   collapsing into `closed` with the real reason in the server-only `close_reason_code`.
+> - The whole **privacy architecture**: SP-005 (server-only tables, no browser grants),
+>   SP-006 (the four-layer tutor boundary), SP-008 (server-side pricing), SP-009 (random,
+>   non-correlatable `TREQ-` references), SP-010 (the protected expiry route).
+> - **Transaction discipline**: status-guarded updates, audit event, status transition,
+>   domain event and outbox entry written in one transaction.
+> - `expireOverdueRequests` — idempotent, batched, scheduler-independent. Extended, not
+>   rewritten.
+> - Versioned rule settings with **snapshotted deadlines** (PD-012), the shortlist surviving
+>   request creation (PD-009), and the `LR-`/`TREQ-` prefixes (PD-018).
+>
+> **The next slice branches cleanly from `main` after this merges** — it is not stacked on
+> this branch.
+
 **Approved scope:** ILR creation, fan-out to up to three tutors, temporary holds,
 withdrawal and expiry. **Explicitly excluded:** tutor accept/decline, selection close-out,
 Booking creation, Stripe, ledger.
@@ -213,22 +250,33 @@ later expiry sweep, expiry idempotency, per-tutor pricing, and the privacy asser
 
 ## 8. The exact next tasks, in order
 
-1. **Await the owner's review of PR #14.** Do not merge without explicit approval.
-2. **`feat/tutor-request-response`** — tutor accept and decline. Must reuse
-   `findRequestForTutor(reference, tutorProfileId-from-session)` and return identical
-   responses for "not yours" and "does not exist". Adds the `accepted` and `declined`
-   transitions and the acceptance hold semantics.
-3. **`feat/multi-tutor-selection`** — the selection close-out. The highest-risk work in the
-   project. Read the guard rails in `docs/decisions/multi-tutor-state-machine.md` before
-   starting: losers must reach a status inside the tutor-visible set that maps to the
-   neutral label, the same `tutor_request.closed` event type must be used, and all losers
-   must close in one transaction so timing cannot differentiate. A Fable review of the
-   close-out transaction is expected before its migration is finalised.
-4. **`feat/stripe-booking-confirmation`** — gated. Requires the owner's approval before any
-   provider account is created or configured.
+**The slice plan changed on 7 August 2026.** The owner replaced the very small slices with
+one fuller vertical slice, because the small ones were technically safe but left each role
+with little usable functionality. `feat/tutor-request-response` and
+`feat/multi-tutor-selection` no longer exist as separate branches — both are folded in below.
 
-Before starting 2 or 3, confirm with the owner: the provisional deadline and hold numbers
-(PD-012), and whether a tutor may be told the platform allows multi-tutor requests.
+1. **Owner's manual review of PR #14, then the owner merges it.** Do not merge without
+   explicit approval. §6 records what it supersedes and what stays authoritative.
+2. **`feat/availability-and-multi-time-requests`** — branched **cleanly from `main`** after
+   PR #14 merges, never stacked on it. One vertical slice: tutor availability management →
+   family sees real availability → multi-time request → per-tutor offered subsets → tutor
+   accept/decline → hold at acceptance → family response view → tutor selection →
+   close-out. Build against
+   [docs/design/multi-time-availability-redesign.md](../design/multi-time-availability-redesign.md),
+   which carries the approved decisions D-1 to D-8, the five ordered checkpoints, and the
+   tutor-workspace acceptance criterion. **Do not start without the owner's go-ahead.**
+3. **`feat/stripe-booking-confirmation`** — still separately gated. Requires the owner's
+   approval before any provider account is created or configured.
+
+Fable security reviews are expected before the migrations for checkpoints 2, 3 and 4 are
+finalised: the widened family availability surface, the per-tutor option subset, the
+acceptance transaction, and the selection close-out.
+
+**Both questions that used to block this work are now answered.** PD-012 has approved
+provisional launch values (design §2, D-8), and the multi-tutor disclosure question is
+settled: tutors may be told generally that Studdy allows families to contact several tutors,
+but no individual Tutor Request may reveal whether others were contacted, their number,
+identity, responses, or why it closed.
 
 ---
 
