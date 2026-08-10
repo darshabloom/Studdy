@@ -18,8 +18,8 @@
     "@studdy/domain": "workspace:*",
     "@studdy/observability": "workspace:*",
     "@studdy/permissions": "workspace:*",
-    "@supabase/ssr": "^0.6.1",
-    "@supabase/supabase-js": "^2.50.0",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.2",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
