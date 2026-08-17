@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { findPublicTutorByReference, listShortlist } from '@studdy/database';
+import {
+  bookableSlotsForSubjectSection,
+  findPublicTutorByReference,
+  listShortlist,
+} from '@studdy/database';
 import { Alert, Button, Card, StatusBadge } from '@studdy/design-system';
 import {
   SHORTLIST_MAX_TUTORS,
@@ -11,8 +15,10 @@ import {
   verificationLabel,
   yearLevelRangeLabel,
 } from '@studdy/domain/discovery';
+import { TutorSlots } from '@/components/discovery/tutor-slots';
 import { addToShortlistAction } from '@/lib/discovery/actions';
 import { resolveDiscoveryContext } from '@/lib/discovery/context';
+import { availabilityWindow, PLATFORM_TIME_ZONE } from '@/lib/time';
 
 interface PageProps {
   params: Promise<{ reference: string }>;
@@ -48,6 +54,19 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
   const alreadyShortlisted = shortlist.some((entry) => entry.tutorReference === reference);
   const shortlistFull = shortlist.length >= SHORTLIST_MAX_TUTORS;
   const rating = ratingLabel(tutor.ratingHundredths);
+
+  // This tutor's own bookable times, at the lesson length they publish for the
+  // section's subject. Signed-out visitors get the coarse label only.
+  const availability =
+    activeSection === null
+      ? null
+      : ((
+          await bookableSlotsForSubjectSection({
+            subjectSectionId: activeSection.subjectSectionId,
+            tutorReferences: [reference],
+            ...availabilityWindow(),
+          })
+        )[0] ?? { slots: [], durationMinutes: tutor.startingPriceDurationMinutes });
 
   return (
     <section className="mx-auto max-w-3xl px-4 py-10">
@@ -90,6 +109,24 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
           {rating !== null ? <StatusBadge family="complete">{rating} rating</StatusBadge> : null}
           <StatusBadge family="complete">{tutor.completedLessonCount} lessons</StatusBadge>
         </div>
+
+        {availability !== null ? (
+          <div className="border-t border-surface-border pt-4">
+            <h2 className="text-sm font-semibold text-text-primary">
+              Bookable times for {activeSection?.subjectDisplayName}
+            </h2>
+            <p className="mb-2 mt-1 text-xs text-text-muted">
+              {availability.durationMinutes} minute lessons, next two weeks. Times shown in New
+              Zealand time.
+            </p>
+            <TutorSlots
+              slots={availability.slots}
+              timeZone={PLATFORM_TIME_ZONE}
+              maxDays={14}
+              maxSlotsPerDay={8}
+            />
+          </div>
+        ) : null}
 
         {tutor.teachingApproach !== null ? (
           <div>

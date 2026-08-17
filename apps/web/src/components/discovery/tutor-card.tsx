@@ -9,8 +9,11 @@ import {
   yearLevelRangeLabel,
   type PublicTutorResult,
 } from '@studdy/domain/discovery';
+import type { Interval } from '@studdy/domain/availability';
 import type { ReactNode } from 'react';
 import { addToShortlistAction } from '@/lib/discovery/actions';
+import { PLATFORM_TIME_ZONE } from '@/lib/time';
+import { TutorSlots } from './tutor-slots';
 
 export interface TutorCardProps {
   tutor: PublicTutorResult;
@@ -19,6 +22,12 @@ export interface TutorCardProps {
   returnTo?: string | undefined;
   alreadyShortlisted?: boolean;
   shortlistFull?: boolean;
+  /**
+   * Real bookable times, for a signed-in family acting on a subject section.
+   * Undefined for signed-out visitors, who see only the coarse label — a
+   * different audience under the access model, not a different card.
+   */
+  slots?: readonly Interval[] | undefined;
 }
 
 /**
@@ -32,6 +41,7 @@ export function TutorCard({
   returnTo,
   alreadyShortlisted = false,
   shortlistFull = false,
+  slots,
 }: TutorCardProps): ReactNode {
   const rating = ratingLabel(tutor.ratingHundredths);
 
@@ -75,7 +85,16 @@ export function TutorCard({
         </div>
       </dl>
 
+      {slots !== undefined ? (
+        <div className="rounded-lg border border-border-subtle p-3">
+          <p className="mb-2 text-xs font-medium text-text-muted">Bookable times</p>
+          <TutorSlots slots={slots} timeZone={PLATFORM_TIME_ZONE} />
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
+        {/* The tutor's own coarse label. Shown alongside real times rather than
+            instead of them, because the real times are what a family acts on. */}
         <StatusBadge family="active">{availabilityLabel(tutor.availabilityLabelCode)}</StatusBadge>
         {rating !== null ? <StatusBadge family="complete">{rating} rating</StatusBadge> : null}
         {tutor.verificationLabels.map((label) => (
@@ -87,7 +106,18 @@ export function TutorCard({
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
         <Button variant="secondary" size="sm" asChild>
-          <Link href={`/tutors/${tutor.tutorReference}`}>View profile</Link>
+          {/* Carry the subject context through: the profile shows bookable
+              times at that section's lesson length, and without it the family
+              would lose the availability they came to compare. */}
+          <Link
+            href={
+              subjectSectionId === undefined
+                ? `/tutors/${tutor.tutorReference}`
+                : `/tutors/${tutor.tutorReference}?section=${subjectSectionId}`
+            }
+          >
+            View profile
+          </Link>
         </Button>
         {subjectSectionId !== undefined ? (
           alreadyShortlisted ? (

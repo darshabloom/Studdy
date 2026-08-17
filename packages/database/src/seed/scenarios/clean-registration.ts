@@ -61,10 +61,25 @@ async function resolveAuthId(email: string, deterministicId: string): Promise<st
   });
   if (created.data.user !== null) return created.data.user.id;
 
-  // Already exists — find it (synthetic account list is tiny, one page suffices).
-  const list = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
-  const existing = list.data.users.find((candidate) => candidate.email === email);
-  if (existing !== undefined) return existing.id;
+  // Already registered — look it up by email directly.
+  //
+  // This used to scan one 200-row page of the admin list, on the reasoning
+  // that the synthetic account list is tiny. The synthetic list is, but
+  // `auth.users` is not: `db:reset` drops the application schemas and
+  // deliberately leaves Supabase's own `auth` schema alone, while the identity
+  // e2e specs register a fresh throwaway account on every run. That table only
+  // grows, and once it passed 200 rows the scan stopped finding the synthetic
+  // accounts — so seeding failed on the very first user, after `createUser`
+  // had correctly reported it already existed.
+  const { sql } = createDatabaseClient();
+  try {
+    const [row] = await sql<
+      { id: string }[]
+    >`select id from auth.users where email = ${email} limit 1`;
+    if (row !== undefined) return row.id;
+  } finally {
+    await sql.end();
+  }
   throw new Error(
     `Could not create or find Supabase auth user for ${email}: ${created.error?.message ?? 'unknown error'}`,
   );

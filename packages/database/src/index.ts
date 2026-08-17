@@ -70,6 +70,7 @@ export {
 export {
   archiveAvailabilityException,
   archiveAvailabilityRule,
+  bookableSlotsForSubjectSection,
   bookableSlotsForTutors,
   createAvailabilityException,
   createAvailabilityRule,
@@ -81,4 +82,6 @@ export {
   type BookableSlotsQuery,
   type CreateAvailabilityExceptionInput,
   type CreateAvailabilityRuleInput,
+  type SubjectSectionSlotsQuery,
+  type TutorBookableSlots,
 } from './repositories/availability';

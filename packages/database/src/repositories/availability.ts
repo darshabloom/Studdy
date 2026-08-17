@@ -6,7 +6,16 @@ import {
   type RecurringRule,
 } from '@studdy/domain/availability';
 import { createDatabaseClient } from '../client';
-import { availabilityExceptions, availabilityRules, tutorTimeReservations } from '../schema/index';
+import {
+  availabilityExceptions,
+  availabilityRules,
+  services,
+  serviceVersions,
+  studentSubjectSections,
+  tutorProfiles,
+  tutorTimeReservations,
+} from '../schema/index';
+import { publiclyListedTutor } from './tutor-visibility';
 
 /**
  * Availability repository.
@@ -418,6 +427,111 @@ export async function bookableSlotsForTutors(
     }
 
     return result;
+  } finally {
+    await client.end();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Discovery — bookable slots for a real student/subject context
+// ---------------------------------------------------------------------------
+
+export interface TutorBookableSlots {
+  readonly tutorReference: string;
+  readonly tutorProfileId: string;
+  /** The tutor's own lesson length for this subject. Tutors may differ. */
+  readonly durationMinutes: number;
+  readonly slots: readonly BookableSlot[];
+}
+
+export interface SubjectSectionSlotsQuery {
+  readonly subjectSectionId: string;
+  /** Restrict to these tutors. Omitted means every tutor offering the subject. */
+  readonly tutorReferences?: readonly string[];
+  readonly from: Date;
+  readonly to: Date;
+  readonly now?: Date;
+}
+
+/**
+ * Bookable slots for the tutors who teach a subject section's subject.
+ *
+ * This is the family-facing availability surface (§7). It is scoped to a real
+ * student/subject context rather than being an open calendar endpoint: the
+ * caller passes a subject section id it has already resolved from the session,
+ * and slots come back only for tutors who actually publish that subject.
+ *
+ * The duration is each tutor's own current published lesson length, not a
+ * number from the browser — a caller cannot widen a tutor's apparent
+ * availability by asking for shorter lessons than the tutor offers.
+ *
+ * What comes back is the same two-instants shape as everywhere else. Nothing
+ * here can express a reason, a gap or a block.
+ */
+export async function bookableSlotsForSubjectSection(
+  query: SubjectSectionSlotsQuery,
+): Promise<readonly TutorBookableSlots[]> {
+  const { sql: client, db } = createDatabaseClient();
+  try {
+    const [section] = await db
+      .select({ subjectId: studentSubjectSections.subjectId })
+      .from(studentSubjectSections)
+      .where(eq(studentSubjectSections.id, query.subjectSectionId));
+    if (section === undefined) return [];
+
+    const offerings = await db
+      .select({
+        tutorProfileId: tutorProfiles.id,
+        tutorReference: tutorProfiles.reference,
+        durationMinutes: serviceVersions.durationMinutes,
+      })
+      .from(serviceVersions)
+      .innerJoin(services, eq(serviceVersions.serviceId, services.id))
+      .innerJoin(tutorProfiles, eq(services.tutorProfileId, tutorProfiles.id))
+      .where(
+        and(
+          eq(services.subjectId, section.subjectId),
+          eq(services.statusCode, 'published'),
+          eq(serviceVersions.statusCode, 'current'),
+          // A tutor who is not openly listed does not appear in discovery, so
+          // their calendar must not be reachable through it either — including
+          // through a shortlist entry saved while they still were listed.
+          publiclyListedTutor(),
+          ...(query.tutorReferences === undefined
+            ? []
+            : [inArray(tutorProfiles.reference, [...query.tutorReferences])]),
+        ),
+      );
+    if (offerings.length === 0) return [];
+
+    // One derivation per distinct lesson length rather than one per tutor:
+    // tutors overwhelmingly share the standard durations.
+    const byDuration = new Map<number, typeof offerings>();
+    for (const offering of offerings) {
+      const existing = byDuration.get(offering.durationMinutes);
+      if (existing === undefined) byDuration.set(offering.durationMinutes, [offering]);
+      else existing.push(offering);
+    }
+
+    const results: TutorBookableSlots[] = [];
+    for (const [durationMinutes, group] of byDuration) {
+      const slotsByTutor = await bookableSlotsForTutors({
+        tutorProfileIds: group.map((offering) => offering.tutorProfileId),
+        from: query.from,
+        to: query.to,
+        durationMinutes,
+        ...(query.now === undefined ? {} : { now: query.now }),
+      });
+      for (const offering of group) {
+        results.push({
+          tutorReference: offering.tutorReference,
+          tutorProfileId: offering.tutorProfileId,
+          durationMinutes,
+          slots: slotsByTutor.get(offering.tutorProfileId) ?? [],
+        });
+      }
+    }
+    return results;
   } finally {
     await client.end();
   }

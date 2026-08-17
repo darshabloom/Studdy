@@ -11,6 +11,23 @@ export {
   type RecurringRule,
 } from './slots';
 export {
+  REQUEST_TIME_OPTIONS_MAX,
+  REQUEST_TIME_OPTIONS_MIN,
+  combineSlotsByStart,
+  validateChosenTimes,
+  type CombinedSlot,
+  type TutorSlotSet,
+} from './combine';
+export {
+  dayLabel,
+  groupSlotsByDay,
+  nextAvailableLabel,
+  slotLabel,
+  timeLabel,
+  type LabelledSlot,
+  type SlotDay,
+} from './presentation';
+export {
   WEEKDAY_LABELS,
   validateAvailabilityRule,
   validateBlockedPeriod,

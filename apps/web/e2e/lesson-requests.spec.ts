@@ -156,6 +156,27 @@ async function shortlistAndCompose(page: Page, dashboard: string): Promise<void>
   await expect(page.getByRole('heading', { name: 'Your shortlist' })).toBeVisible();
 }
 
+/**
+ * Reach the request composer through the combined availability grid.
+ *
+ * The shortlist now leads to choosing times rather than straight to the
+ * composer: a family picks the times that suit before anyone is asked. The
+ * composer still collects the lesson time itself in this checkpoint, so this
+ * traverses the grid and leaves the composer to the caller.
+ */
+async function chooseTimesAndCompose(page: Page): Promise<void> {
+  await page.getByRole('link', { name: /Choose times for/ }).click();
+  await expect(page.getByRole('heading', { name: 'Choose times that suit' })).toBeVisible();
+
+  const options = page.getByRole('checkbox');
+  await expect(options.first()).toBeVisible({ timeout: 15_000 });
+  await options.nth(0).check();
+  await options.nth(1).check();
+
+  await page.getByRole('link', { name: 'Review request' }).click();
+  await expect(page.getByRole('heading', { name: 'Send your lesson request' })).toBeVisible();
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.describe('lesson requests', () => {
@@ -165,8 +186,7 @@ test.describe('lesson requests', () => {
     await signIn(page, REQUEST_PARENT);
     await shortlistAndCompose(page, '/parent');
 
-    await page.getByRole('link', { name: /Send request/i }).click();
-    await expect(page.getByRole('heading', { name: 'Send your lesson request' })).toBeVisible();
+    await chooseTimesAndCompose(page);
 
     // Honest payment copy: nothing may claim a card exists.
     await expect(page.getByText('You will not be charged when requests are sent')).toBeVisible();
@@ -201,8 +221,7 @@ test.describe('lesson requests', () => {
     await signIn(page, REQUEST_STUDENT);
     await shortlistAndCompose(page, '/student');
 
-    await page.getByRole('link', { name: /Send request/i }).click();
-    await expect(page.getByRole('heading', { name: 'Send your lesson request' })).toBeVisible();
+    await chooseTimesAndCompose(page);
     // A week past the parent's lesson: same weekday and time, different date,
     // so this send cannot collide with a hold that journey left behind.
     await page.getByLabel('Lesson date').fill(attemptDateValue(testInfo, 13));

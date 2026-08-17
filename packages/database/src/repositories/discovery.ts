@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { createDatabaseClient } from '../client';
 import { subjectSectionShortlistEntries, tutorProfiles } from '../schema/index';
+import { publiclyListedTutor } from './tutor-visibility';
 
 /**
  * Discovery repository. Public tutor data is read exclusively through
@@ -230,7 +231,11 @@ export async function addToShortlist(input: {
       .where(
         and(
           eq(tutorProfiles.reference, input.tutorReference),
-          eq(tutorProfiles.statusCode, 'active'),
+          // Same eligibility as the public listing. A reference stays valid
+          // and shareable after a tutor stops being listed, so checking only
+          // status would let anyone holding an old one shortlist them — and
+          // through the shortlist, read their calendar.
+          publiclyListedTutor(),
         ),
       );
     if (tutor === undefined) return { kind: 'already_present' };
