@@ -28,10 +28,6 @@ async function signIn(page: Page, email: string): Promise<void> {
 }
 
 /** A date input value a few days ahead, comfortably past minimum notice. */
-function futureDateValue(daysAhead: number): string {
-  const date = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
-  return date.toISOString().slice(0, 10);
-}
 
 /**
  * A lesson date unique to this attempt.
@@ -52,8 +48,33 @@ function futureDateValue(daysAhead: number): string {
  */
 function attemptDateValue(testInfo: TestInfo, baseDaysAhead: number): string {
   const attempt = testInfo.repeatEachIndex * 8 + testInfo.retry;
-  return futureDateValue(baseDaysAhead + attempt * 7);
+  return nextWeekdayValue(LESSON_WEEKDAY, baseDaysAhead + attempt * 7);
 }
+
+/**
+ * The next `weekday` falling at least `daysAhead` out, as 'YYYY-MM-DD'.
+ *
+ * The server now refuses a time the tutor does not offer, so a lesson date can
+ * no longer be "some day next week" — it has to land on a weekday the tutor
+ * actually works, or the send fails for a reason that has nothing to do with
+ * what the test is checking.
+ */
+function nextWeekdayValue(weekday: number, daysAhead: number): string {
+  const date = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
+  date.setUTCHours(0, 0, 0, 0);
+  while (date.getUTCDay() !== weekday) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Tuesday at 17:00 is the one slot both seeded maths tutors offer — Aroha works
+ * 16:00–19:00 and James 17:00–19:00 — so the journey holds whichever of them
+ * discovery happens to list first.
+ */
+const LESSON_WEEKDAY = 2;
+const LESSON_START_TIME = '17:00';
 
 /**
  * Ensure the signed-in account has a student and a subject need, creating them
@@ -101,7 +122,9 @@ async function ensureSubjectNeed(page: Page, dashboard: string): Promise<void> {
       .getByRole('link', { name: /Add a subject/ })
       .first()
       .click();
-    await page.getByLabel('Subject', { exact: true }).selectOption({ index: 1 });
+    // Pinned rather than positional: the journey depends on reaching tutors
+    // whose seeded availability covers the lesson time chosen below.
+    await page.getByLabel('Subject', { exact: true }).selectOption({ label: 'Mathematics' });
     await page.getByLabel('School year for this subject').selectOption({ label: 'Year 9' });
     await page.getByRole('button', { name: 'Save and find tutors' }).click();
   }
@@ -150,7 +173,7 @@ test.describe('lesson requests', () => {
     await expect(page.getByText('your card will not be charged')).toHaveCount(0);
 
     await page.getByLabel('Lesson date').fill(attemptDateValue(testInfo, 6));
-    await page.getByLabel('Start time').fill('16:00');
+    await page.getByLabel('Start time').fill(LESSON_START_TIME);
     await page.getByRole('button', { name: /Send request to/ }).click();
 
     await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
@@ -180,8 +203,10 @@ test.describe('lesson requests', () => {
 
     await page.getByRole('link', { name: /Send request/i }).click();
     await expect(page.getByRole('heading', { name: 'Send your lesson request' })).toBeVisible();
-    await page.getByLabel('Lesson date').fill(attemptDateValue(testInfo, 7));
-    await page.getByLabel('Start time').fill('15:30');
+    // A week past the parent's lesson: same weekday and time, different date,
+    // so this send cannot collide with a hold that journey left behind.
+    await page.getByLabel('Lesson date').fill(attemptDateValue(testInfo, 13));
+    await page.getByLabel('Start time').fill(LESSON_START_TIME);
     await page.getByRole('button', { name: /Send request to/ }).click();
 
     await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);

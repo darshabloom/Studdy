@@ -18,7 +18,10 @@ export default function Layout({ children }: { children: ReactNode }) {
     <WorkspaceChrome
       accepts={['tutor']}
       navItems={NAV_ITEMS}
-      navLinks={[{ label: 'Lesson requests', href: '/tutor/requests' }]}
+      navLinks={[
+        { label: 'Lesson requests', href: '/tutor/requests' },
+        { label: 'Availability', href: '/tutor/availability' },
+      ]}
       homeHref="/tutor"
     >
       {children}

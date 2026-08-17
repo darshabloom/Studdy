@@ -67,3 +67,18 @@ export {
   setRuleSetting,
   type LoadedRequestRules,
 } from './repositories/rule-settings';
+export {
+  archiveAvailabilityException,
+  archiveAvailabilityRule,
+  bookableSlotsForTutors,
+  createAvailabilityException,
+  createAvailabilityRule,
+  listAvailabilityExceptions,
+  listAvailabilityRules,
+  type AvailabilityExceptionRecord,
+  type AvailabilityRuleRecord,
+  type BookableSlot,
+  type BookableSlotsQuery,
+  type CreateAvailabilityExceptionInput,
+  type CreateAvailabilityRuleInput,
+} from './repositories/availability';

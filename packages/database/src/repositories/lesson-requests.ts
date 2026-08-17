@@ -21,6 +21,7 @@ import {
   tutorRequests,
   tutorTimeReservations,
 } from '../schema/index';
+import { bookableSlotsForTutors } from './availability';
 import { loadRequestRules } from './rule-settings';
 
 /**
@@ -165,6 +166,45 @@ export async function createIntendedLessonRequest(
       throw new RequestValidationError(
         (validation.error.details?.['issues'] ?? {}) as Record<string, string>,
       );
+    }
+
+    // The proposed time must be one the tutor actually offers.
+    //
+    // Without this the request path is an availability oracle. A hold collision
+    // raises 23P01 and surfaces as SlotUnavailableError, while a privately
+    // blocked or simply non-working time succeeds — so a family could send and
+    // withdraw requests across a tutor's week and separate "someone else holds
+    // this time" from every other kind of gap. That is precisely the
+    // distinction the derived-slot boundary exists to prevent.
+    //
+    // Checking here rather than in the action means every caller inherits it,
+    // and a time the tutor never offered now fails identically to one already
+    // taken: same error, same message, no information in the difference.
+    const durationMinutes = Math.round(
+      (input.proposedEndAt.getTime() - input.proposedStartAt.getTime()) / 60_000,
+    );
+    // `stepMinutes: 1` aligns the slot grid to the proposed start instead of the
+    // 30-minute grid a family is shown, so this asks "is this interval inside
+    // the tutor's open time" rather than "does it sit on our display grid".
+    // A tutor free 16:00–19:00 genuinely is free at 17:15.
+    const bookable = await bookableSlotsForTutors({
+      tutorProfileIds: input.tutorProfileIds,
+      from: input.proposedStartAt,
+      to: input.proposedEndAt,
+      durationMinutes,
+      stepMinutes: 1,
+      now,
+    });
+    const notOffered = input.tutorProfileIds.find(
+      (tutorProfileId) =>
+        !(bookable.get(tutorProfileId) ?? []).some(
+          (slot) =>
+            slot.startAt.getTime() === input.proposedStartAt.getTime() &&
+            slot.endAt.getTime() === input.proposedEndAt.getTime(),
+        ),
+    );
+    if (notOffered !== undefined) {
+      throw new SlotUnavailableError(notOffered);
     }
 
     const deadlines = calculateDeadlines(rules, input.proposedStartAt, now);

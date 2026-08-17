@@ -13,6 +13,7 @@ import { listRequestsForTutor, listRequestsForStudents } from '../repositories/r
 import { setRuleSetting } from '../repositories/rule-settings';
 import {
   auditEvents,
+  availabilityExceptions,
   domainEvents,
   intendedLessonRequests,
   outboxEntries,
@@ -114,6 +115,18 @@ async function buildFixture(label: string): Promise<Fixture> {
           currencyCode: 'NZD',
         })
         .returning({ id: serviceVersions.id });
+      // Open for the whole test horizon. The request path refuses a time the
+      // tutor does not offer, and these fixtures are about fan-out, holds and
+      // deadlines rather than opening hours. One 'adds' exception is used
+      // instead of recurring rules because it is a single absolute interval
+      // with no daily boundary for a proposed lesson to fall through.
+      await db.insert(availabilityExceptions).values({
+        tutorProfileId: profile!.id,
+        startsAt: new Date(Date.now() - 60 * 60 * 1000),
+        endsAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+        effectCode: 'adds',
+      });
+
       tutors.push({
         tutorProfileId: profile!.id,
         serviceVersionId: version!.id,
@@ -127,7 +140,15 @@ async function buildFixture(label: string): Promise<Fixture> {
   }
 }
 
-const future = (hours: number): Date => new Date(Date.now() + hours * 60 * 60 * 1000);
+/**
+ * Whole minutes: the bookable-time check aligns to a minute grid, and no real
+ * form submits seconds.
+ */
+const future = (hours: number): Date => {
+  const at = new Date(Date.now() + hours * 60 * 60 * 1000);
+  at.setSeconds(0, 0);
+  return at;
+};
 
 describe.skipIf(!available)('intended lesson requests (integration)', () => {
   beforeAll(async () => {
@@ -717,5 +738,86 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
     expect(requests).toHaveLength(1);
     expect(requests[0]!.tutorRequests).toHaveLength(2);
     expect(requests[0]!.tutorRequests[0]!.tutorFirstName).toBeTruthy();
+  });
+
+  /**
+   * The request path must not become an availability oracle.
+   *
+   * Sending is the one family-facing write that touches a tutor's calendar, so
+   * it is the one place a family could probe it. If a time already held by
+   * someone else failed differently from a time the tutor privately blocked or
+   * simply does not work, a family could send and withdraw across a week and
+   * read back the tutor's real calendar — the exact distinction the derived
+   * slot boundary exists to erase.
+   */
+  describe('does not leak why a time is unavailable', () => {
+    const requestFor = async (
+      fixture: Fixture,
+      start: Date,
+    ): Promise<{ ok: boolean; error: unknown }> => {
+      try {
+        await createIntendedLessonRequest({
+          studentSubjectSectionId: fixture.subjectSectionId,
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutors[0]!.tutorProfileId],
+          proposedStartAt: start,
+          proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        });
+        return { ok: true, error: null };
+      } catch (error) {
+        return { ok: false, error };
+      }
+    };
+
+    it('refuses a time outside the tutor working hours', async () => {
+      const fixture = await buildFixture(`oracle-outside-${randomUUID().slice(0, 8)}`);
+      // Beyond the fixture's open interval entirely.
+      const start = future(95 * 24);
+      const result = await requestFor(fixture, start);
+      expect(result.ok).toBe(false);
+      expect(result.error).toBeInstanceOf(SlotUnavailableError);
+    });
+
+    it('refuses a privately blocked time identically to one already held', async () => {
+      const fixture = await buildFixture(`oracle-block-${randomUUID().slice(0, 8)}`);
+      const blockedStart = future(100);
+      const takenStart = future(130);
+
+      // A private block, carrying a reason the family may never learn.
+      const { sql, db } = createDatabaseClient();
+      try {
+        await db.insert(availabilityExceptions).values({
+          tutorProfileId: fixture.tutors[0]!.tutorProfileId,
+          startsAt: new Date(blockedStart.getTime() - 30 * 60 * 1000),
+          endsAt: new Date(blockedStart.getTime() + 90 * 60 * 1000),
+          effectCode: 'removes',
+          reasonCode: 'medical_appointment',
+          privateNote: 'Never reaches a family.',
+        });
+      } finally {
+        await sql.end();
+      }
+
+      // Someone else already holds the second time.
+      const firstHold = await requestFor(fixture, takenStart);
+      expect(firstHold.ok).toBe(true);
+
+      const blocked = await requestFor(fixture, blockedStart);
+      const taken = await requestFor(fixture, takenStart);
+
+      // Same class, same message: the difference carries no information.
+      expect(blocked.ok).toBe(false);
+      expect(taken.ok).toBe(false);
+      expect(blocked.error).toBeInstanceOf(SlotUnavailableError);
+      expect(taken.error).toBeInstanceOf(SlotUnavailableError);
+      expect((blocked.error as Error).message).toBe((taken.error as Error).message);
+    });
   });
 });

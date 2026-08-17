@@ -2,6 +2,8 @@ import { and, eq } from 'drizzle-orm';
 import { createDatabaseClient } from '../../client';
 import {
   authIdentityLinks,
+  availabilityExceptions,
+  availabilityRules,
   services,
   serviceVersions,
   subjects,
@@ -50,7 +52,21 @@ interface TutorSeed {
     priceAmountMinor: number;
     formatCode: string;
   }>;
+  /**
+   * Recurring bookable time, chosen to match the tutor's availability label so
+   * the label and the real calculated slots agree. A tutor advertised as
+   * "available this week" who has no bookable time would be a lie the seed told.
+   */
+  availability: ReadonlyArray<{
+    /** 0 = Sunday … 6 = Saturday. */
+    dayOfWeek: number;
+    localStartTime: string;
+    localEndTime: string;
+  }>;
 }
+
+const SEED_TIME_ZONE = 'Pacific/Auckland';
+const SEED_EFFECTIVE_FROM = '2026-01-01';
 
 const TUTOR_SEED: readonly TutorSeed[] = [
   {
@@ -78,6 +94,13 @@ const TUTOR_SEED: readonly TutorSeed[] = [
         priceAmountMinor: 3500,
         formatCode: 'online',
       },
+    ],
+    availability: [
+      { dayOfWeek: 1, localStartTime: '16:00', localEndTime: '19:00' },
+      { dayOfWeek: 2, localStartTime: '16:00', localEndTime: '19:00' },
+      { dayOfWeek: 3, localStartTime: '16:00', localEndTime: '19:00' },
+      { dayOfWeek: 4, localStartTime: '16:00', localEndTime: '19:00' },
+      { dayOfWeek: 5, localStartTime: '15:00', localEndTime: '18:00' },
     ],
   },
   {
@@ -118,6 +141,10 @@ const TUTOR_SEED: readonly TutorSeed[] = [
         formatCode: 'either',
       },
     ],
+    availability: [
+      { dayOfWeek: 2, localStartTime: '17:00', localEndTime: '19:00' },
+      { dayOfWeek: 4, localStartTime: '17:00', localEndTime: '19:00' },
+    ],
   },
   {
     email: 'tutor.c@local.studdy.test',
@@ -144,6 +171,11 @@ const TUTOR_SEED: readonly TutorSeed[] = [
         priceAmountMinor: 4000,
         formatCode: 'online',
       },
+    ],
+    availability: [
+      { dayOfWeek: 1, localStartTime: '15:00', localEndTime: '18:00' },
+      { dayOfWeek: 3, localStartTime: '15:00', localEndTime: '18:00' },
+      { dayOfWeek: 5, localStartTime: '15:00', localEndTime: '18:00' },
     ],
   },
   {
@@ -172,6 +204,7 @@ const TUTOR_SEED: readonly TutorSeed[] = [
         formatCode: 'online',
       },
     ],
+    availability: [{ dayOfWeek: 1, localStartTime: '16:00', localEndTime: '17:00' }],
   },
 ];
 
@@ -305,6 +338,55 @@ export async function seedDiscoveryTutors(): Promise<void> {
           });
         }
       }
+      // Recurring availability. Idempotent on (tutor, weekday, start) so
+      // reseeding does not stack duplicate rules on top of each other.
+      for (const window of seed.availability) {
+        const [existingRule] = await db
+          .select({ id: availabilityRules.id })
+          .from(availabilityRules)
+          .where(
+            and(
+              eq(availabilityRules.tutorProfileId, tutorProfileId),
+              eq(availabilityRules.dayOfWeek, window.dayOfWeek),
+              eq(availabilityRules.localStartTime, window.localStartTime),
+            ),
+          );
+        if (existingRule === undefined) {
+          await db.insert(availabilityRules).values({
+            tutorProfileId,
+            dayOfWeek: window.dayOfWeek,
+            localStartTime: window.localStartTime,
+            localEndTime: window.localEndTime,
+            ianaTimeZone: SEED_TIME_ZONE,
+            effectiveFrom: SEED_EFFECTIVE_FROM,
+            lessonFormatCode: 'any',
+          });
+        }
+      }
+
+      // One blocked period for the limited tutor, so the derived slots exercise
+      // a removal rather than only ever adding. Its reason is server-only and
+      // must never reach a family — it exists to prove that boundary is real.
+      if (seed.email === 'tutor.b@local.studdy.test') {
+        const blockStart = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+        blockStart.setUTCMinutes(0, 0, 0);
+        const [existingBlock] = await db
+          .select({ id: availabilityExceptions.id })
+          .from(availabilityExceptions)
+          .where(eq(availabilityExceptions.tutorProfileId, tutorProfileId));
+        if (existingBlock === undefined) {
+          await db.insert(availabilityExceptions).values({
+            tutorProfileId,
+            startsAt: blockStart,
+            endsAt: new Date(blockStart.getTime() + 4 * 60 * 60 * 1000),
+            effectCode: 'removes',
+            reasonCode: 'personal_commitment',
+            privateNote: 'Synthetic: proves a private reason never reaches a family.',
+            isPrivate: true,
+          });
+        }
+      }
+
       console.log(`seeded tutor ${seed.publicFirstName} (${seed.email})`);
     }
   } finally {

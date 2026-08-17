@@ -10,12 +10,26 @@ import {
   SlotUnavailableError,
   withdrawRequest,
 } from '@studdy/database';
+import { zonedTimeToUtc } from '@studdy/domain/availability';
 import { resolveDiscoveryContext } from '../discovery/context';
 
 export interface RequestFormState {
   error: string | null;
   issues?: Record<string, string>;
 }
+
+/**
+ * The zone lesson times are entered and stored in.
+ *
+ * The form collects a wall-clock date and time, which is meaningless without a
+ * zone. Constructing `new Date('2026-09-01T16:00:00')` would read it in the
+ * *server's* zone — 16:00 on a developer's machine in Auckland, but 16:00 UTC
+ * on a CI runner or a deployed host, i.e. a different lesson four in the
+ * morning. Availability rules are stored against this zone, so the entered time
+ * has to be resolved against it too or a request lands outside the hours the
+ * tutor actually offered.
+ */
+const REQUEST_TIME_ZONE = 'Pacific/Auckland';
 
 /**
  * Send an Intended Lesson Request to the chosen tutors.
@@ -59,7 +73,12 @@ export async function sendLessonRequestAction(
     };
   }
 
-  const proposedStartAt = new Date(`${date}T${time}:00`);
+  let proposedStartAt: Date;
+  try {
+    proposedStartAt = zonedTimeToUtc(date, time, REQUEST_TIME_ZONE);
+  } catch {
+    return { error: null, issues: { lessonDate: 'That date and time could not be understood.' } };
+  }
   if (Number.isNaN(proposedStartAt.getTime())) {
     return { error: null, issues: { lessonDate: 'That date and time could not be understood.' } };
   }
@@ -75,7 +94,7 @@ export async function sendLessonRequestAction(
       proposedStartAt,
       proposedEndAt,
       formatCode,
-      timeZone: 'Pacific/Auckland',
+      timeZone: REQUEST_TIME_ZONE,
       notesForTutors: notes === '' ? null : notes,
       // No payment method exists until the Stripe slice; the gate is
       // configuration-driven and currently disabled.
