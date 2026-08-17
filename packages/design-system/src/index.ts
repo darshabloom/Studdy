@@ -25,6 +25,28 @@ export {
   type StateProps,
 } from './components/states';
 export { EnvironmentBanner } from './components/environment-banner';
+export {
+  WeekCalendar,
+  type WeekCalendarProps,
+  type WeekCalendarMode,
+} from './components/calendar/week-calendar';
+export {
+  WEEKDAY_COLUMN_LABELS,
+  DAYS_IN_WEEK,
+  MINUTES_IN_DAY,
+  FAMILY_SAFE_ROLES,
+  assertFamilySafe,
+  blockPosition,
+  clockLabel,
+  draggedRange,
+  fittedWindow,
+  hourMarks,
+  minutesAtOffset,
+  snapMinutes,
+  type CalendarBlock,
+  type CalendarBlockRole,
+  type CalendarWindow,
+} from './components/calendar/geometry';
 
 // Layouts
 export { PublicShell } from './layouts/public-shell';
