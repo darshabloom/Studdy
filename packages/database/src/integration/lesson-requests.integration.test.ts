@@ -1239,6 +1239,42 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       }
     });
 
+    it('records the real prior status of each closed request', async () => {
+      // Audit fidelity: whether a tutor had accepted or was still deciding
+      // when the family chose is the interesting part of the transition.
+      const scenario = await twoAcceptances(`select-audit-${randomUUID().slice(0, 8)}`);
+      const correlationId = `cor_${randomUUID()}`;
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId,
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [loser] = await db
+          .select({ id: tutorRequests.id })
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.loser));
+        const transitions = await db
+          .select()
+          .from(statusTransitions)
+          .where(
+            and(
+              eq(statusTransitions.correlationId, correlationId),
+              eq(statusTransitions.entityId, loser!.id),
+            ),
+          );
+        expect(transitions).toHaveLength(1);
+        expect(transitions[0]!.fromStatusCode).toBe('accepted');
+        expect(transitions[0]!.toStatusCode).toBe('closed');
+      } finally {
+        await sql.end();
+      }
+    });
+
     it('tells the closed tutor nothing about why', async () => {
       const scenario = await twoAcceptances(`select-privacy-${randomUUID().slice(0, 8)}`);
       await selectAcceptedTutorRequest({

@@ -47,7 +47,10 @@ export default async function RequestDetailPage({
             {request.subjectDisplayName} for {request.studentPreferredName}
           </h1>
         </div>
-        <FamilyRequestStatus statusCode={request.statusCode} />
+        <FamilyRequestStatus
+          statusCode={request.statusCode}
+          closeReasonCode={request.closeReasonCode}
+        />
       </div>
 
       <Card className="mt-6">

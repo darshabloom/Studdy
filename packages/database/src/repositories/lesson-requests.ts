@@ -1429,6 +1429,23 @@ export async function selectAcceptedTutorRequest(
       // 2. Every competing request closes — as `closed`, never a status that
       //    says "not selected". A distinct status would tell the tutor a
       //    competitor existed; the real reason stays server-side.
+      //
+      //    Their prior status is read first: an UPDATE ... RETURNING gives the
+      //    new row, so recording the transition without this would log
+      //    `from: null` and lose whether the tutor had accepted or was still
+      //    deciding when the family chose.
+      const beforeClose = await tx
+        .select({ id: tutorRequests.id, statusCode: tutorRequests.statusCode })
+        .from(tutorRequests)
+        .where(
+          and(
+            eq(tutorRequests.intendedLessonRequestId, ilr.id),
+            ne(tutorRequests.id, winner.id),
+            inArray(tutorRequests.statusCode, ['sent', 'accepted']),
+          ),
+        );
+      const statusBeforeClose = new Map(beforeClose.map((row) => [row.id, row.statusCode]));
+
       const losers = await tx
         .update(tutorRequests)
         .set({
@@ -1504,7 +1521,7 @@ export async function selectAcceptedTutorRequest(
         await tx.insert(statusTransitions).values({
           entityType: 'tutor_request',
           entityId: loser.id,
-          fromStatusCode: null,
+          fromStatusCode: statusBeforeClose.get(loser.id) ?? null,
           toStatusCode: 'closed',
           actorUserId: input.actorUserId,
           reasonCode: 'another_tutor_selected',

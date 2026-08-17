@@ -63,7 +63,10 @@ export default async function RequestsPage() {
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <FamilyRequestStatus statusCode={request.statusCode} />
+                    <FamilyRequestStatus
+                      statusCode={request.statusCode}
+                      closeReasonCode={request.closeReasonCode}
+                    />
                     <Button size="sm" variant="secondary" asChild>
                       <Link href={`/requests/${request.reference}`}>View request</Link>
                     </Button>

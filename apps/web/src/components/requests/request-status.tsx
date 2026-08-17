@@ -29,6 +29,10 @@ const FAMILY_CLOSE_REASON_LABELS: Record<string, { label: string; family: Status
   request_expired: { label: 'Request expired', family: 'overdue' },
   all_tutors_declined: { label: 'Closed', family: 'archived' },
   another_tutor_selected: { label: 'You chose another tutor', family: 'archived' },
+  // The family let their own window run out. Saying so plainly is the point:
+  // "Closed" would leave them guessing why a tutor they had secured vanished.
+  // The same close reason renders to that tutor as the generic ending.
+  selection_window_lapsed: { label: 'You did not choose in time', family: 'overdue' },
   payment_window_lapsed: { label: 'Payment window passed', family: 'overdue' },
 };
 
@@ -66,11 +70,23 @@ const TUTOR_REQUEST_LABELS: Record<string, { label: string; family: StatusFamily
   // safe default if it ever appears.
 };
 
-export function FamilyRequestStatus({ statusCode }: { statusCode: string }): ReactNode {
-  const entry = FAMILY_REQUEST_LABELS[statusCode] ?? {
-    label: statusCode,
-    family: 'archived' as const,
-  };
+export function FamilyRequestStatus({
+  statusCode,
+  closeReasonCode = null,
+}: {
+  statusCode: string;
+  closeReasonCode?: string | null;
+}): ReactNode {
+  // The request is theirs, so a closed one says why. A selection or payment
+  // window that ran out is exactly the case where a bare "Closed" would leave
+  // a family unable to tell what happened to a tutor they had already secured.
+  const entry =
+    statusCode === 'closed' && closeReasonCode !== null
+      ? (FAMILY_CLOSE_REASON_LABELS[closeReasonCode] ?? FAMILY_REQUEST_LABELS['closed']!)
+      : (FAMILY_REQUEST_LABELS[statusCode] ?? {
+          label: statusCode,
+          family: 'archived' as const,
+        });
   return <StatusBadge family={entry.family}>{entry.label}</StatusBadge>;
 }
 
