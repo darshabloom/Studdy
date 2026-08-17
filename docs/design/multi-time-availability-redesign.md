@@ -112,6 +112,25 @@ be protecting a slot nobody could still book.
 
 ### 3.1 Parent / guardian
 
+> **SUPERSEDED IN PRESENTATION, not in model.** The owner reviewed the working slice and
+> directed a user-journey and interaction redesign before PR #17 may merge. The screen
+> sequence in the table below is **shortlist-first, and that is no longer the normal path**.
+>
+> The normal journey is now: **Child → Subject → Tutor → Lesson length → Online/In person →
+> Availability → Review → Send request**, entered from a tutor card or profile with the
+> tutor and any known child/subject context prefilled. **Shortlisting is optional** — a
+> saving and comparison feature, never a prerequisite for booking. The multi-tutor fan-out
+> in this table survives intact as an optional "Ask shortlisted tutors" journey reached from
+> the shortlist.
+>
+> Also changed: **1–5 acceptable times, not 2–5**; lesson length is chosen from the tutor's
+> **published service durations**; and a `student_subject_section` is find-or-created **at
+> send**, never as a side effect of browsing.
+>
+> Everything else in this document — the data model, the state machines, the acceptance and
+> selection transactions, and the whole of §7's access model — **stands unchanged**. See
+> `docs/handoffs/current-session.md` §6 for the authoritative redesign and its steps.
+
 | #   | Screen                                   | What happens                                                                                                                                                                                                                                                                                                                                                           |
 | --- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | `/sign-up` → `/verify` → `/welcome`      | Account, email verification, display and family name. Unchanged.                                                                                                                                                                                                                                                                                                       |
