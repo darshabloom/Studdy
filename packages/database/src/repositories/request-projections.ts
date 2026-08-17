@@ -42,6 +42,17 @@ export interface OfferedTimeView {
   readonly statusCode: string;
 }
 
+export interface TutorOfferedTimeView extends OfferedTimeView {
+  /**
+   * This offered row's own id — what the tutor names when accepting.
+   *
+   * Their own record, not `request_time_option_id`: that one identifies the
+   * family's option and belongs to the other side of the boundary, so it is
+   * never selected here.
+   */
+  readonly tutorRequestTimeOptionId: string;
+}
+
 export interface FamilyTutorRequestView {
   readonly tutorRequestId: string;
   readonly reference: string;
@@ -258,7 +269,7 @@ export interface TutorRequestView {
    * tell that from this projection, because nothing here counts anything they
    * were not asked about.
    */
-  readonly offeredTimes: readonly OfferedTimeView[];
+  readonly offeredTimes: readonly TutorOfferedTimeView[];
   readonly durationMinutes: number;
   readonly formatCode: string;
   readonly timeZone: string;
@@ -368,6 +379,7 @@ export async function listRequestsForTutor(
     // the boundary, and nothing tutor-facing has any use for it.
     const offered = await db
       .select({
+        tutorRequestTimeOptionId: tutorRequestTimeOptions.id,
         tutorRequestId: tutorRequestTimeOptions.tutorRequestId,
         startAt: tutorRequestTimeOptions.startsAt,
         endAt: tutorRequestTimeOptions.endsAt,
@@ -389,6 +401,7 @@ export async function listRequestsForTutor(
       offeredTimes: offered
         .filter((entry) => entry.tutorRequestId === tutorRequestId)
         .map((entry) => ({
+          tutorRequestTimeOptionId: entry.tutorRequestTimeOptionId,
           startAt: entry.startAt,
           endAt: entry.endAt,
           statusCode: entry.statusCode,

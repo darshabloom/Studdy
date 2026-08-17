@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { listRequestsForTutor, tutorProfileForUser } from '@studdy/database';
 import { Alert, Card, EmptyState, RestrictedState } from '@studdy/design-system';
 import {
@@ -79,7 +80,12 @@ export default async function TutorRequestsPage() {
                     <div>
                       <p className="text-sm text-text-muted">{request.reference}</p>
                       <p className="text-lg font-semibold">
-                        {request.subjectDisplayName} with {request.studentPreferredName}
+                        <Link
+                          className="hover:underline"
+                          href={`/tutor/requests/${request.reference}`}
+                        >
+                          {request.subjectDisplayName} with {request.studentPreferredName}
+                        </Link>
                       </p>
                       {/* The times THIS tutor was offered. Never a count of
                           the family's full set — only their own subset. */}

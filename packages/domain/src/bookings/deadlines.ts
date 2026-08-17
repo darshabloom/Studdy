@@ -66,3 +66,28 @@ export function calculateDeadlines(
 
   return { respondByAt, decisionDeadlineAt, appliedTier };
 }
+
+/**
+ * When an acceptance stops holding the tutor's calendar (D-8).
+ *
+ * The earlier of a fixed window from the acceptance, and a cutoff before the
+ * lesson. The second limb is the one that matters: minimum notice is the same
+ * figure, so a hold can never outlive the moment the lesson stops being
+ * bookable at all — a hold living past that would be protecting a slot nobody
+ * could still book, at the cost of the tutor's real calendar time.
+ *
+ * Never extend this to disguise the timing of a family's decision. That would
+ * spend a tutor's bookable time to obscure an inference the privacy guarantee
+ * does not even cover.
+ */
+export function acceptanceHoldExpiry(
+  rules: RequestRules,
+  acceptedAt: Date,
+  offeredStartAt: Date,
+): Date {
+  const window = new Date(acceptedAt.getTime() + rules.acceptanceHoldHours * MS_PER_HOUR);
+  const cutoff = new Date(
+    offeredStartAt.getTime() - rules.acceptanceHoldCutoffBeforeLessonHours * MS_PER_HOUR,
+  );
+  return new Date(Math.min(window.getTime(), cutoff.getTime()));
+}

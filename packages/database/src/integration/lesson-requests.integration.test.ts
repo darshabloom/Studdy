@@ -3,10 +3,14 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { and, eq, inArray } from 'drizzle-orm';
 import { createDatabaseClient } from '../client';
 import {
+  acceptTutorRequestTime,
   createIntendedLessonRequest,
+  declineTutorRequest,
   expireOverdueRequests,
   NoTutorAvailableError,
+  RequestNotOpenError,
   RequestValidationError,
+  TimeNoLongerAvailableError,
   withdrawRequest,
 } from '../repositories/lesson-requests';
 import { listRequestsForTutor, listRequestsForStudents } from '../repositories/request-projections';
@@ -615,10 +619,16 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
     expect(only.reference).toMatch(/^TREQ-/);
     expect(only.offeredTimes.length).toBeGreaterThan(0);
     expect(only.offeredTimes[0]?.startAt).toBeInstanceOf(Date);
-    // Pinned: an offered time carries the two instants and its status, and in
-    // particular never `requestTimeOptionId` — an identifier from the family's
-    // side of the boundary.
-    expect(Object.keys(only.offeredTimes[0]!).sort()).toEqual(['endAt', 'startAt', 'statusCode']);
+    // Pinned: an offered time carries the two instants, its status, and the
+    // tutor's OWN row id so they can accept it — and in particular never
+    // `requestTimeOptionId`, which identifies the family's option and belongs
+    // to the other side of the boundary.
+    expect(Object.keys(only.offeredTimes[0]!).sort()).toEqual([
+      'endAt',
+      'startAt',
+      'statusCode',
+      'tutorRequestTimeOptionId',
+    ]);
     expect(only.subjectDisplayName).toBeTruthy();
     // Nothing is held at send any more (D-1): the hold arrives at acceptance.
     expect(only.holdExpiresAt).toBeNull();
@@ -905,6 +915,190 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
     expect(requests).toHaveLength(1);
     expect(requests[0]!.tutorRequests).toHaveLength(2);
     expect(requests[0]!.tutorRequests[0]!.tutorFirstName).toBeTruthy();
+  });
+
+  describe('accepting a time', () => {
+    /** Send a request to one tutor and return their offered rows. */
+    const sendTo = async (
+      fixture: Fixture,
+      tutorIndex: number,
+      starts: readonly Date[],
+    ): Promise<{ reference: string; optionIds: string[] }> => {
+      const created = await createIntendedLessonRequest({
+        studentSubjectSectionId: fixture.subjectSectionId,
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: [fixture.tutors[tutorIndex]!.tutorProfileId],
+        proposedStarts: [...starts],
+        formatCode: 'online',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      const view = await listRequestsForTutor(fixture.tutors[tutorIndex]!.tutorProfileId);
+      const mine = view.find((entry) => entry.reference === created.tutorRequestReferences[0]);
+      return {
+        reference: created.tutorRequestReferences[0]!,
+        optionIds: (mine?.offeredTimes ?? []).map((option) => option.tutorRequestTimeOptionId),
+      };
+    };
+
+    it('claims the time, holds the calendar and moves the request', async () => {
+      const fixture = await buildFixture(`accept-${randomUUID().slice(0, 8)}`);
+      const start = future(160);
+      const sent = await sendTo(fixture, 0, [start, altStart(start)]);
+
+      const accepted = await acceptTutorRequestTime({
+        reference: sent.reference,
+        tutorProfileId: fixture.tutors[0]!.tutorProfileId,
+        tutorRequestTimeOptionId: sent.optionIds[0]!,
+        actorUserId: fixture.tutors[0]!.userId,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      expect(accepted.startAt.getTime()).toBe(start.getTime());
+
+      // The hold exists now — and only now (D-1).
+      const { sql, db } = createDatabaseClient();
+      try {
+        const holds = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorProfileId, fixture.tutors[0]!.tutorProfileId));
+        expect(holds).toHaveLength(1);
+        expect(holds[0]!.statusCode).toBe('active');
+        expect(holds[0]!.expiresAt!.getTime()).toBe(accepted.holdExpiresAt.getTime());
+        // D-8: never past the point the lesson stops being bookable.
+        expect(accepted.holdExpiresAt.getTime()).toBeLessThanOrEqual(
+          start.getTime() - 2 * 60 * 60 * 1000,
+        );
+
+        const [request] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, sent.reference));
+        expect(request!.statusCode).toBe('accepted');
+        expect(request!.acceptedTimeOptionId).toBe(sent.optionIds[0]);
+        expect(request!.holdRuleVersion).not.toBeNull();
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('refuses a second acceptance on the same request', async () => {
+      // D-4: one accepted time per request, and the database enforces it even
+      // if the status guard were wrong.
+      const fixture = await buildFixture(`accept-twice-${randomUUID().slice(0, 8)}`);
+      const start = future(170);
+      const sent = await sendTo(fixture, 0, [start, altStart(start)]);
+      const base = {
+        reference: sent.reference,
+        tutorProfileId: fixture.tutors[0]!.tutorProfileId,
+        actorUserId: fixture.tutors[0]!.userId,
+      };
+
+      await acceptTutorRequestTime({
+        ...base,
+        tutorRequestTimeOptionId: sent.optionIds[0]!,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      await expect(
+        acceptTutorRequestTime({
+          ...base,
+          tutorRequestTimeOptionId: sent.optionIds[1]!,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestNotOpenError);
+    });
+
+    it('lets exactly one of two tutors claim the same instant', async () => {
+      // Two families, two tutors, one time. Both were free to be asked; the
+      // exclusion constraint decides the calendar, and the loser is told the
+      // time is gone with no hint of who took it.
+      const fixture = await buildFixture(`accept-race-${randomUUID().slice(0, 8)}`);
+      const start = future(180);
+      const first = await sendTo(fixture, 0, [start, altStart(start)]);
+      const second = await sendTo(fixture, 0, [start, altStart(start)]);
+
+      const results = await Promise.allSettled([
+        acceptTutorRequestTime({
+          reference: first.reference,
+          tutorProfileId: fixture.tutors[0]!.tutorProfileId,
+          tutorRequestTimeOptionId: first.optionIds[0]!,
+          actorUserId: fixture.tutors[0]!.userId,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+        acceptTutorRequestTime({
+          reference: second.reference,
+          tutorProfileId: fixture.tutors[0]!.tutorProfileId,
+          tutorRequestTimeOptionId: second.optionIds[0]!,
+          actorUserId: fixture.tutors[0]!.userId,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ]);
+
+      expect(results.filter((entry) => entry.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.find((entry) => entry.status === 'rejected');
+      expect((rejected as PromiseRejectedResult).reason).toBeInstanceOf(TimeNoLongerAvailableError);
+    });
+
+    it('refuses a reference belonging to another tutor, exactly as a missing one', async () => {
+      const fixture = await buildFixture(`accept-scope-${randomUUID().slice(0, 8)}`);
+      const start = future(190);
+      const sent = await sendTo(fixture, 0, [start, altStart(start)]);
+
+      const notOurs = acceptTutorRequestTime({
+        reference: sent.reference,
+        tutorProfileId: fixture.tutors[1]!.tutorProfileId,
+        tutorRequestTimeOptionId: sent.optionIds[0]!,
+        actorUserId: fixture.tutors[1]!.userId,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      const missing = acceptTutorRequestTime({
+        reference: 'TREQ-ZZZZZZZZZZ',
+        tutorProfileId: fixture.tutors[1]!.tutorProfileId,
+        tutorRequestTimeOptionId: sent.optionIds[0]!,
+        actorUserId: fixture.tutors[1]!.userId,
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      // Same class, same message: a tutor cannot probe references to discover
+      // which ones exist.
+      await expect(notOurs).rejects.toBeInstanceOf(RequestNotOpenError);
+      await expect(missing).rejects.toBeInstanceOf(RequestNotOpenError);
+    });
+
+    it('declines without taking any calendar time', async () => {
+      const fixture = await buildFixture(`decline-${randomUUID().slice(0, 8)}`);
+      const start = future(200);
+      const sent = await sendTo(fixture, 0, [start, altStart(start)]);
+
+      await declineTutorRequest({
+        reference: sent.reference,
+        tutorProfileId: fixture.tutors[0]!.tutorProfileId,
+        actorUserId: fixture.tutors[0]!.userId,
+        declineReasonCode: 'too_far_away',
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [request] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, sent.reference));
+        expect(request!.statusCode).toBe('declined');
+
+        const holds = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorProfileId, fixture.tutors[0]!.tutorProfileId));
+        expect(holds).toEqual([]);
+      } finally {
+        await sql.end();
+      }
+    });
   });
 
   /**

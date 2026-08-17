@@ -186,20 +186,6 @@ test.describe('lesson requests', () => {
     await page.goto('/tutor/requests');
     await expect(page.getByRole('heading', { name: 'Lesson requests' })).toBeVisible();
 
-    // Responding is honestly deferred, not faked with dead controls.
-    await expect(page.getByText('Responding opens in the next release')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Decline' })).toHaveCount(0);
-
-    const holds = page.getByText('Temporary request hold');
-    if ((await holds.count()) > 0) {
-      await expect(holds.first()).toBeVisible();
-      await expect(
-        page.getByText(/This time is held in your calendar until/).first(),
-      ).toBeVisible();
-      await expect(page.getByText(/released automatically/).first()).toBeVisible();
-    }
-
     // Nothing on the page may reveal a competitor, a fan-out or an ILR.
     const body = (await page.locator('body').innerText()).toLowerCase();
     expect(body).not.toContain('lr-');
@@ -209,6 +195,56 @@ test.describe('lesson requests', () => {
     expect(body).not.toContain('position');
     const html = await page.content();
     expect(html).not.toMatch(/intendedLessonRequestId/i);
+  });
+
+  test('tutor: accepts one offered time and sees the hold with its expiry', async ({ page }) => {
+    await signIn(page, 'tutor.a@local.studdy.test');
+    await page.goto('/tutor/requests');
+    await page.getByRole('link', { name: /with /i }).first().click();
+    await expect(page).toHaveURL(/\/tutor\/requests\/TREQ-/);
+
+    await expect(
+      page.getByRole('heading', { name: 'Can you do one of these times?' }),
+    ).toBeVisible();
+    await page.getByRole('radio').first().check();
+    await page.getByRole('button', { name: 'Accept this time' }).click();
+
+    // The hold exists only now, and is shown with its expiry (D-1, D-8).
+    await expect(page.getByText('You accepted this time')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/held on your calendar until/)).toBeVisible();
+    await expect(page.getByText(/may or may not become a booking/)).toBeVisible();
+
+    // Still nothing about anyone else.
+    const body = (await page.locator('body').innerText()).toLowerCase();
+    expect(body).not.toContain('lr-');
+    expect(body).not.toContain('another tutor');
+  });
+
+  test('tutor: an unowned reference is indistinguishable from a missing one', async ({ page }) => {
+    // SP-007 used to get "no HTTP-status oracle" for free because no tutor-side
+    // [reference] route existed. This route removes that, so the property has
+    // to be proven: a reference belonging to another tutor and one that never
+    // existed must answer identically.
+    await signIn(page, 'tutor.a@local.studdy.test');
+    await page.goto('/tutor/requests');
+    await page.getByRole('link', { name: /with /i }).first().click();
+    await expect(page).toHaveURL(/\/tutor\/requests\/TREQ-/);
+    const realReference = new URL(page.url()).pathname.split('/').pop() ?? '';
+    expect(realReference).toMatch(/^TREQ-/);
+
+    // Tutor C holds no such request, so for them it is another tutor's.
+    await signIn(page, 'tutor.c@local.studdy.test');
+    const unowned = await page.goto(`/tutor/requests/${realReference}`);
+    const unownedBody = await page.locator('body').innerText();
+    const missing = await page.goto('/tutor/requests/TREQ-ZZZZZZZZZZ');
+    const missingBody = await page.locator('body').innerText();
+
+    // Same status and same body: nothing in the response tells this tutor that
+    // one of those references is real.
+    expect(unowned?.status()).toBe(missing?.status());
+    expect(unownedBody).toBe(missingBody);
+    // And neither leaks the request itself.
+    expect(unownedBody).not.toContain(realReference);
   });
 
   test('a tutor cannot reach the family request routes', async ({ page }) => {
