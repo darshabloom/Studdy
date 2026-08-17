@@ -36,6 +36,10 @@ const FAMILY_REQUEST_LABELS: Record<string, { label: string; family: StatusFamil
   draft: { label: 'Draft', family: 'pending' },
   awaiting_responses: { label: 'Awaiting responses', family: 'pending' },
   ready_for_selection: { label: 'Ready to choose', family: 'awaiting_action' },
+  // Chosen but not yet paid. "Booked" is reserved for a confirmed booking, so
+  // this must not borrow it — a family told they are booked before payment
+  // would be told something untrue.
+  awaiting_payment: { label: 'Payment next', family: 'awaiting_action' },
   fulfilled: { label: 'Booked', family: 'complete' },
   closed: { label: 'Closed', family: 'archived' },
 };
@@ -47,6 +51,10 @@ const FAMILY_REQUEST_LABELS: Record<string, { label: string; family: StatusFamil
 const TUTOR_REQUEST_LABELS: Record<string, { label: string; family: StatusFamily }> = {
   sent: { label: 'Awaiting your response', family: 'awaiting_action' },
   accepted: { label: 'You accepted', family: 'active' },
+  // The chosen tutor. Without this the winner fell through to "Closed — no
+  // longer available", which is the safe direction but plainly false: their
+  // time is held and the lesson is going ahead pending payment.
+  selected: { label: 'You were chosen', family: 'complete' },
   // Tutor-driven endings: the tutor already knows these, so they stay distinct.
   declined: { label: 'You declined', family: 'cancelled' },
   acceptance_withdrawn: { label: 'You withdrew your acceptance', family: 'cancelled' },

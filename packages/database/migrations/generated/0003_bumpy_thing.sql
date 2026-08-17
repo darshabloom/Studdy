@@ -1,0 +1,2 @@
+ALTER TABLE "bookings"."intended_lesson_requests" DROP CONSTRAINT "ilr_status_check";--> statement-breakpoint
+ALTER TABLE "bookings"."intended_lesson_requests" ADD CONSTRAINT "ilr_status_check" CHECK ("bookings"."intended_lesson_requests"."status_code" in ('draft', 'awaiting_responses', 'ready_for_selection', 'awaiting_payment', 'fulfilled', 'closed'));

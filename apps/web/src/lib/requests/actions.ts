@@ -8,6 +8,8 @@ import {
   findRequestForStudents,
   NoTutorAvailableError,
   RequestValidationError,
+  selectAcceptedTutorRequest,
+  SelectionNoLongerAvailableError,
   SlotUnavailableError,
   withdrawRequest,
 } from '@studdy/database';
@@ -117,6 +119,50 @@ export async function sendLessonRequestAction(
   }
 
   revalidatePath('/requests');
+  redirect(`/requests/${reference}`);
+}
+
+/**
+ * Choose one accepted tutor and time (design §3.1 step 11, D-5).
+ *
+ * The family's scope comes from the session: `selectAcceptedTutorRequest`
+ * filters the request by the student profiles this user may act for, so a
+ * reference belonging to another family matches nothing rather than being
+ * found and refused.
+ */
+export async function selectTutorAction(
+  _previous: RequestFormState,
+  formData: FormData,
+): Promise<RequestFormState> {
+  const context = await resolveDiscoveryContext();
+  if (context === null) return { error: 'Sign in to choose a tutor.' };
+
+  const reference = String(formData.get('reference') ?? '');
+  const tutorRequestReference = String(formData.get('tutorRequestReference') ?? '');
+  if (reference === '' || tutorRequestReference === '') {
+    return { error: null, issues: { selection: 'Choose the tutor and time you would like.' } };
+  }
+
+  try {
+    await selectAcceptedTutorRequest({
+      reference,
+      studentProfileIds: context.students.map((student) => student.studentProfileId),
+      tutorRequestReference,
+      actorUserId: context.studdyUserId,
+      correlationId: `cor_${randomUUID()}`,
+    });
+  } catch (error) {
+    if (error instanceof SelectionNoLongerAvailableError) {
+      return {
+        error:
+          'That tutor and time is no longer available to choose. Refresh to see what is still open.',
+      };
+    }
+    throw error;
+  }
+
+  revalidatePath('/requests');
+  revalidatePath(`/requests/${reference}`);
   redirect(`/requests/${reference}`);
 }
 

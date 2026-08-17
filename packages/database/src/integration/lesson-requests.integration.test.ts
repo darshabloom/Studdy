@@ -10,6 +10,8 @@ import {
   NoTutorAvailableError,
   RequestNotOpenError,
   RequestValidationError,
+  selectAcceptedTutorRequest,
+  SelectionNoLongerAvailableError,
   TimeNoLongerAvailableError,
   withdrawRequest,
 } from '../repositories/lesson-requests';
@@ -1048,25 +1050,35 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       const start = future(190);
       const sent = await sendTo(fixture, 0, [start, altStart(start)]);
 
-      const notOurs = acceptTutorRequestTime({
-        reference: sent.reference,
-        tutorProfileId: fixture.tutors[1]!.tutorProfileId,
-        tutorRequestTimeOptionId: sent.optionIds[0]!,
-        actorUserId: fixture.tutors[1]!.userId,
-        correlationId: `cor_${randomUUID()}`,
-      });
-      const missing = acceptTutorRequestTime({
-        reference: 'TREQ-ZZZZZZZZZZ',
-        tutorProfileId: fixture.tutors[1]!.tutorProfileId,
-        tutorRequestTimeOptionId: sent.optionIds[0]!,
-        actorUserId: fixture.tutors[1]!.userId,
-        correlationId: `cor_${randomUUID()}`,
-      });
+      // Settled together: creating both promises and awaiting them one after
+      // the other leaves the second rejecting with nothing listening, which
+      // Vitest reports as an unhandled rejection.
+      const [notOurs, missing] = await Promise.allSettled([
+        acceptTutorRequestTime({
+          reference: sent.reference,
+          tutorProfileId: fixture.tutors[1]!.tutorProfileId,
+          tutorRequestTimeOptionId: sent.optionIds[0]!,
+          actorUserId: fixture.tutors[1]!.userId,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+        acceptTutorRequestTime({
+          reference: 'TREQ-ZZZZZZZZZZ',
+          tutorProfileId: fixture.tutors[1]!.tutorProfileId,
+          tutorRequestTimeOptionId: sent.optionIds[0]!,
+          actorUserId: fixture.tutors[1]!.userId,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ]);
 
       // Same class, same message: a tutor cannot probe references to discover
       // which ones exist.
-      await expect(notOurs).rejects.toBeInstanceOf(RequestNotOpenError);
-      await expect(missing).rejects.toBeInstanceOf(RequestNotOpenError);
+      expect(notOurs.status).toBe('rejected');
+      expect(missing.status).toBe('rejected');
+      expect((notOurs as PromiseRejectedResult).reason).toBeInstanceOf(RequestNotOpenError);
+      expect((missing as PromiseRejectedResult).reason).toBeInstanceOf(RequestNotOpenError);
+      expect(((notOurs as PromiseRejectedResult).reason as Error).message).toBe(
+        ((missing as PromiseRejectedResult).reason as Error).message,
+      );
     });
 
     it('declines without taking any calendar time', async () => {
@@ -1097,6 +1109,365 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
         expect(holds).toEqual([]);
       } finally {
         await sql.end();
+      }
+    });
+  });
+
+  /**
+   * One request to two tutors, each accepting a different time — the D-5 shape
+   * the family then chooses between. Shared by the selection tests and the
+   * hold-expiry tests, which both need a request with live acceptances.
+   */
+  const twoAcceptances = async (
+    label: string,
+  ): Promise<{
+    fixture: Fixture;
+    ilrReference: string;
+    studentProfileIds: string[];
+    winner: string;
+    loser: string;
+    loserTutorProfileId: string;
+  }> => {
+    const fixture = await buildFixture(label);
+    const first = future(220);
+    const second = altStart(first);
+
+    const created = await createIntendedLessonRequest({
+      studentSubjectSectionId: fixture.subjectSectionId,
+      requestedByUserId: fixture.requesterUserId,
+      familyAccountId: null,
+      tutorProfileIds: [fixture.tutors[0]!.tutorProfileId, fixture.tutors[1]!.tutorProfileId],
+      proposedStarts: [first, second],
+      formatCode: 'online',
+      timeZone: 'Pacific/Auckland',
+      notesForTutors: null,
+      hasPaymentMethodOnFile: false,
+      paymentExemptionCode: null,
+      correlationId: `cor_${randomUUID()}`,
+    });
+
+    // Each tutor accepts a different time, so the family is genuinely
+    // choosing a tutor AND a time.
+    const references: string[] = [];
+    for (const [index, tutor] of [fixture.tutors[0]!, fixture.tutors[1]!].entries()) {
+      const view = await listRequestsForTutor(tutor.tutorProfileId);
+      const mine = view.find((entry) => created.tutorRequestReferences.includes(entry.reference))!;
+      await acceptTutorRequestTime({
+        reference: mine.reference,
+        tutorProfileId: tutor.tutorProfileId,
+        tutorRequestTimeOptionId: mine.offeredTimes[index]!.tutorRequestTimeOptionId,
+        actorUserId: tutor.userId,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      references.push(mine.reference);
+    }
+
+    const { sql, db } = createDatabaseClient();
+    let studentProfileIds: string[];
+    try {
+      const [section] = await db
+        .select({ studentProfileId: studentSubjectSections.studentProfileId })
+        .from(studentSubjectSections)
+        .where(eq(studentSubjectSections.id, fixture.subjectSectionId));
+      studentProfileIds = [section!.studentProfileId];
+    } finally {
+      await sql.end();
+    }
+
+    return {
+      fixture,
+      ilrReference: created.reference,
+      studentProfileIds,
+      winner: references[0]!,
+      loser: references[1]!,
+      loserTutorProfileId: fixture.tutors[1]!.tutorProfileId,
+    };
+  };
+
+  describe('family selection', () => {
+    it('keeps the winner, closes the rest and releases only their holds', async () => {
+      const scenario = await twoAcceptances(`select-${randomUUID().slice(0, 8)}`);
+
+      const outcome = await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      expect(outcome.closedCount).toBe(1);
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(won!.statusCode).toBe('selected');
+
+        const [lost] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.loser));
+        // Plain `closed` — never a status that says "not selected".
+        expect(lost!.statusCode).toBe('closed');
+        expect(lost!.closeReasonCode).toBe('another_tutor_selected');
+
+        const winnerHold = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorRequestId, won!.id));
+        expect(winnerHold[0]!.statusCode).toBe('active');
+
+        const loserHold = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorRequestId, lost!.id));
+        // Released at once: a tutor who was not chosen gets their calendar
+        // back immediately rather than waiting out a hold protecting nothing.
+        expect(loserHold[0]!.statusCode).toBe('released');
+        expect(loserHold[0]!.releasedAt).not.toBeNull();
+
+        const [ilr] = await db
+          .select()
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.reference, scenario.ilrReference));
+        // NOT fulfilled: nobody has paid, so this is not a confirmed booking.
+        expect(ilr!.statusCode).toBe('awaiting_payment');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('tells the closed tutor nothing about why', async () => {
+      const scenario = await twoAcceptances(`select-privacy-${randomUUID().slice(0, 8)}`);
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      const view = await listRequestsForTutor(scenario.loserTutorProfileId);
+      const theirs = view.find((entry) => entry.reference === scenario.loser)!;
+      expect(theirs.statusCode).toBe('closed');
+
+      const serialised = JSON.stringify(theirs, (_key, value: unknown) =>
+        typeof value === 'bigint' ? value.toString() : value,
+      );
+      expect(serialised).not.toContain('another_tutor_selected');
+      expect(serialised).not.toContain('closeReasonCode');
+      expect(serialised).not.toContain(scenario.winner);
+      expect(serialised).not.toContain(scenario.ilrReference);
+    });
+
+    it('applies exactly once when submitted twice at the same moment', async () => {
+      const scenario = await twoAcceptances(`select-race-${randomUUID().slice(0, 8)}`);
+      const call = () =>
+        selectAcceptedTutorRequest({
+          reference: scenario.ilrReference,
+          studentProfileIds: scenario.studentProfileIds,
+          tutorRequestReference: scenario.winner,
+          actorUserId: scenario.fixture.requesterUserId,
+          correlationId: `cor_${randomUUID()}`,
+        });
+
+      const results = await Promise.allSettled([call(), call()]);
+      expect(results.filter((entry) => entry.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.find((entry) => entry.status === 'rejected');
+      expect((rejected as PromiseRejectedResult).reason).toBeInstanceOf(
+        SelectionNoLongerAvailableError,
+      );
+    });
+
+    it('refuses another family request, exactly as a missing one', async () => {
+      const scenario = await twoAcceptances(`select-scope-${randomUUID().slice(0, 8)}`);
+      const other = await buildFixture(`select-other-${randomUUID().slice(0, 8)}`);
+      const { sql, db } = createDatabaseClient();
+      let strangerProfileIds: string[];
+      try {
+        const [section] = await db
+          .select({ studentProfileId: studentSubjectSections.studentProfileId })
+          .from(studentSubjectSections)
+          .where(eq(studentSubjectSections.id, other.subjectSectionId));
+        strangerProfileIds = [section!.studentProfileId];
+      } finally {
+        await sql.end();
+      }
+
+      const [notOurs, missing] = await Promise.allSettled([
+        selectAcceptedTutorRequest({
+          reference: scenario.ilrReference,
+          studentProfileIds: strangerProfileIds,
+          tutorRequestReference: scenario.winner,
+          actorUserId: other.requesterUserId,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+        selectAcceptedTutorRequest({
+          reference: 'LR-00000000',
+          studentProfileIds: strangerProfileIds,
+          tutorRequestReference: scenario.winner,
+          actorUserId: other.requesterUserId,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ]);
+
+      expect(notOurs.status).toBe('rejected');
+      expect(missing.status).toBe('rejected');
+      expect((notOurs as PromiseRejectedResult).reason).toBeInstanceOf(
+        SelectionNoLongerAvailableError,
+      );
+      expect(((notOurs as PromiseRejectedResult).reason as Error).message).toBe(
+        ((missing as PromiseRejectedResult).reason as Error).message,
+      );
+    });
+
+    it('refuses a tutor request that never accepted', async () => {
+      const scenario = await twoAcceptances(`select-unaccepted-${randomUUID().slice(0, 8)}`);
+      // Close the loser first, then try to select it.
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      await expect(
+        selectAcceptedTutorRequest({
+          reference: scenario.ilrReference,
+          studentProfileIds: scenario.studentProfileIds,
+          tutorRequestReference: scenario.loser,
+          actorUserId: scenario.fixture.requesterUserId,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(SelectionNoLongerAvailableError);
+    });
+  });
+
+  describe('holds die at their natural expiry', () => {
+    /** Force a hold's expiry into the past, as the clock eventually would. */
+    const expireHold = async (reference: string): Promise<void> => {
+      const { sql } = createDatabaseClient();
+      try {
+        await sql`update bookings.tutor_requests
+                     set acceptance_hold_expires_at = now() - interval '1 minute'
+                   where reference = ${reference}`;
+      } finally {
+        await sql.end();
+      }
+    };
+
+    it('releases an accepted hold the family never chose', async () => {
+      // §8.2: the selection window lapsed. The tutor gets their calendar back
+      // rather than holding it on the chance a decision arrives later.
+      const scenario = await twoAcceptances(`lapse-accept-${randomUUID().slice(0, 8)}`);
+      await expireHold(scenario.winner);
+
+      await expireOverdueRequests({ correlationId: `cor_${randomUUID()}`, now: new Date() });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [request] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(request!.statusCode).toBe('closed');
+        expect(request!.closeReasonCode).toBe('selection_window_lapsed');
+
+        const holds = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorRequestId, request!.id));
+        expect(holds[0]!.statusCode).toBe('released');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('releases the winner hold when payment never happens', async () => {
+      // The hold the family won is NOT extended by selection, so it expires
+      // when it always said it would. §12 forbids retaining it beyond that,
+      // and the tutor's own screen promises it is released either way.
+      const scenario = await twoAcceptances(`lapse-selected-${randomUUID().slice(0, 8)}`);
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      await expireHold(scenario.winner);
+
+      await expireOverdueRequests({ correlationId: `cor_${randomUUID()}`, now: new Date() });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [request] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(request!.statusCode).toBe('closed');
+        expect(request!.closeReasonCode).toBe('payment_window_lapsed');
+
+        const holds = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorRequestId, request!.id));
+        expect(holds[0]!.statusCode).toBe('released');
+
+        // The ILR follows its winner, forwards — never back out of a terminal.
+        const [ilr] = await db
+          .select()
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.reference, scenario.ilrReference));
+        expect(ilr!.statusCode).toBe('closed');
+        expect(ilr!.closeReasonCode).toBe('payment_window_lapsed');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('does not let a withdrawal half-apply over a completed selection', async () => {
+      const scenario = await twoAcceptances(`withdraw-after-${randomUUID().slice(0, 8)}`);
+      const { sql, db } = createDatabaseClient();
+      let ilrId: string;
+      try {
+        const [row] = await db
+          .select({ id: intendedLessonRequests.id })
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.reference, scenario.ilrReference));
+        ilrId = row!.id;
+      } finally {
+        await sql.end();
+      }
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      // A stale tab submitting withdrawal after the choice was made must not
+      // close the winner and strand the request with no chosen tutor.
+      const outcome = await withdrawRequest({
+        intendedLessonRequestId: ilrId,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      expect(outcome.withdrawnCount).toBe(0);
+
+      const probe = createDatabaseClient();
+      try {
+        const [winner] = await probe.db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(winner!.statusCode).toBe('selected');
+      } finally {
+        await probe.sql.end();
       }
     });
   });

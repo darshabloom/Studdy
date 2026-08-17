@@ -293,9 +293,39 @@ Server-only, like every other close reason, and never rendered to a tutor.
 
 ## 5. State machines
 
-### Intended Lesson Request — unchanged, 5 states
+### Intended Lesson Request — 6 states
 
-`draft`, `awaiting_responses`, `ready_for_selection`, `fulfilled`, `closed`.
+`draft`, `awaiting_responses`, `ready_for_selection`, `awaiting_payment`, `fulfilled`,
+`closed`.
+
+**Amended by the owner during checkpoint 5.** Revisions up to this point had selection move
+the ILR straight to `fulfilled`. That was wrong: `fulfilled` is terminal and means the
+request **resulted in a confirmed booking**, which is also what the interface says — it
+renders as "Booked". Landing there at selection would have claimed a booking for a lesson
+nobody had paid for, and would have left a payment failure needing a transition _backwards_
+out of a terminal state.
+
+Selection therefore lands on **`awaiting_payment`**, and the payment slice moves
+`awaiting_payment → fulfilled` on confirmation, or `awaiting_payment → closed` with the
+existing reason `payment_window_lapsed` when it does not. Payment failure now has a forward
+path.
+
+`awaiting_responses → fulfilled` is removed with it: every route to a confirmed booking runs
+through selection and then payment, so nothing can reach "Booked" without both having
+happened.
+
+| From                | To                          | Trigger                                  |
+| ------------------- | --------------------------- | ---------------------------------------- |
+| draft               | awaiting_responses, closed  | requester sends / abandons               |
+| awaiting_responses  | ready_for_selection, closed | a tutor accepts / withdrawal or expiry   |
+| ready_for_selection | awaiting_payment, closed    | selection completes / withdrawal, lapse  |
+| awaiting_payment    | fulfilled, closed           | payment confirms / payment window lapses |
+| fulfilled           | —                           | terminal: a confirmed booking            |
+| closed              | —                           | terminal                                 |
+
+`awaiting_payment` is deliberately **not** an "open" status for the response and selection
+expiry sweep: by then the decision has been made, and the payment window is a different
+clock owned by the payment slice.
 
 ### Tutor Request — unchanged, 7 states
 

@@ -34,6 +34,9 @@ export default async function RequestDetailPage({
   ).length;
   const isOpen =
     request.statusCode === 'awaiting_responses' || request.statusCode === 'ready_for_selection';
+  const acceptedCount = request.tutorRequests.filter(
+    (entry) => entry.statusCode === 'accepted',
+  ).length;
 
   return (
     <>
@@ -88,11 +91,35 @@ export default async function RequestDetailPage({
         ) : null}
       </Card>
 
-      {isOpen ? (
+      {request.statusCode === 'ready_for_selection' && acceptedCount > 0 ? (
+        <div className="mt-6">
+          <Alert tone="information" title="Ready for you to choose">
+            <p>
+              {acceptedCount === 1
+                ? 'A tutor has accepted one of your times.'
+                : `${String(acceptedCount)} tutors have accepted one of your times.`}{' '}
+              Choosing keeps that tutor&rsquo;s time and closes the others. Nothing is charged yet.
+            </p>
+            <p className="mt-3">
+              <Button size="sm" asChild>
+                <Link href={`/requests/${request.reference}/select`}>Choose your tutor</Link>
+              </Button>
+            </p>
+          </Alert>
+        </div>
+      ) : request.statusCode === 'awaiting_payment' ? (
+        <div className="mt-6">
+          <Alert tone="information" title="You chose your tutor">
+            Their time is held while payment is set up. The lesson is not booked until that is done,
+            and payment arrives in the next release.
+          </Alert>
+        </div>
+      ) : isOpen ? (
         <div className="mt-6">
           <Alert tone="information" title="What happens next">
-            Each tutor replies separately, and no tutor can see who else you asked. Choosing a tutor
-            and confirming the booking arrives in the next release — nothing is charged now.
+            Each tutor replies separately, and no tutor can see who else you asked. When one accepts
+            a time you offered, you will be able to choose them here. Nothing is held or charged
+            until then.
           </Alert>
         </div>
       ) : null}

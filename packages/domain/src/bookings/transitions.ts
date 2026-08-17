@@ -12,6 +12,18 @@ export const ILR_STATUSES = [
   'draft',
   'awaiting_responses',
   'ready_for_selection',
+  /**
+   * The family has chosen a tutor and a time, and payment has not happened.
+   *
+   * Selection is not the end of the story: a request only becomes a booking
+   * once payment confirms. Landing on `fulfilled` at selection would have made
+   * the interface say "Booked" for a lesson nobody had paid for, and would have
+   * left a payment failure needing a transition backwards out of a terminal
+   * state. This state gives that failure a forward path instead — to `closed`,
+   * reason `payment_window_lapsed`.
+   */
+  'awaiting_payment',
+  /** TERMINAL, and it means it: the request resulted in a confirmed booking. */
   'fulfilled',
   'closed',
 ] as const;
@@ -65,7 +77,15 @@ export const LIVE_TUTOR_REQUEST_STATUSES: readonly TutorRequestStatus[] = [
   'selected',
 ];
 
-/** Statuses in which an ILR is still open for responses or selection. */
+/**
+ * Statuses in which an ILR is still open for responses or selection.
+ *
+ * `awaiting_payment` is deliberately absent. The decision has been made by
+ * then, so the response and selection deadlines no longer apply to it; the
+ * payment window is a different clock, owned by the payment slice. Adding it
+ * here would make the expiry sweep close requests on a deadline that stopped
+ * being relevant the moment the family chose.
+ */
 export const OPEN_ILR_STATUSES: readonly IlrStatus[] = [
   'awaiting_responses',
   'ready_for_selection',
@@ -73,8 +93,14 @@ export const OPEN_ILR_STATUSES: readonly IlrStatus[] = [
 
 const ILR_TRANSITIONS: Record<IlrStatus, readonly IlrStatus[]> = {
   draft: ['awaiting_responses', 'closed'],
-  awaiting_responses: ['ready_for_selection', 'fulfilled', 'closed'],
-  ready_for_selection: ['fulfilled', 'closed'],
+  // No longer straight to `fulfilled`. Every route to a confirmed booking now
+  // runs through selection and then payment, so a request cannot reach
+  // "Booked" without either having happened.
+  awaiting_responses: ['ready_for_selection', 'closed'],
+  ready_for_selection: ['awaiting_payment', 'closed'],
+  // Payment confirms, or its window lapses and the request closes. Nothing
+  // reverses out of a terminal state.
+  awaiting_payment: ['fulfilled', 'closed'],
   fulfilled: [],
   closed: [],
 };
@@ -131,6 +157,8 @@ export const CLOSE_REASON_CODES = [
   'request_expired',
   'all_tutors_declined',
   'another_tutor_selected',
+  /** The family did not choose before the acceptance hold expired (§4.9). */
+  'selection_window_lapsed',
   'payment_window_lapsed',
 ] as const;
 

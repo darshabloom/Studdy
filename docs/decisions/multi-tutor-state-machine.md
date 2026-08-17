@@ -30,17 +30,28 @@ One ILR fans out to at most three Tutor Requests (`platform.rule_settings`
 responds independently, and holds the slot independently. The first tutor to accept does
 not automatically win.
 
-## Intended Lesson Request — 5 states
+## Intended Lesson Request — 6 states
 
-`draft`, `awaiting_responses`, `ready_for_selection`, `fulfilled`, `closed`
+`draft`, `awaiting_responses`, `ready_for_selection`, `awaiting_payment`, `fulfilled`,
+`closed`
 
-| From                | To                                     | Trigger                                                   |
-| ------------------- | -------------------------------------- | --------------------------------------------------------- |
-| draft               | awaiting_responses, closed             | requester sends / abandons                                |
-| awaiting_responses  | ready_for_selection, fulfilled, closed | a tutor accepts / booking confirms / withdrawal or expiry |
-| ready_for_selection | fulfilled, closed                      | selection completes / withdrawal or expiry                |
-| fulfilled           | —                                      | terminal                                                  |
-| closed              | —                                      | terminal                                                  |
+**Amended by the owner during checkpoint 5**, adding `awaiting_payment`. Previously
+selection moved the ILR straight to `fulfilled`. `fulfilled` is terminal and means the
+request **resulted in a confirmed booking** — the interface renders it as "Booked" — so
+setting it at selection would have claimed a booking before anyone had paid, and a payment
+failure would have needed a transition backwards out of a terminal state.
+
+| From                | To                          | Trigger                                  |
+| ------------------- | --------------------------- | ---------------------------------------- |
+| draft               | awaiting_responses, closed  | requester sends / abandons               |
+| awaiting_responses  | ready_for_selection, closed | a tutor accepts / withdrawal or expiry   |
+| ready_for_selection | awaiting_payment, closed    | selection completes / withdrawal, lapse  |
+| awaiting_payment    | fulfilled, closed           | payment confirms / payment window lapses |
+| fulfilled           | —                           | terminal: a confirmed booking            |
+| closed              | —                           | terminal                                 |
+
+`awaiting_responses → fulfilled` is removed: every route to a confirmed booking runs through
+selection and then payment.
 
 ## Tutor Request — 7 states (APPROVED, final)
 

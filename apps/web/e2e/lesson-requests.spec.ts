@@ -247,6 +247,53 @@ test.describe('lesson requests', () => {
     expect(unownedBody).not.toContain(realReference);
   });
 
+  test('family: chooses the accepted tutor and time, and lands before payment', async ({
+    page,
+  }) => {
+    // The independent student's request is the live one by this point: the
+    // parent's was withdrawn earlier in this serial file, and the tutor
+    // accepted a time on the student's.
+    await signIn(page, REQUEST_STUDENT);
+    await page.goto('/requests');
+    await page.getByRole('link', { name: 'View request' }).first().click();
+    await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
+
+    await expect(page.getByText('Ready for you to choose')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('link', { name: 'Choose your tutor' }).click();
+    await expect(page.getByRole('heading', { name: 'Choose your tutor' })).toBeVisible();
+
+    // A tutor and a time together (D-5), not a tutor then a time.
+    await page.getByRole('radio').first().check();
+    await page.getByRole('button', { name: 'Choose this tutor' }).click();
+
+    await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
+    // Chosen, but explicitly NOT booked: nobody has paid.
+    await expect(page.getByText('You chose your tutor')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/not booked until that is done/)).toBeVisible();
+    // The status says "Payment next", never "Booked": `fulfilled` is reserved
+    // for a confirmed booking, and nobody has paid.
+    await expect(page.getByText('Payment next')).toBeVisible();
+  });
+
+  test('tutor: a closed request says nothing about why it closed', async ({ page }) => {
+    // Every family-side and system-side ending renders identically. A tutor
+    // who was not chosen must not be able to tell that from a withdrawal.
+    await signIn(page, 'tutor.a@local.studdy.test');
+    await page.goto('/tutor/requests');
+
+    const body = (await page.locator('body').innerText()).toLowerCase();
+    for (const forbidden of [
+      'another tutor',
+      'not selected',
+      'was chosen',
+      'another_tutor_selected',
+      'selection_window_lapsed',
+      'lr-',
+    ]) {
+      expect(body, `closure must not explain itself: "${forbidden}"`).not.toContain(forbidden);
+    }
+  });
+
   test('a tutor cannot reach the family request routes', async ({ page }) => {
     await signIn(page, 'tutor.a@local.studdy.test');
     await page.goto('/requests');

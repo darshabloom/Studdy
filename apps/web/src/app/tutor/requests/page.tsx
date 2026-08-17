@@ -52,9 +52,9 @@ export default async function TutorRequestsPage() {
       </p>
 
       <div className="mt-4">
-        <Alert tone="information" title="Responding opens in the next release">
-          You can see everything you need to assess these requests now. Accepting and declining
-          arrive in the next Studdy release — nothing you do here affects a request yet.
+        <Alert tone="information" title="Accepting holds the time">
+          Open a request to accept one of the times you were offered, or to decline. Accepting holds
+          that time on your calendar while the family decides.
         </Alert>
       </div>
 

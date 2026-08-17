@@ -35,7 +35,15 @@ export const intendedLessonRequests = bookingsSchema.table(
     familyAccountId: uuid('family_account_id').references(() => familyAccounts.id, {
       onDelete: 'restrict',
     }),
-    /** draft | awaiting_responses | ready_for_selection | fulfilled | closed */
+    /**
+     * draft | awaiting_responses | ready_for_selection | awaiting_payment |
+     * fulfilled | closed
+     *
+     * `fulfilled` is terminal and means a CONFIRMED BOOKING — not "the family
+     * chose someone". Selection lands on `awaiting_payment`, so a payment
+     * failure closes forward rather than needing to reverse out of a terminal
+     * state.
+     */
     statusCode: text('status_code').notNull().default('awaiting_responses'),
     /** Why it closed, for the requesting family only — never shown to tutors. */
     closeReasonCode: text('close_reason_code'),
@@ -73,7 +81,7 @@ export const intendedLessonRequests = bookingsSchema.table(
   (table) => [
     check(
       'ilr_status_check',
-      sql`${table.statusCode} in ('draft', 'awaiting_responses', 'ready_for_selection', 'fulfilled', 'closed')`,
+      sql`${table.statusCode} in ('draft', 'awaiting_responses', 'ready_for_selection', 'awaiting_payment', 'fulfilled', 'closed')`,
     ),
     check('ilr_format_check', sql`${table.formatCode} in ('online', 'in_person')`),
     check('ilr_duration_positive_check', sql`${table.durationMinutes} > 0`),
