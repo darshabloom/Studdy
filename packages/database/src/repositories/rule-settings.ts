@@ -54,6 +54,16 @@ export async function loadRequestRules(reader?: Reader): Promise<LoadedRequestRu
         RULE_KEYS.requirePaymentMethod,
         PROVISIONAL_REQUEST_RULES.requirePaymentMethodBeforeSend,
       ),
+      minTimeOptions: read(RULE_KEYS.minTimeOptions, PROVISIONAL_REQUEST_RULES.minTimeOptions),
+      maxTimeOptions: read(RULE_KEYS.maxTimeOptions, PROVISIONAL_REQUEST_RULES.maxTimeOptions),
+      acceptanceHoldHours: read(
+        RULE_KEYS.acceptanceHoldHours,
+        PROVISIONAL_REQUEST_RULES.acceptanceHoldHours,
+      ),
+      acceptanceHoldCutoffBeforeLessonHours: read(
+        RULE_KEYS.acceptanceHoldCutoffBeforeLessonHours,
+        PROVISIONAL_REQUEST_RULES.acceptanceHoldCutoffBeforeLessonHours,
+      ),
     };
 
     return {

@@ -45,6 +45,7 @@ export {
   expireOverdueRequests,
   currentRequestRules,
   subjectSectionOwner,
+  NoTutorAvailableError,
   SlotUnavailableError,
   RequestValidationError,
   type CreateIntendedLessonRequestInput,

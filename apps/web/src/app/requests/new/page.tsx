@@ -1,23 +1,43 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { currentRequestRules, listShortlist } from '@studdy/database';
+import {
+  bookableSlotsForSubjectSection,
+  currentRequestRules,
+  listShortlist,
+} from '@studdy/database';
 import { Alert, Button, Card, EmptyState } from '@studdy/design-system';
+import { dayLabel, timeLabel } from '@studdy/domain/availability';
 import { resolveDiscoveryContext } from '@/lib/discovery/context';
+import { availabilityWindow, PLATFORM_TIME_ZONE } from '@/lib/time';
 import { RequestComposer } from './request-composer';
 
 export const metadata = { title: 'Send a lesson request' };
 
+interface SearchParams {
+  section?: string;
+  /** Repeated: one per time chosen on the availability grid. */
+  time?: string | string[];
+}
+
+/**
+ * Review before sending (design §3.1 step 7).
+ *
+ * The family sees each invited tutor with **the subset of their chosen times
+ * that tutor can actually do**. A tutor who can do none is called out here,
+ * before anything is sent, with the choice to drop them or go back and add a
+ * time they can do — never a silent omission discovered later.
+ */
 export default async function NewRequestPage({
   searchParams,
 }: {
-  searchParams: Promise<{ section?: string }>;
+  searchParams: Promise<SearchParams>;
 }) {
-  const { section: sectionId } = await searchParams;
+  const params = await searchParams;
   const context = await resolveDiscoveryContext();
   if (context === null) redirect('/sign-in?next=%2Frequests%2Fnew');
 
   const section = context.subjectSections.find(
-    (candidate) => candidate.subjectSectionId === sectionId,
+    (candidate) => candidate.subjectSectionId === params.section,
   );
   if (section === undefined) {
     return (
@@ -53,6 +73,54 @@ export default async function NewRequestPage({
     );
   }
 
+  const chosenTimes = (typeof params.time === 'string' ? [params.time] : (params.time ?? []))
+    .map((raw) => new Date(raw))
+    .filter((at) => !Number.isNaN(at.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  const timesHref = `/shortlist/${section.subjectSectionId}/times`;
+  if (chosenTimes.length === 0) {
+    return (
+      <EmptyState
+        title="Choose some times first"
+        description="Pick the times that would suit, and we will ask each tutor only about the ones they can do."
+        action={
+          <Button asChild>
+            <Link href={timesHref}>Choose times</Link>
+          </Button>
+        }
+      />
+    );
+  }
+
+  // Which of the chosen times each shortlisted tutor can actually do. Derived
+  // here so the family sees it before sending rather than discovering after.
+  const availability = await bookableSlotsForSubjectSection({
+    subjectSectionId: section.subjectSectionId,
+    tutorReferences: shortlist.map((entry) => entry.tutorReference),
+    ...availabilityWindow(),
+  });
+  const bookableByReference = new Map(
+    availability.map((entry) => [
+      entry.tutorReference,
+      new Set(entry.slots.map((slot) => slot.startAt.getTime())),
+    ]),
+  );
+
+  const composerTutors = shortlist.map((entry) => {
+    const bookable = bookableByReference.get(entry.tutorReference) ?? new Set<number>();
+    const canDo = chosenTimes.filter((at) => bookable.has(at.getTime()));
+    return {
+      tutorProfileId: entry.tutorProfileId,
+      tutorFirstName: entry.firstName,
+      priceAmountMinor: entry.startingPriceAmountMinor.toString(),
+      currencyCode: entry.currencyCode,
+      canDoLabels: canDo.map(
+        (at) => `${dayLabel(at, PLATFORM_TIME_ZONE)}, ${timeLabel(at, PLATFORM_TIME_ZONE)}`,
+      ),
+    };
+  });
+
   return (
     <>
       <p className="text-sm text-text-muted">
@@ -62,8 +130,8 @@ export default async function NewRequestPage({
         Send your lesson request
       </h1>
       <p className="mt-2 text-text-secondary">
-        Every tutor you choose receives the same request and replies separately. No tutor can see
-        who else you asked.
+        Every tutor you choose is asked about the times they can do, and replies separately. No
+        tutor can see who else you asked.
       </p>
 
       <div className="mt-6">
@@ -84,13 +152,12 @@ export default async function NewRequestPage({
           subjectDisplayName={section.subjectDisplayName}
           studentName={student?.preferredName ?? 'your student'}
           fanOutCap={rules.fanOutCap}
-          minimumNoticeHours={rules.minimumNoticeHours}
-          shortlist={shortlist.map((entry) => ({
-            tutorProfileId: entry.tutorProfileId,
-            tutorFirstName: entry.firstName,
-            priceAmountMinor: entry.startingPriceAmountMinor.toString(),
-            currencyCode: entry.currencyCode,
+          timesHref={timesHref}
+          chosenTimes={chosenTimes.map((at) => ({
+            iso: at.toISOString(),
+            label: `${dayLabel(at, PLATFORM_TIME_ZONE)}, ${timeLabel(at, PLATFORM_TIME_ZONE)}`,
           }))}
+          shortlist={composerTutors}
         />
       </Card>
     </>

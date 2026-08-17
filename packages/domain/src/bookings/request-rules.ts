@@ -17,6 +17,10 @@ export const RULE_KEYS = {
   decisionGraceHours: 'requests.decision_grace_hours',
   minimumNoticeHours: 'requests.minimum_notice_hours',
   requirePaymentMethod: 'requests.require_payment_method_before_send',
+  minTimeOptions: 'requests.min_time_options',
+  maxTimeOptions: 'requests.max_time_options',
+  acceptanceHoldHours: 'requests.acceptance_hold_hours',
+  acceptanceHoldCutoffBeforeLessonHours: 'requests.acceptance_hold_cutoff_before_lesson_hours',
 } as const;
 
 /**
@@ -46,6 +50,18 @@ export interface RequestRules {
    * would block every request with no way for a user to satisfy it.
    */
   readonly requirePaymentMethodBeforeSend: boolean;
+  /** A request must offer at least this many times, so a tutor has a choice. */
+  readonly minTimeOptions: number;
+  /** And at most this many — the option table makes a sixth unrepresentable. */
+  readonly maxTimeOptions: number;
+  /** How long an acceptance holds the tutor's calendar while the family chooses. */
+  readonly acceptanceHoldHours: number;
+  /**
+   * A hold also ends this long before the lesson itself. Minimum notice is the
+   * same figure, so a hold can never outlive the point at which the lesson
+   * stops being bookable — it would be protecting a slot nobody could book.
+   */
+  readonly acceptanceHoldCutoffBeforeLessonHours: number;
 }
 
 /** Provisional seed values. Doc 11 §13's "potential model", labelled as such. */
@@ -60,4 +76,8 @@ export const PROVISIONAL_REQUEST_RULES: RequestRules = {
   decisionGraceHours: 24,
   minimumNoticeHours: 2,
   requirePaymentMethodBeforeSend: false,
+  minTimeOptions: 2,
+  maxTimeOptions: 5,
+  acceptanceHoldHours: 8,
+  acceptanceHoldCutoffBeforeLessonHours: 2,
 };

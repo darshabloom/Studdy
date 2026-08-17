@@ -111,6 +111,16 @@
       "policy": null,
       "notes": "Server-only: request-slice tables carry no anon/authenticated grant. Column grants are role-level and cannot distinguish a parent from a tutor, so the tutor-privacy boundary is enforced by server-side projections. RLS enabled as fail-closed second layer. Tutor projection never selects intended_lesson_request_id, position or close_reason_code."
     },
+    "bookings.request_time_options": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Server-only, family-side. Holds the family's WHOLE set of acceptable times; the size of that set alone would tell a tutor how flexible the family is, so no tutor projection reads this table at all. RLS enabled as fail-closed second layer."
+    },
+    "bookings.tutor_request_time_options": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Server-only. One tutor's own offered subset — the only option table a tutor-facing projection may read, and even there request_time_option_id is never selected because it is an identifier from the family's side. RLS enabled as fail-closed second layer."
+    },
     "availability.tutor_time_reservations": {
       "classification": "server_only",
       "policy": null,

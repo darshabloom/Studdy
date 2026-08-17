@@ -47,7 +47,15 @@ export default async function RequestsPage() {
                       {request.subjectDisplayName} for {request.studentPreferredName}
                     </p>
                     <p className="mt-1 text-sm text-text-secondary">
-                      {formatLessonDateTime(request.proposedStartAt, request.timeZone)}
+                      {request.timeOptions.length === 0
+                        ? 'No times recorded'
+                        : `${formatLessonDateTime(request.timeOptions[0]!.startAt, request.timeZone)}${
+                            request.timeOptions.length > 1
+                              ? ` and ${String(request.timeOptions.length - 1)} other ${
+                                  request.timeOptions.length === 2 ? 'time' : 'times'
+                                }`
+                              : ''
+                          }`}
                     </p>
                     <p className="mt-1 text-sm text-text-secondary">
                       Sent to {request.tutorRequests.length}{' '}

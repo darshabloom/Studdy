@@ -8,6 +8,7 @@ export { calculateDeadlines, selectResponseTier, type DeadlineCalculation } from
 export {
   validateFanOut,
   assignPositions,
+  offeredSubset,
   slotUnavailableError,
   type FanOutInput,
   type FanOutTarget,

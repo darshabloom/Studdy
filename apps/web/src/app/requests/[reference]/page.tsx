@@ -51,9 +51,16 @@ export default async function RequestDetailPage({
         <h2 className="text-lg font-semibold">The lesson you asked for</h2>
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-text-secondary">When</dt>
+            <dt className="text-text-secondary">Times you offered</dt>
             <dd className="font-medium">
-              {formatLessonDateTime(request.proposedStartAt, request.timeZone)}
+              <ul className="flex flex-col gap-1">
+                {request.timeOptions.map((option) => (
+                  <li key={option.startAt.toISOString()} className="tabular-nums">
+                    {formatLessonDateTime(option.startAt, request.timeZone)}
+                    {option.statusCode === 'taken' ? ' · taken' : ''}
+                  </li>
+                ))}
+              </ul>
             </dd>
           </div>
           <div>

@@ -15,6 +15,13 @@
       "when": 1786341914050,
       "tag": "0001_fast_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786959658249,
+      "tag": "0002_daffy_slyde",
+      "breakpoints": true
     }
   ]
 }

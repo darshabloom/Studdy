@@ -2,16 +2,20 @@ import { and, eq, inArray, lte } from 'drizzle-orm';
 import {
   assignPositions,
   calculateDeadlines,
+  offeredSubset,
   validateFanOut,
   type FanOutTarget,
   type RequestRules,
 } from '@studdy/domain/bookings';
+import { zonedClockTime, zonedDateOnly } from '@studdy/domain/availability';
 import { createDatabaseClient } from '../client';
 import {
   auditEvents,
   domainEvents,
   intendedLessonRequests,
   outboxEntries,
+  requestTimeOptions,
+  tutorRequestTimeOptions,
   services,
   serviceVersions,
   statusTransitions,
@@ -30,6 +34,24 @@ import { loadRequestRules } from './rule-settings';
  * Accept/decline, selection close-out, Booking creation and anything Stripe or
  * ledger are deliberately NOT here — they belong to later slices.
  */
+
+/**
+ * Tutors grouped by their own lesson length, so availability is derived once
+ * per distinct duration rather than once per tutor.
+ */
+function groupByDuration(
+  targets: readonly FanOutTarget[],
+  durationByTutor: ReadonlyMap<string, number>,
+): ReadonlyMap<number, string[]> {
+  const groups = new Map<number, string[]>();
+  for (const target of targets) {
+    const duration = durationByTutor.get(target.tutorProfileId) ?? 60;
+    const existing = groups.get(duration);
+    if (existing === undefined) groups.set(duration, [target.tutorProfileId]);
+    else existing.push(target.tutorProfileId);
+  }
+  return groups;
+}
 
 /** Postgres SQLSTATEs surfaced by the guarantees this slice relies on. */
 const UNIQUE_VIOLATION = '23505';
@@ -70,8 +92,12 @@ export interface CreateIntendedLessonRequestInput {
    * tutor to another tutor's cheaper price.
    */
   readonly tutorProfileIds: readonly string[];
-  readonly proposedStartAt: Date;
-  readonly proposedEndAt: Date;
+  /**
+   * The times the family would accept, as start instants (D-3). Each tutor is
+   * offered only the subset they can actually do; a tutor who can do none is
+   * not sent a request at all.
+   */
+  readonly proposedStarts: readonly Date[];
   readonly formatCode: string;
   readonly timeZone: string;
   readonly notesForTutors: string | null;
@@ -86,6 +112,20 @@ export interface CreatedIntendedLessonRequest {
   readonly intendedLessonRequestId: string;
   readonly reference: string;
   readonly tutorRequestReferences: readonly string[];
+  /**
+   * Tutors who could do none of the chosen times and were therefore not asked
+   * (D-2). The caller surfaces this so the family learns it before sending
+   * rather than discovering a silent omission afterwards.
+   */
+  readonly notAskedTutorProfileIds: readonly string[];
+}
+
+/** No tutor could do any of the chosen times, so nothing was sent. */
+export class NoTutorAvailableError extends Error {
+  override name = 'NoTutorAvailableError';
+  constructor() {
+    super('None of the chosen tutors are free at any of those times.');
+  }
 }
 
 /**
@@ -120,6 +160,7 @@ export async function createIntendedLessonRequest(
       .select({
         tutorProfileId: services.tutorProfileId,
         serviceVersionId: serviceVersions.id,
+        durationMinutes: serviceVersions.durationMinutes,
         tutorFirstName: tutorProfiles.publicFirstName,
       })
       .from(serviceVersions)
@@ -150,12 +191,23 @@ export async function createIntendedLessonRequest(
       serviceVersionId: versionByTutor.get(tutorProfileId)!,
     }));
 
+    const durationByTutor = new Map(
+      offerings.map((row) => [row.tutorProfileId, row.durationMinutes]),
+    );
+    // The family-side record needs one lesson length. Where invited tutors
+    // differ, take the longest: the family should plan for the longest lesson
+    // they might get, and each tutor's own option rows still snapshot their own
+    // length.
+    const familyDurationMinutes = Math.max(
+      ...targets.map((target) => durationByTutor.get(target.tutorProfileId) ?? 60),
+    );
+
     const validation = validateFanOut(
       rules,
       {
         targets,
-        proposedStartAt: input.proposedStartAt,
-        proposedEndAt: input.proposedEndAt,
+        proposedStarts: input.proposedStarts,
+        durationMinutes: familyDurationMinutes,
         formatCode: input.formatCode,
         hasPaymentMethodOnFile: input.hasPaymentMethodOnFile,
         paymentExemptionCode: input.paymentExemptionCode,
@@ -168,47 +220,82 @@ export async function createIntendedLessonRequest(
       );
     }
 
-    // The proposed time must be one the tutor actually offers.
+    // Work out, against live availability, which of the chosen times each tutor
+    // can actually do.
     //
-    // Without this the request path is an availability oracle. A hold collision
-    // raises 23P01 and surfaces as SlotUnavailableError, while a privately
-    // blocked or simply non-working time succeeds — so a family could send and
-    // withdraw requests across a tutor's week and separate "someone else holds
-    // this time" from every other kind of gap. That is precisely the
-    // distinction the derived-slot boundary exists to prevent.
+    // Every offered time is checked, not just one: a tutor may accept any of
+    // them, so each has to be a time they were genuinely free for. This is also
+    // what stops the request path being an availability oracle — a tutor is
+    // only ever asked about times they could accept, so a later "no longer
+    // available" cannot be read as "we asked about a time you never offered".
     //
-    // Checking here rather than in the action means every caller inherits it,
-    // and a time the tutor never offered now fails identically to one already
-    // taken: same error, same message, no information in the difference.
-    const durationMinutes = Math.round(
-      (input.proposedEndAt.getTime() - input.proposedStartAt.getTime()) / 60_000,
-    );
-    // `stepMinutes: 1` aligns the slot grid to the proposed start instead of the
-    // 30-minute grid a family is shown, so this asks "is this interval inside
-    // the tutor's open time" rather than "does it sit on our display grid".
-    // A tutor free 16:00–19:00 genuinely is free at 17:15.
-    const bookable = await bookableSlotsForTutors({
-      tutorProfileIds: input.tutorProfileIds,
-      from: input.proposedStartAt,
-      to: input.proposedEndAt,
-      durationMinutes,
-      stepMinutes: 1,
-      now,
-    });
-    const notOffered = input.tutorProfileIds.find(
-      (tutorProfileId) =>
-        !(bookable.get(tutorProfileId) ?? []).some(
-          (slot) =>
-            slot.startAt.getTime() === input.proposedStartAt.getTime() &&
-            slot.endAt.getTime() === input.proposedEndAt.getTime(),
-        ),
-    );
-    if (notOffered !== undefined) {
-      throw new SlotUnavailableError(notOffered);
+    // `stepMinutes: 1` aligns the grid to the proposed start rather than the
+    // 30-minute grid a family is shown, so this asks "is this lesson inside the
+    // tutor's open time" rather than "does it sit on our display grid": a tutor
+    // free 16:00–19:00 genuinely is free at 17:15.
+    const bookableStartsByTutor = new Map<string, Date[]>();
+    for (const startAt of validation.value.proposedStarts) {
+      for (const [durationMinutes, group] of groupByDuration(targets, durationByTutor)) {
+        const endAt = new Date(startAt.getTime() + durationMinutes * 60_000);
+        const bookable = await bookableSlotsForTutors({
+          tutorProfileIds: group,
+          from: startAt,
+          to: endAt,
+          durationMinutes,
+          stepMinutes: 1,
+          now,
+        });
+        for (const tutorProfileId of group) {
+          const canDoIt = (bookable.get(tutorProfileId) ?? []).some(
+            (slot) => slot.startAt.getTime() === startAt.getTime(),
+          );
+          if (!canDoIt) continue;
+          const existing = bookableStartsByTutor.get(tutorProfileId);
+          if (existing === undefined) bookableStartsByTutor.set(tutorProfileId, [startAt]);
+          else existing.push(startAt);
+        }
+      }
     }
 
-    const deadlines = calculateDeadlines(rules, input.proposedStartAt, now);
-    const positioned = assignPositions(targets);
+    // A tutor who can do none of the chosen times is not asked at all (D-2).
+    // An unanswerable request is worse than no request: the tutor can only
+    // decline, and the family waits out a deadline for an answer that was
+    // never possible.
+    const offeredByTutor = new Map<string, readonly Date[]>();
+    const notAskedTutorProfileIds: string[] = [];
+    for (const target of targets) {
+      const subset = offeredSubset(
+        validation.value.proposedStarts,
+        bookableStartsByTutor.get(target.tutorProfileId) ?? [],
+      );
+      if (subset.length === 0) notAskedTutorProfileIds.push(target.tutorProfileId);
+      else offeredByTutor.set(target.tutorProfileId, subset);
+    }
+    if (offeredByTutor.size === 0) throw new NoTutorAvailableError();
+
+    const askedTargets = targets.filter((target) => offeredByTutor.has(target.tutorProfileId));
+
+    // The family's own deadline runs from the soonest time they offered.
+    const earliestStart = validation.value.proposedStarts[0]!;
+    const familyDeadlines = calculateDeadlines(rules, earliestStart, now);
+
+    // Each tutor's response window runs from the soonest time THEY were
+    // offered — never the family's earliest.
+    //
+    // A shared deadline leaks the set the tutor cannot see. The window is
+    // clamped to `earliest − minimum notice`, so a tutor offered only Saturday
+    // but shown a deadline of 2pm today learns both that an earlier option
+    // exists and, by adding the notice back, exactly when it is. The response
+    // tiers leak the same thing more coarsely. Deriving from the tutor's own
+    // subset is also what D-8 means by "how far ahead the lesson is": for a
+    // tutor, that is the lesson they could actually accept.
+    const deadlinesByTutor = new Map<string, ReturnType<typeof calculateDeadlines>>();
+    for (const target of askedTargets) {
+      const ownEarliest = offeredByTutor.get(target.tutorProfileId)![0]!;
+      deadlinesByTutor.set(target.tutorProfileId, calculateDeadlines(rules, ownEarliest, now));
+    }
+
+    const positioned = assignPositions(askedTargets);
 
     return await db.transaction(async (tx) => {
       const [ilr] = await tx
@@ -218,20 +305,40 @@ export async function createIntendedLessonRequest(
           requestedByUserId: input.requestedByUserId,
           familyAccountId: input.familyAccountId,
           statusCode: 'awaiting_responses',
-          proposedStartAt: input.proposedStartAt,
-          proposedEndAt: input.proposedEndAt,
           durationMinutes: validation.value.durationMinutes,
           formatCode: input.formatCode,
           timeZone: input.timeZone,
           notesForTutors: input.notesForTutors,
           // Snapshotted: later configuration changes never move this.
-          decisionDeadlineAt: deadlines.decisionDeadlineAt,
+          decisionDeadlineAt: familyDeadlines.decisionDeadlineAt,
           deadlineRuleVersion,
           sentAt: now,
           createdByUserId: input.requestedByUserId,
         })
         .returning({ id: intendedLessonRequests.id, reference: intendedLessonRequests.reference });
       if (ilr === undefined) throw new Error('intended_lesson_requests insert returned no row');
+
+      // The family's full set of acceptable times. Server-only and family-side:
+      // its size alone would tell a tutor how flexible the family is.
+      const optionIdByStart = new Map<number, string>();
+      for (const [index, startAt] of validation.value.proposedStarts.entries()) {
+        const endAt = new Date(startAt.getTime() + validation.value.durationMinutes * 60_000);
+        const [option] = await tx
+          .insert(requestTimeOptions)
+          .values({
+            intendedLessonRequestId: ilr.id,
+            position: index + 1,
+            startsAt: startAt,
+            endsAt: endAt,
+            localDate: zonedDateOnly(startAt, input.timeZone),
+            localStartTime: zonedClockTime(startAt, input.timeZone),
+            ianaTimeZone: input.timeZone,
+            statusCode: 'offered',
+          })
+          .returning({ id: requestTimeOptions.id });
+        if (option === undefined) throw new Error('request_time_options insert returned no row');
+        optionIdByStart.set(startAt.getTime(), option.id);
+      }
 
       const references: string[] = [];
       for (const target of positioned) {
@@ -243,7 +350,7 @@ export async function createIntendedLessonRequest(
             serviceVersionId: target.serviceVersionId,
             position: target.position,
             statusCode: 'sent',
-            respondByAt: deadlines.respondByAt,
+            respondByAt: deadlinesByTutor.get(target.tutorProfileId)!.respondByAt,
             deadlineRuleVersion,
             sentAt: now,
             createdByUserId: input.requestedByUserId,
@@ -252,17 +359,25 @@ export async function createIntendedLessonRequest(
         if (request === undefined) throw new Error('tutor_requests insert returned no row');
         references.push(request.reference);
 
-        // The hold. Overlap is rejected by the exclusion constraint, which is
-        // what makes fan-out atomic against concurrent requests.
-        await tx.insert(tutorTimeReservations).values({
-          tutorProfileId: target.tutorProfileId,
-          tutorRequestId: request.id,
-          startAt: input.proposedStartAt,
-          endAt: input.proposedEndAt,
-          statusCode: 'active',
-          reservationTypeCode: 'request_hold',
-          expiresAt: deadlines.respondByAt,
-        });
+        // This tutor's own offered subset, with their own lesson length. Times
+        // are snapshotted rather than joined at read time: this row is the
+        // record of what this tutor was offered, and a later change to the
+        // family's options must not rewrite that history.
+        const tutorDuration = durationByTutor.get(target.tutorProfileId) ?? 60;
+        for (const startAt of offeredByTutor.get(target.tutorProfileId) ?? []) {
+          await tx.insert(tutorRequestTimeOptions).values({
+            tutorRequestId: request.id,
+            requestTimeOptionId: optionIdByStart.get(startAt.getTime())!,
+            startsAt: startAt,
+            endsAt: new Date(startAt.getTime() + tutorDuration * 60_000),
+            statusCode: 'offered',
+          });
+        }
+
+        // NO calendar hold here. A request is a question, and holding three
+        // tutors' calendars on speculation took real bookable time from people
+        // who had not agreed to anything (D-1). The hold is taken at
+        // acceptance, by the tutor who actually said yes.
 
         await tx.insert(statusTransitions).values({
           entityType: 'tutor_request',
@@ -279,7 +394,10 @@ export async function createIntendedLessonRequest(
         // this tutor's reference — nothing about siblings.
         await tx.insert(outboxEntries).values({
           eventType: 'tutor_request.sent',
-          payload: { tutorRequestReference: request.reference, respondByAt: deadlines.respondByAt },
+          payload: {
+            tutorRequestReference: request.reference,
+            respondByAt: deadlinesByTutor.get(target.tutorProfileId)!.respondByAt,
+          },
           idempotencyKey: `tutor_request.sent:${request.id}`,
           correlationId: input.correlationId,
         });
@@ -304,7 +422,11 @@ export async function createIntendedLessonRequest(
         actorUserId: input.requestedByUserId,
         correlationId: input.correlationId,
         occurredAt: now,
-        newValue: { tutorCount: positioned.length, proposedStartAt: input.proposedStartAt },
+        newValue: {
+          tutorCount: positioned.length,
+          timeOptionCount: validation.value.proposedStarts.length,
+          earliestStartAt: earliestStart,
+        },
         riskLevel: 'low',
       });
 
@@ -321,6 +443,7 @@ export async function createIntendedLessonRequest(
         intendedLessonRequestId: ilr.id,
         reference: ilr.reference,
         tutorRequestReferences: references,
+        notAskedTutorProfileIds,
       };
     });
   } catch (error) {

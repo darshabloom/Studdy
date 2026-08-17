@@ -65,9 +65,14 @@ export default async function TutorDashboardPage() {
   const soonestDeadline = awaiting
     .map((request) => request.respondByAt)
     .sort((a, b) => a.getTime() - b.getTime())[0];
+  // Holds exist only once a tutor has accepted (D-1), so this is the accepted
+  // work sitting on the calendar while the family chooses.
   const held = requests
-    .filter((request) => request.statusCode === 'sent' && request.holdExpiresAt !== null)
-    .sort((a, b) => a.proposedStartAt.getTime() - b.proposedStartAt.getTime());
+    .filter((request) => request.holdExpiresAt !== null && request.offeredTimes.length > 0)
+    .sort(
+      (a, b) =>
+        (a.offeredTimes[0]?.startAt.getTime() ?? 0) - (b.offeredTimes[0]?.startAt.getTime() ?? 0),
+    );
 
   return (
     <>

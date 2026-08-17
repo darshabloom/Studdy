@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 /**
  * End-to-end journeys for the Intended Lesson Request slice.
@@ -26,55 +26,6 @@ async function signIn(page: Page, email: string): Promise<void> {
   await page.getByRole('button', { name: 'Log in' }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 15_000 });
 }
-
-/** A date input value a few days ahead, comfortably past minimum notice. */
-
-/**
- * A lesson date unique to this attempt.
- *
- * A sent request leaves a live hold on the tutor's calendar, and the platform
- * is correct to refuse a second request overlapping it — that is PD-010 and the
- * GiST exclusion constraint doing their job. So an attempt that re-books the
- * identical slot fails on a rule the application is right to enforce, and the
- * real failure is masked by a misleading one.
- *
- * A family sending another request while the first is still live would pick a
- * different time, so each attempt does too. Whole weeks keep the same weekday,
- * so weekly availability rules still match, and moving further out only
- * increases notice — there is no maximum booking horizon to breach.
- *
- * Cleaning up at the end of the journey instead would not survive a failure
- * midway, which is precisely when the next attempt runs.
- */
-function attemptDateValue(testInfo: TestInfo, baseDaysAhead: number): string {
-  const attempt = testInfo.repeatEachIndex * 8 + testInfo.retry;
-  return nextWeekdayValue(LESSON_WEEKDAY, baseDaysAhead + attempt * 7);
-}
-
-/**
- * The next `weekday` falling at least `daysAhead` out, as 'YYYY-MM-DD'.
- *
- * The server now refuses a time the tutor does not offer, so a lesson date can
- * no longer be "some day next week" — it has to land on a weekday the tutor
- * actually works, or the send fails for a reason that has nothing to do with
- * what the test is checking.
- */
-function nextWeekdayValue(weekday: number, daysAhead: number): string {
-  const date = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
-  date.setUTCHours(0, 0, 0, 0);
-  while (date.getUTCDay() !== weekday) {
-    date.setUTCDate(date.getUTCDate() + 1);
-  }
-  return date.toISOString().slice(0, 10);
-}
-
-/**
- * Tuesday at 17:00 is the one slot both seeded maths tutors offer — Aroha works
- * 16:00–19:00 and James 17:00–19:00 — so the journey holds whichever of them
- * discovery happens to list first.
- */
-const LESSON_WEEKDAY = 2;
-const LESSON_START_TIME = '17:00';
 
 /**
  * Ensure the signed-in account has a student and a subject need, creating them
@@ -159,10 +110,10 @@ async function shortlistAndCompose(page: Page, dashboard: string): Promise<void>
 /**
  * Reach the request composer through the combined availability grid.
  *
- * The shortlist now leads to choosing times rather than straight to the
- * composer: a family picks the times that suit before anyone is asked. The
- * composer still collects the lesson time itself in this checkpoint, so this
- * traverses the grid and leaves the composer to the caller.
+ * The shortlist leads to choosing times rather than straight to the composer:
+ * a family picks the times that suit, from real bookable availability, before
+ * anyone is asked. The composer no longer collects a time at all — it reviews
+ * what each tutor will actually be asked about.
  */
 async function chooseTimesAndCompose(page: Page): Promise<void> {
   await page.getByRole('link', { name: /Choose times for/ }).click();
@@ -182,7 +133,7 @@ test.describe.configure({ mode: 'serial' });
 test.describe('lesson requests', () => {
   test.skip(!supabaseConfigured, 'Requires local Supabase (pnpm supabase:start)');
 
-  test('parent: shortlist → compose → send → awaiting responses', async ({ page }, testInfo) => {
+  test('parent: shortlist → compose → send → awaiting responses', async ({ page }) => {
     await signIn(page, REQUEST_PARENT);
     await shortlistAndCompose(page, '/parent');
 
@@ -192,8 +143,10 @@ test.describe('lesson requests', () => {
     await expect(page.getByText('You will not be charged when requests are sent')).toBeVisible();
     await expect(page.getByText('your card will not be charged')).toHaveCount(0);
 
-    await page.getByLabel('Lesson date').fill(attemptDateValue(testInfo, 6));
-    await page.getByLabel('Start time').fill(LESSON_START_TIME);
+    // The times were chosen on the availability grid, so the composer has none
+    // to collect — it shows what each tutor will actually be asked about.
+    await expect(page.getByText(/Times you chose \(2\)/)).toBeVisible();
+    await expect(page.getByText(/Will be asked about:/).first()).toBeVisible();
     await page.getByRole('button', { name: /Send request to/ }).click();
 
     await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
@@ -217,15 +170,11 @@ test.describe('lesson requests', () => {
     await expect(page.getByText('Your shortlist is still saved')).toBeVisible();
   });
 
-  test('independent student: same journey through the same screens', async ({ page }, testInfo) => {
+  test('independent student: same journey through the same screens', async ({ page }) => {
     await signIn(page, REQUEST_STUDENT);
     await shortlistAndCompose(page, '/student');
 
     await chooseTimesAndCompose(page);
-    // A week past the parent's lesson: same weekday and time, different date,
-    // so this send cannot collide with a hold that journey left behind.
-    await page.getByLabel('Lesson date').fill(attemptDateValue(testInfo, 13));
-    await page.getByLabel('Start time').fill(LESSON_START_TIME);
     await page.getByRole('button', { name: /Send request to/ }).click();
 
     await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);

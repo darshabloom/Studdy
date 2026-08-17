@@ -6,11 +6,11 @@ import { redirect } from 'next/navigation';
 import {
   createIntendedLessonRequest,
   findRequestForStudents,
+  NoTutorAvailableError,
   RequestValidationError,
   SlotUnavailableError,
   withdrawRequest,
 } from '@studdy/database';
-import { zonedTimeToUtc } from '@studdy/domain/availability';
 import { resolveDiscoveryContext } from '../discovery/context';
 
 export interface RequestFormState {
@@ -60,29 +60,24 @@ export async function sendLessonRequestAction(
     return { error: null, issues: { targets: 'Choose at least one tutor.' } };
   }
 
-  const date = String(formData.get('lessonDate') ?? '');
-  const time = String(formData.get('lessonTime') ?? '');
-  const durationMinutes = Number(formData.get('durationMinutes') ?? 60);
   const formatCode = String(formData.get('formatCode') ?? 'online');
   const notes = String(formData.get('notesForTutors') ?? '').trim();
 
-  if (date === '' || time === '') {
-    return {
-      error: null,
-      issues: { lessonDate: 'Choose the date and time you would like the lesson.' },
-    };
+  // The times the family chose on the availability grid. They arrive as
+  // instants rather than a wall-clock date and time, because they were picked
+  // from real bookable slots — there is no wall clock left to interpret, and
+  // nothing for a zone mismatch to shift.
+  const proposedStarts: Date[] = [];
+  for (const raw of formData.getAll('time').map(String)) {
+    const at = new Date(raw);
+    if (Number.isNaN(at.getTime())) {
+      return { error: null, issues: { times: 'One of those times could not be understood.' } };
+    }
+    proposedStarts.push(at);
   }
-
-  let proposedStartAt: Date;
-  try {
-    proposedStartAt = zonedTimeToUtc(date, time, REQUEST_TIME_ZONE);
-  } catch {
-    return { error: null, issues: { lessonDate: 'That date and time could not be understood.' } };
+  if (proposedStarts.length === 0) {
+    return { error: null, issues: { times: 'Choose the times that would suit you.' } };
   }
-  if (Number.isNaN(proposedStartAt.getTime())) {
-    return { error: null, issues: { lessonDate: 'That date and time could not be understood.' } };
-  }
-  const proposedEndAt = new Date(proposedStartAt.getTime() + durationMinutes * 60 * 1000);
 
   let reference: string;
   try {
@@ -91,8 +86,7 @@ export async function sendLessonRequestAction(
       requestedByUserId: context.studdyUserId,
       familyAccountId: context.familyAccountId,
       tutorProfileIds,
-      proposedStartAt,
-      proposedEndAt,
+      proposedStarts,
       formatCode,
       timeZone: REQUEST_TIME_ZONE,
       notesForTutors: notes === '' ? null : notes,
@@ -107,10 +101,16 @@ export async function sendLessonRequestAction(
     if (error instanceof RequestValidationError) {
       return { error: null, issues: error.issues };
     }
+    if (error instanceof NoTutorAvailableError) {
+      return {
+        error:
+          'None of the tutors you chose are free at any of those times any more, so nothing was sent. Go back and choose some different times.',
+      };
+    }
     if (error instanceof SlotUnavailableError) {
       return {
         error:
-          'One of the tutors you chose is no longer free at that time, so nothing was sent. Choose another time, or a different tutor, and try again.',
+          'One of the tutors you chose is no longer free at those times, so nothing was sent. Choose another time, or a different tutor, and try again.',
       };
     }
     throw error;

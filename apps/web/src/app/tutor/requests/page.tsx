@@ -81,9 +81,22 @@ export default async function TutorRequestsPage() {
                       <p className="text-lg font-semibold">
                         {request.subjectDisplayName} with {request.studentPreferredName}
                       </p>
-                      <p className="mt-1 text-sm text-text-secondary">
-                        {formatLessonDateTime(request.proposedStartAt, request.timeZone)}
-                      </p>
+                      {/* The times THIS tutor was offered. Never a count of
+                          the family's full set — only their own subset. */}
+                      <ul className="mt-1 flex flex-col gap-0.5 text-sm text-text-secondary">
+                        {request.offeredTimes.map((option) => (
+                          <li key={option.startAt.toISOString()} className="tabular-nums">
+                            {formatLessonDateTime(option.startAt, request.timeZone)}
+                            {/* Deliberately cause-free. Today `unavailable`
+                                only ever means this tutor's own calendar
+                                filled, but withdrawal and selection close-out
+                                will land on the same status, and a wording
+                                that named a cause would then either be false
+                                or invite a second, distinguishing string. */}
+                            {option.statusCode === 'unavailable' ? ' · no longer available' : ''}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                     <TutorRequestStatus statusCode={request.statusCode} />
                   </div>

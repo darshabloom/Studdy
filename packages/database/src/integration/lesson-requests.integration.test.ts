@@ -5,8 +5,8 @@ import { createDatabaseClient } from '../client';
 import {
   createIntendedLessonRequest,
   expireOverdueRequests,
+  NoTutorAvailableError,
   RequestValidationError,
-  SlotUnavailableError,
   withdrawRequest,
 } from '../repositories/lesson-requests';
 import { listRequestsForTutor, listRequestsForStudents } from '../repositories/request-projections';
@@ -17,6 +17,7 @@ import {
   domainEvents,
   intendedLessonRequests,
   outboxEntries,
+  requestTimeOptions,
   services,
   serviceVersions,
   statusTransitions,
@@ -24,6 +25,7 @@ import {
   studentSubjectSections,
   subjects,
   tutorProfiles,
+  tutorRequestTimeOptions,
   tutorRequests,
   tutorTimeReservations,
   users,
@@ -150,6 +152,16 @@ const future = (hours: number): Date => {
   return at;
 };
 
+/**
+ * A second acceptable time, a day after the first.
+ *
+ * A request must offer at least two (D-3), so every fixture needs a companion
+ * to its primary time. A day apart keeps it inside the fixture's open window
+ * and well clear of minimum notice, and far enough from the first that a hold
+ * on one cannot overlap the other.
+ */
+const altStart = (start: Date): Date => new Date(start.getTime() + 24 * 60 * 60 * 1000);
+
 describe.skipIf(!available)('intended lesson requests (integration)', () => {
   beforeAll(async () => {
     // Deadline rules must exist so a version is snapshotted onto records.
@@ -175,8 +187,7 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: fixture.tutors.map((tutor) => tutor.tutorProfileId),
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: 'Needs help with algebra',
@@ -210,6 +221,9 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
       // Deadlines are snapshotted with the rule version that produced them.
       expect(requests.every((row) => row.deadlineRuleVersion > 0)).toBe(true);
 
+      // NOTHING is held at send (D-1). A request is a question, and reserving
+      // three tutors' calendars on speculation took real bookable time from
+      // people who had not agreed to anything.
       const holds = await db
         .select()
         .from(tutorTimeReservations)
@@ -219,10 +233,27 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
             requests.map((row) => row.id),
           ),
         );
-      expect(holds).toHaveLength(3);
-      expect(holds.every((hold) => hold.statusCode === 'active')).toBe(true);
-      // Every hold shows an expiry, so no hold appears open-ended to a tutor.
-      expect(holds.every((hold) => hold.expiresAt !== null)).toBe(true);
+      expect(holds).toEqual([]);
+
+      // Each tutor is offered the family's times they can actually do.
+      const offered = await db
+        .select()
+        .from(tutorRequestTimeOptions)
+        .where(
+          inArray(
+            tutorRequestTimeOptions.tutorRequestId,
+            requests.map((row) => row.id),
+          ),
+        );
+      expect(offered).toHaveLength(6); // three tutors × two offered times
+      expect(offered.every((row) => row.statusCode === 'offered')).toBe(true);
+
+      const familyOptions = await db
+        .select()
+        .from(requestTimeOptions)
+        .where(eq(requestTimeOptions.intendedLessonRequestId, created.intendedLessonRequestId));
+      expect(familyOptions).toHaveLength(2);
+      expect(familyOptions.map((row) => row.position).sort()).toEqual([1, 2]);
 
       const transitions = await db
         .select()
@@ -259,16 +290,17 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
     }
   });
 
-  it('fan-out is all-or-nothing when a tutor slot is already held', async () => {
+  it('a second request for the same time is allowed, because sending holds nothing', async () => {
+    // Under D-1 a request reserves no calendar time, so two families may ask
+    // the same tutor about the same slot. Whoever the tutor accepts takes it;
+    // until then nobody has been shut out on speculation.
     const fixture = await buildFixture(`conflict-${randomUUID().slice(0, 8)}`);
     const start = future(120);
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
     const base = {
       studentSubjectSectionId: fixture.subjectSectionId,
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
-      proposedStartAt: start,
-      proposedEndAt: end,
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -276,41 +308,82 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
       paymentExemptionCode: null,
     };
 
-    // First request takes tutor 1's slot.
-    await createIntendedLessonRequest({
+    const first = await createIntendedLessonRequest({
       ...base,
       tutorProfileIds: [fixture.tutors[0]!.tutorProfileId],
       correlationId: `cor_${randomUUID()}`,
     });
+    const second = await createIntendedLessonRequest({
+      ...base,
+      tutorProfileIds: fixture.tutors.map((tutor) => tutor.tutorProfileId),
+      correlationId: `cor_${randomUUID()}`,
+    });
 
-    // Second request includes tutor 1 plus two free tutors — must fail whole.
-    await expect(
-      createIntendedLessonRequest({
-        ...base,
-        tutorProfileIds: fixture.tutors.map((tutor) => tutor.tutorProfileId),
-        correlationId: `cor_${randomUUID()}`,
-      }),
-    ).rejects.toBeInstanceOf(SlotUnavailableError);
+    expect(first.tutorRequestReferences).toHaveLength(1);
+    expect(second.tutorRequestReferences).toHaveLength(3);
 
-    // The free tutors must NOT have been sent anything.
+    // And still nothing on anyone's calendar.
     const { sql, db } = createDatabaseClient();
     try {
-      const stray = await db
+      const holds = await db
         .select()
-        .from(tutorRequests)
+        .from(tutorTimeReservations)
         .where(
-          inArray(tutorRequests.tutorProfileId, [
-            fixture.tutors[1]!.tutorProfileId,
-            fixture.tutors[2]!.tutorProfileId,
-          ]),
+          inArray(
+            tutorTimeReservations.tutorProfileId,
+            fixture.tutors.map((tutor) => tutor.tutorProfileId),
+          ),
         );
-      expect(stray).toHaveLength(0);
+      expect(holds).toEqual([]);
     } finally {
       await sql.end();
     }
   });
 
-  it('two concurrent requests for the same tutor slot: exactly one wins', async () => {
+  it('a tutor who can do none of the chosen times is simply not asked', async () => {
+    const fixture = await buildFixture(`subset-${randomUUID().slice(0, 8)}`);
+    const start = future(150);
+    const other = altStart(start);
+
+    // Block tutor 2 across the first time only, so their subset shrinks to one.
+    const { sql, db } = createDatabaseClient();
+    try {
+      await db.insert(availabilityExceptions).values({
+        tutorProfileId: fixture.tutors[1]!.tutorProfileId,
+        startsAt: new Date(start.getTime() - 30 * 60 * 1000),
+        endsAt: new Date(start.getTime() + 90 * 60 * 1000),
+        effectCode: 'removes',
+      });
+      // And tutor 3 across both, so they cannot be asked at all.
+      await db.insert(availabilityExceptions).values({
+        tutorProfileId: fixture.tutors[2]!.tutorProfileId,
+        startsAt: new Date(start.getTime() - 60 * 60 * 1000),
+        endsAt: new Date(other.getTime() + 120 * 60 * 1000),
+        effectCode: 'removes',
+      });
+    } finally {
+      await sql.end();
+    }
+
+    const created = await createIntendedLessonRequest({
+      studentSubjectSectionId: fixture.subjectSectionId,
+      requestedByUserId: fixture.requesterUserId,
+      familyAccountId: null,
+      tutorProfileIds: fixture.tutors.map((tutor) => tutor.tutorProfileId),
+      proposedStarts: [start, other],
+      formatCode: 'online',
+      timeZone: 'Pacific/Auckland',
+      notesForTutors: null,
+      hasPaymentMethodOnFile: false,
+      paymentExemptionCode: null,
+      correlationId: `cor_${randomUUID()}`,
+    });
+
+    expect(created.tutorRequestReferences).toHaveLength(2);
+    expect(created.notAskedTutorProfileIds).toEqual([fixture.tutors[2]!.tutorProfileId]);
+  });
+
+  it('two concurrent requests for the same tutor slot both succeed now that neither holds it', async () => {
     const fixture = await buildFixture(`race-${randomUUID().slice(0, 8)}`);
     const start = future(140);
     const base = {
@@ -318,8 +391,7 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: [fixture.tutors[0]!.tutorProfileId],
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -332,10 +404,10 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
       createIntendedLessonRequest({ ...base, correlationId: `cor_${randomUUID()}` }),
     ]);
 
+    // Both succeed: asking is not claiming. The race that matters moved to
+    // acceptance, where the exclusion constraint still decides it.
     const fulfilled = results.filter((result) => result.status === 'fulfilled');
-    const rejected = results.filter((result) => result.status === 'rejected');
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
+    expect(fulfilled).toHaveLength(2);
   });
 
   it('rejects a fan-out beyond the cap and duplicate tutors', async () => {
@@ -345,8 +417,7 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
       studentSubjectSectionId: fixture.subjectSectionId,
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -369,8 +440,7 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: fixture.tutors.slice(0, 2).map((tutor) => tutor.tutorProfileId),
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -423,8 +493,7 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: [fixture.tutors[0]!.tutorProfileId],
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -485,8 +554,7 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: [fixture.tutors[0]!.tutorProfileId],
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -529,8 +597,7 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: fixture.tutors.map((tutor) => tutor.tutorProfileId),
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: 'Algebra help',
@@ -543,11 +610,18 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
     expect(view).toHaveLength(1);
     const only = view[0]!;
 
-    // The tutor gets what they need to assess the request.
+    // The tutor gets what they need to assess the request: their own offered
+    // times, and nothing that counts the family's full set.
     expect(only.reference).toMatch(/^TREQ-/);
-    expect(only.proposedStartAt).toBeInstanceOf(Date);
+    expect(only.offeredTimes.length).toBeGreaterThan(0);
+    expect(only.offeredTimes[0]?.startAt).toBeInstanceOf(Date);
+    // Pinned: an offered time carries the two instants and its status, and in
+    // particular never `requestTimeOptionId` — an identifier from the family's
+    // side of the boundary.
+    expect(Object.keys(only.offeredTimes[0]!).sort()).toEqual(['endAt', 'startAt', 'statusCode']);
     expect(only.subjectDisplayName).toBeTruthy();
-    expect(only.holdExpiresAt).toBeInstanceOf(Date);
+    // Nothing is held at send any more (D-1): the hold arrives at acceptance.
+    expect(only.holdExpiresAt).toBeNull();
 
     // And nothing that could reveal competitors. (BigInt prices need a
     // replacer — JSON.stringify cannot serialise them.)
@@ -577,8 +651,7 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: [fixture.tutors[0]!.tutorProfileId],
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -599,22 +672,120 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
     // close-out will produce, so the value itself cannot differentiate.
     expect(afterWithdrawal[0]!.statusCode).toBe('closed');
 
-    // Simulate the states selection close-out will produce and assert they are
-    // equally visible with the same shape.
+    // Every terminal state the schema allows must stay equally visible and
+    // carry the same shape, so a tutor cannot tell a family withdrawal from an
+    // expiry, a decline, or a selection close-out.
+    //
+    // Iterating only over the status withdrawal already produced would make
+    // this a no-op re-assertion of the line above, so each state is forced
+    // explicitly — including the ones later slices will start writing.
     const { sql, db } = createDatabaseClient();
     try {
-      for (const terminal of ['closed'] as const) {
+      for (const terminal of [
+        'closed',
+        'expired',
+        'declined',
+        'acceptance_withdrawn',
+        'selected',
+      ] as const) {
         await db
           .update(tutorRequests)
           .set({ statusCode: terminal })
           .where(eq(tutorRequests.intendedLessonRequestId, created.intendedLessonRequestId));
         const view = await listRequestsForTutor(fixture.tutors[0]!.tutorProfileId);
         expect(view, `${terminal} must remain visible to the tutor`).toHaveLength(1);
-        expect(Object.keys(view[0]!).sort()).toEqual(Object.keys(afterWithdrawal[0]!).sort());
+        expect(
+          Object.keys(view[0]!).sort(),
+          `${terminal} must expose the same fields as every other ending`,
+        ).toEqual(Object.keys(afterWithdrawal[0]!).sort());
       }
     } finally {
       await sql.end();
     }
+  });
+
+  it('gives the tutor their own lesson length, not the family-wide one', async () => {
+    // The ILR stores the LONGEST duration across invited tutors. Showing that
+    // to a 60-minute tutor invited alongside a 90-minute one would hand them a
+    // number they know is not theirs — proof another tutor was asked.
+    const fixture = await buildFixture(`duration-${randomUUID().slice(0, 8)}`);
+    const start = future(105);
+
+    const { sql, db } = createDatabaseClient();
+    try {
+      await db
+        .update(serviceVersions)
+        .set({ durationMinutes: 90 })
+        .where(eq(serviceVersions.id, fixture.tutors[1]!.serviceVersionId));
+    } finally {
+      await sql.end();
+    }
+
+    await createIntendedLessonRequest({
+      studentSubjectSectionId: fixture.subjectSectionId,
+      requestedByUserId: fixture.requesterUserId,
+      familyAccountId: null,
+      tutorProfileIds: [fixture.tutors[0]!.tutorProfileId, fixture.tutors[1]!.tutorProfileId],
+      proposedStarts: [start, altStart(start)],
+      formatCode: 'online',
+      timeZone: 'Pacific/Auckland',
+      notesForTutors: null,
+      hasPaymentMethodOnFile: false,
+      paymentExemptionCode: null,
+      correlationId: `cor_${randomUUID()}`,
+    });
+
+    const shortTutor = await listRequestsForTutor(fixture.tutors[0]!.tutorProfileId);
+    const longTutor = await listRequestsForTutor(fixture.tutors[1]!.tutorProfileId);
+    expect(shortTutor[0]!.durationMinutes).toBe(60);
+    expect(longTutor[0]!.durationMinutes).toBe(90);
+  });
+
+  it('sets each tutor response deadline from their own earliest offered time', async () => {
+    // A shared deadline leaks the family's set: the window is clamped to
+    // "earliest offered − minimum notice", so a tutor offered only the later
+    // time would learn an earlier one exists and could recover it exactly.
+    const fixture = await buildFixture(`deadline-${randomUUID().slice(0, 8)}`);
+    const soon = future(10);
+    const later = future(200);
+
+    // Tutor 2 cannot do the earlier time, so their subset starts later.
+    const { sql, db } = createDatabaseClient();
+    try {
+      await db.insert(availabilityExceptions).values({
+        tutorProfileId: fixture.tutors[1]!.tutorProfileId,
+        startsAt: new Date(soon.getTime() - 60 * 60 * 1000),
+        endsAt: new Date(soon.getTime() + 120 * 60 * 1000),
+        effectCode: 'removes',
+      });
+    } finally {
+      await sql.end();
+    }
+
+    await createIntendedLessonRequest({
+      studentSubjectSectionId: fixture.subjectSectionId,
+      requestedByUserId: fixture.requesterUserId,
+      familyAccountId: null,
+      tutorProfileIds: [fixture.tutors[0]!.tutorProfileId, fixture.tutors[1]!.tutorProfileId],
+      proposedStarts: [soon, later],
+      formatCode: 'online',
+      timeZone: 'Pacific/Auckland',
+      notesForTutors: null,
+      hasPaymentMethodOnFile: false,
+      paymentExemptionCode: null,
+      correlationId: `cor_${randomUUID()}`,
+    });
+
+    const canDoSoon = await listRequestsForTutor(fixture.tutors[0]!.tutorProfileId);
+    const laterOnly = await listRequestsForTutor(fixture.tutors[1]!.tutorProfileId);
+
+    expect(canDoSoon[0]!.offeredTimes).toHaveLength(2);
+    expect(laterOnly[0]!.offeredTimes).toHaveLength(1);
+
+    // The tutor who cannot do the early time must not have a deadline derived
+    // from it — theirs runs from the time they were actually offered.
+    expect(laterOnly[0]!.respondByAt.getTime()).toBeGreaterThan(soon.getTime());
+    expect(canDoSoon[0]!.respondByAt.getTime()).toBeLessThan(soon.getTime());
   });
 
   it('prices each request from the tutor’s own current service version', async () => {
@@ -629,8 +800,7 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: fixture.tutors.map((tutor) => tutor.tutorProfileId),
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -670,8 +840,7 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
         familyAccountId: null,
         // A tutor whose services are for a different subject entirely.
         tutorProfileIds: [other.tutors[0]!.tutorProfileId],
-        proposedStartAt: start,
-        proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+        proposedStarts: [start, altStart(start)],
         formatCode: 'online',
         timeZone: 'Pacific/Auckland',
         notesForTutors: null,
@@ -690,8 +859,7 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: [fixture.tutors[0]!.tutorProfileId],
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -712,8 +880,7 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: fixture.tutors.slice(0, 2).map((tutor) => tutor.tutorProfileId),
-      proposedStartAt: start,
-      proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+      proposedStarts: [start, altStart(start)],
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -743,26 +910,25 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
   /**
    * The request path must not become an availability oracle.
    *
-   * Sending is the one family-facing write that touches a tutor's calendar, so
-   * it is the one place a family could probe it. If a time already held by
-   * someone else failed differently from a time the tutor privately blocked or
-   * simply does not work, a family could send and withdraw across a week and
-   * read back the tutor's real calendar — the exact distinction the derived
-   * slot boundary exists to erase.
+   * Under the multi-time model the protection is structural rather than a
+   * matter of matching error messages: a time a tutor cannot do never enters
+   * their offered subset, and the subset says only which times they were asked
+   * about. Whether a time is missing because the tutor blocked it privately,
+   * because an accepted hold already covers it, or because they simply do not
+   * work then, the observable result is identical — the time is absent.
    */
   describe('does not leak why a time is unavailable', () => {
-    const requestFor = async (
+    const offeredTimesFor = async (
       fixture: Fixture,
-      start: Date,
-    ): Promise<{ ok: boolean; error: unknown }> => {
+      starts: readonly Date[],
+    ): Promise<{ created: boolean; offered: number[]; error: unknown }> => {
       try {
-        await createIntendedLessonRequest({
+        const created = await createIntendedLessonRequest({
           studentSubjectSectionId: fixture.subjectSectionId,
           requestedByUserId: fixture.requesterUserId,
           familyAccountId: null,
           tutorProfileIds: [fixture.tutors[0]!.tutorProfileId],
-          proposedStartAt: start,
-          proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+          proposedStarts: [...starts],
           formatCode: 'online',
           timeZone: 'Pacific/Auckland',
           notesForTutors: null,
@@ -770,29 +936,36 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
           paymentExemptionCode: null,
           correlationId: `cor_${randomUUID()}`,
         });
-        return { ok: true, error: null };
+        const view = await listRequestsForTutor(fixture.tutors[0]!.tutorProfileId);
+        const mine = view.find((entry) => created.tutorRequestReferences.includes(entry.reference));
+        return {
+          created: true,
+          offered: (mine?.offeredTimes ?? []).map((option) => option.startAt.getTime()),
+          error: null,
+        };
       } catch (error) {
-        return { ok: false, error };
+        return { created: false, offered: [], error };
       }
     };
 
-    it('refuses a time outside the tutor working hours', async () => {
+    it('sends nothing when the tutor works none of the chosen times', async () => {
       const fixture = await buildFixture(`oracle-outside-${randomUUID().slice(0, 8)}`);
       // Beyond the fixture's open interval entirely.
       const start = future(95 * 24);
-      const result = await requestFor(fixture, start);
-      expect(result.ok).toBe(false);
-      expect(result.error).toBeInstanceOf(SlotUnavailableError);
+      const result = await offeredTimesFor(fixture, [start, altStart(start)]);
+      expect(result.created).toBe(false);
+      expect(result.error).toBeInstanceOf(NoTutorAvailableError);
     });
 
-    it('refuses a privately blocked time identically to one already held', async () => {
+    it('drops a privately blocked time exactly as it drops a reserved one', async () => {
       const fixture = await buildFixture(`oracle-block-${randomUUID().slice(0, 8)}`);
-      const blockedStart = future(100);
-      const takenStart = future(130);
+      const free = future(100);
+      const blockedStart = future(124);
+      const reservedStart = future(148);
 
-      // A private block, carrying a reason the family may never learn.
       const { sql, db } = createDatabaseClient();
       try {
+        // A private block, carrying a reason the family may never learn.
         await db.insert(availabilityExceptions).values({
           tutorProfileId: fixture.tutors[0]!.tutorProfileId,
           startsAt: new Date(blockedStart.getTime() - 30 * 60 * 1000),
@@ -801,23 +974,25 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
           reasonCode: 'medical_appointment',
           privateNote: 'Never reaches a family.',
         });
+        // And an accepted hold from someone else, covering a different time.
+        await db.insert(tutorTimeReservations).values({
+          tutorProfileId: fixture.tutors[0]!.tutorProfileId,
+          startAt: reservedStart,
+          endAt: new Date(reservedStart.getTime() + 60 * 60 * 1000),
+          statusCode: 'active',
+          reservationTypeCode: 'request_hold',
+          expiresAt: new Date(reservedStart.getTime() - 2 * 60 * 60 * 1000),
+        });
       } finally {
         await sql.end();
       }
 
-      // Someone else already holds the second time.
-      const firstHold = await requestFor(fixture, takenStart);
-      expect(firstHold.ok).toBe(true);
+      const result = await offeredTimesFor(fixture, [free, blockedStart, reservedStart]);
 
-      const blocked = await requestFor(fixture, blockedStart);
-      const taken = await requestFor(fixture, takenStart);
-
-      // Same class, same message: the difference carries no information.
-      expect(blocked.ok).toBe(false);
-      expect(taken.ok).toBe(false);
-      expect(blocked.error).toBeInstanceOf(SlotUnavailableError);
-      expect(taken.error).toBeInstanceOf(SlotUnavailableError);
-      expect((blocked.error as Error).message).toBe((taken.error as Error).message);
+      // The free time is offered; the other two are absent, and nothing in the
+      // result distinguishes the block from the reservation.
+      expect(result.created).toBe(true);
+      expect(result.offered).toEqual([free.getTime()]);
     });
   });
 });

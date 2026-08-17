@@ -24,6 +24,8 @@ export {
   nextAvailableLabel,
   slotLabel,
   timeLabel,
+  zonedClockTime,
+  zonedDateOnly,
   type LabelledSlot,
   type SlotDay,
 } from './presentation';

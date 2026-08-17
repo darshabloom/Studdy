@@ -48,6 +48,33 @@ function dateKey(instant: Date, ianaTimeZone: string): string {
   return `${p['year'] ?? ''}-${p['month'] ?? ''}-${p['day'] ?? ''}`;
 }
 
+/**
+ * 'YYYY-MM-DD' in the given zone — the machine form, for storage.
+ *
+ * Stored alongside the instant so a rendered time can never drift from the one
+ * the family actually chose, even if a zone's rules change beneath it.
+ */
+export function zonedDateOnly(instant: Date, ianaTimeZone: string): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ianaTimeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return formatter.format(instant);
+}
+
+/** 'HH:mm' in the given zone — the machine form, for storage. */
+export function zonedClockTime(instant: Date, ianaTimeZone: string): string {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: ianaTimeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return formatter.format(instant);
+}
+
 /** 'Tue 2 Sep' — weekday included because families scan by weekday. */
 export function dayLabel(instant: Date, ianaTimeZone: string): string {
   const formatter = new Intl.DateTimeFormat('en-NZ', {
