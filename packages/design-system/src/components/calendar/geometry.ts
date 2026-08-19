@@ -23,11 +23,20 @@ export const MINUTES_IN_DAY = 24 * 60;
  * absence, never a marked-out reason for absence.
  */
 export type CalendarBlockRole =
-  'available' | 'blocked' | 'hold' | 'lesson' | 'selected' | 'candidate';
+  'available' | 'available_once' | 'blocked' | 'hold' | 'lesson' | 'selected' | 'candidate';
 
-/** Roles a family-facing calendar may render. Enforced by `assertFamilySafe`. */
+/**
+ * Roles a family-facing calendar may render. Enforced by `assertFamilySafe`.
+ *
+ * `available_once` belongs here because a one-off addition is ordinary bookable
+ * time: it says the tutor is free, which is the entire point of the surface. It
+ * exists as its own role so the TUTOR can tell a recurring rule from a one-off
+ * while editing. Family projections still emit only `available`, so a family is
+ * never told which kind of row produced a slot.
+ */
 export const FAMILY_SAFE_ROLES: readonly CalendarBlockRole[] = [
   'available',
+  'available_once',
   'selected',
   'candidate',
 ];

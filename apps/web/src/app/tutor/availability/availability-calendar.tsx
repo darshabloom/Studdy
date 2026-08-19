@@ -39,10 +39,26 @@ import type { CalendarSegment } from '@/lib/availability/calendar-projection';
 /** What a drag on empty grid creates. */
 type Tool = 'weekly' | 'extra' | 'block';
 
-const TOOLS: readonly { id: Tool; label: string; hint: string }[] = [
-  { id: 'weekly', label: 'Repeats weekly', hint: 'Your regular teaching hours, every week.' },
-  { id: 'extra', label: 'Extra time, once', hint: 'Hours you can offer on this date only.' },
-  { id: 'block', label: 'Block time', hint: 'Time you are not available on this date.' },
+/** Each tool carries the colour it will draw, so the choice is visible up front. */
+const TOOLS: readonly { id: Tool; label: string; hint: string; swatch: string }[] = [
+  {
+    id: 'weekly',
+    label: 'Regular availability',
+    hint: 'Repeats every week until you change it.',
+    swatch: 'bg-brand-purple',
+  },
+  {
+    id: 'extra',
+    label: 'One-off availability',
+    hint: 'Extra hours on this date only.',
+    swatch: 'bg-brand-purple/40',
+  },
+  {
+    id: 'block',
+    label: 'Block time',
+    hint: 'Time you are not available on this date.',
+    swatch: 'bg-text-muted/50',
+  },
 ];
 
 export interface AvailabilityCalendarProps {
@@ -63,6 +79,8 @@ export interface AvailabilityCalendarProps {
   readonly isPastWeek: boolean;
   /** TUTOR-ONLY. Never rendered on the family preview, which is a separate route. */
   readonly notedBlocks: readonly NotedBlock[];
+  /** Present only when the week on screen contains today. */
+  readonly now?: { dayIndex: number; minutes: number };
 }
 
 export interface NotedBlock {
@@ -211,20 +229,42 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
       ) : null}
 
       {props.isPastWeek ? null : (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          {TOOLS.map((option) => (
-            <Button
-              key={option.id}
-              variant={tool === option.id ? 'primary' : 'secondary'}
-              size="sm"
-              onClick={() => {
-                setTool(option.id);
-                setBlockDraft(null);
-              }}
-            >
-              {option.label}
-            </Button>
-          ))}
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/*
+           * A segmented control, not three buttons. These are modes of one tool
+           * — what a drag will draw — and only one can be active, which a row of
+           * separate buttons does not say. Joining them into a single track with
+           * one filled segment is the shape a person already reads as a mode.
+           */}
+          <div
+            role="radiogroup"
+            aria-label="What dragging on the calendar creates"
+            className="inline-flex rounded-[var(--radius-medium)] border border-surface-border bg-surface-card-secondary p-0.5"
+          >
+            {TOOLS.map((option) => {
+              const active = tool === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => {
+                    setTool(option.id);
+                    setBlockDraft(null);
+                  }}
+                  className={`flex items-center gap-1.5 rounded-[var(--radius-gentle)] px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-purple ${
+                    active
+                      ? 'bg-surface-card text-text-primary shadow-sm'
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  <span aria-hidden className={`h-2.5 w-2.5 rounded-sm ${option.swatch}`} />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
           <p className="text-sm text-text-secondary">
             {TOOLS.find((option) => option.id === tool)?.hint}
           </p>
@@ -290,17 +330,20 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
           mode={props.isPastWeek ? 'read' : 'edit'}
           dayLabels={props.dayLabels}
           ariaLabel={`Your availability, week of ${props.weekLabel}`}
+          {...(props.now === undefined ? {} : { now: props.now })}
           {...(props.isPastWeek
             ? {}
             : { onCreate: handleCreate, onResize: handleResize, onDelete: handleDelete })}
         />
-        {props.isPastWeek ? null : (
-          <p className="mt-3 text-sm text-text-secondary">
-            Drag on an empty part of a day to add time. Drag the bottom edge of a block to change
-            when it ends, or use × to remove it. Times are {props.timeZone}.
-          </p>
-        )}
-        <Legend />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+          <Legend />
+          {props.isPastWeek ? null : (
+            <p className="text-xs text-text-muted">
+              Drag to add · drag the bottom edge to resize · × to remove · times in {props.timeZone}
+            </p>
+          )}
+        </div>
+
         {props.hasAnyRules ? null : (
           <p className="mt-3 text-sm text-text-secondary">
             Nothing set yet. Drag across a weekday above to add the hours you normally teach — they
@@ -331,20 +374,22 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
   );
 }
 
+/** The five things a block can be, in the same colours the grid uses. */
 function Legend(): ReactNode {
   return (
-    <ul className="mt-3 flex flex-wrap gap-4 text-xs text-text-secondary">
-      <LegendItem className="bg-brand-lavender/70 border-brand-purple/40" label="Bookable" />
+    <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-text-secondary">
+      <LegendItem className="border-brand-purple/30 bg-brand-lavender/70" label="Regular" />
+      <LegendItem className="border-brand-purple/30 bg-brand-lavender/40" label="One-off" />
       <LegendItem
-        className="bg-status-neutral-bg border-status-neutral-border"
+        className="border-surface-border bg-surface-card-secondary"
         label="Blocked (private)"
       />
       <LegendItem
-        className="bg-status-warning-bg border-status-warning-border"
+        className="border-status-warning-border bg-status-warning-bg"
         label="Held, temporarily"
       />
       <LegendItem
-        className="bg-status-success-bg border-status-success-border"
+        className="border-status-success-border bg-status-success-bg"
         label="Confirmed lesson"
       />
     </ul>

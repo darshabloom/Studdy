@@ -54,10 +54,82 @@ test.describe('tutor availability, as a calendar', () => {
     await expect(calendar).toBeVisible();
     await expect(calendar.locator('[data-calendar-block]').first()).toBeVisible();
 
-    // The tools that make it an editing surface, not a picture.
-    await expect(page.getByRole('button', { name: 'Repeats weekly' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Extra time, once' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Block time' })).toBeVisible();
+    // Seven day columns, each headed — the shape that makes it read as a week
+    // rather than as seven stacked lists.
+    await expect(calendar.getByText(/^Mon /)).toBeVisible();
+    await expect(calendar.getByText(/^Sun /)).toBeVisible();
+
+    // The tools that make it an editing surface, not a picture. They are a
+    // radiogroup because only one can be what a drag will draw.
+    const tools = page.getByRole('radiogroup', { name: /dragging on the calendar/i });
+    await expect(tools.getByRole('radio', { name: 'Regular availability' })).toBeVisible();
+    await expect(tools.getByRole('radio', { name: 'One-off availability' })).toBeVisible();
+    await expect(tools.getByRole('radio', { name: 'Block time' })).toBeVisible();
+
+    // Regular availability is selected by default, so a first drag does the
+    // thing a tutor almost always wants.
+    await expect(tools.getByRole('radio', { name: 'Regular availability' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+  });
+
+  /**
+   * That the calendar is a GRID, asserted on measured geometry.
+   *
+   * This exists because of a failure no other test could see. The design system
+   * is a workspace package, so it resolves through a symlink in node_modules,
+   * and Tailwind's content detection skips node_modules — every utility class
+   * used only inside a design system component was silently dropped from the
+   * bundle. The markup was correct and every assertion about text and roles
+   * still passed, while the week collapsed into a vertical stack of full-width
+   * bars roughly two thousand pixels tall.
+   *
+   * Text and roles cannot catch a missing stylesheet. Positions can.
+   */
+  test('lays the week out as columns, not as a vertical stack', async ({ page }) => {
+    await signIn(page, TUTOR);
+    await page.goto('/tutor/availability');
+    const calendar = page.getByRole('group', { name: /Your availability, week of/ });
+    await expect(calendar).toBeVisible({ timeout: 15_000 });
+    await expect(calendar.locator('[data-calendar-block]').first()).toBeVisible();
+
+    const geometry = await calendar.evaluate((root) => {
+      const blocks = [...root.querySelectorAll('[data-calendar-block]')];
+      const columns = [...new Set(blocks.map((block) => block.parentElement))].filter(
+        (column): column is HTMLElement => column !== null,
+      );
+      const boxes = columns.map((column) => column.getBoundingClientRect());
+      return {
+        blockCount: blocks.length,
+        columnCount: columns.length,
+        // Distinct left edges: real columns sit beside each other.
+        distinctLefts: new Set(boxes.map((box) => Math.round(box.left))).size,
+        // Shared top edge: they are a row of columns, not a stack of sections.
+        distinctTops: new Set(boxes.map((box) => Math.round(box.top))).size,
+        blocksAbsolute: blocks.every(
+          (block) => globalThis.getComputedStyle(block).position === 'absolute',
+        ),
+        calendarHeight: Math.round(root.getBoundingClientRect().height),
+        widestBlock: Math.max(...blocks.map((block) => block.getBoundingClientRect().width)),
+        calendarWidth: Math.round(root.getBoundingClientRect().width),
+      };
+    });
+
+    // Every column carrying a block starts at its own x and shares one y.
+    expect(geometry.columnCount).toBeGreaterThan(1);
+    expect(geometry.distinctLefts).toBe(geometry.columnCount);
+    expect(geometry.distinctTops).toBe(1);
+
+    // Blocks sit at their own time, which requires them to be positioned.
+    expect(geometry.blocksAbsolute).toBe(true);
+
+    // A block belongs to one day, so it can never span the width of the week.
+    expect(geometry.widestBlock).toBeLessThan(geometry.calendarWidth / 3);
+
+    // A week of teaching hours fits on a screen rather than running to a scroll
+    // of empty day sections. The old stacked layout was ~2,240px.
+    expect(geometry.calendarHeight).toBeLessThan(900);
   });
 
   test('navigates between weeks', async ({ page }) => {
@@ -67,13 +139,16 @@ test.describe('tutor availability, as a calendar', () => {
       timeout: 15_000,
     });
 
-    await page.getByRole('link', { name: /Next/ }).click();
+    await page.getByRole('link', { name: 'Next week' }).click();
     await expect(page).toHaveURL(/\/tutor\/availability\?week=\d{4}-\d{2}-\d{2}/);
 
-    // "This week" only offers itself once the tutor has left this week.
-    await expect(page.getByRole('link', { name: 'This week' })).toBeVisible();
-    await page.getByRole('link', { name: 'This week' }).click();
-    await expect(page.getByRole('link', { name: 'This week' })).toHaveCount(0);
+    // The way back only offers itself once the tutor has left this week; on the
+    // current week the same spot is a plain "This week" marker instead.
+    const backToThisWeek = page.getByRole('link', { name: 'Back to this week' });
+    await expect(backToThisWeek).toBeVisible();
+    await backToThisWeek.click();
+    await expect(backToThisWeek).toHaveCount(0);
+    await expect(page.getByText('This week', { exact: true })).toBeVisible();
   });
 
   test('preview as family shows bookable time and never a reason for a gap', async ({ page }) => {

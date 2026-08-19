@@ -6,14 +6,8 @@ import {
   listTutorReservations,
   tutorProfileForUser,
 } from '@studdy/database';
-import {
-  Alert,
-  Button,
-  Card,
-  RestrictedState,
-  WeekCalendar,
-  fittedWindow,
-} from '@studdy/design-system';
+import { Alert, Button, RestrictedState, WeekCalendar, fittedWindow } from '@studdy/design-system';
+import { zonedClockTime } from '@studdy/domain/availability';
 import { resolveIdentity } from '@/lib/identity/resolve';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 import {
@@ -21,7 +15,7 @@ import {
   familyPreviewBlocks,
   tutorWeekBlocks,
 } from '@/lib/availability/calendar-projection';
-import { mondayOf, shiftDate, weekDays } from '@/lib/availability/calendar-time';
+import { clockToMinutes, mondayOf, shiftDate, weekDays } from '@/lib/availability/calendar-time';
 import { AvailabilityCalendar } from './availability-calendar';
 
 export const metadata = { title: 'Your availability' };
@@ -106,33 +100,56 @@ export default async function TutorAvailabilityPage({
     />
   );
 
-  const heading = (
-    <>
+  // The current-time line, only when today is actually in the week on screen.
+  const todayIndex = days.findIndex((day) => day.startAt <= now && now < day.endAt);
+  const nowMarker =
+    todayIndex >= 0
+      ? {
+          dayIndex: todayIndex,
+          minutes: clockToMinutes(zonedClockTime(now, PLATFORM_TIME_ZONE)),
+        }
+      : undefined;
+
+  const weeklyMinutes = rules.reduce((total, rule) => {
+    const start =
+      Number(rule.localStartTime.slice(0, 2)) * 60 + Number(rule.localStartTime.slice(3, 5));
+    const end = Number(rule.localEndTime.slice(0, 2)) * 60 + Number(rule.localEndTime.slice(3, 5));
+    return total + (end - start);
+  }, 0);
+
+  const title = (
+    <div>
       <h1 className="font-display text-2xl font-semibold text-brand-purple-deep">
         Your availability
       </h1>
-      <p className="mt-2 text-text-secondary">
-        Families can only ask you for times you are free. Draw your regular hours on the calendar,
-        then block out anything one-off.
+      <p className="mt-1 text-sm text-text-secondary">
+        Families can only ask you for times you are free.
       </p>
-
-      {rules.length === 0 ? (
-        <div className="mt-4">
-          <Alert tone="warning" title="Families cannot request you yet">
-            You have no availability set, so you will not appear as bookable and no family can send
-            you a lesson request. Adding your regular hours is all it takes.
-          </Alert>
-        </div>
-      ) : null}
-    </>
+    </div>
   );
+
+  const noAvailabilityAlert =
+    rules.length === 0 ? (
+      <div className="mt-4">
+        <Alert tone="warning" title="Families cannot request you yet">
+          You have no availability set, so you will not appear as bookable and no family can send
+          you a lesson request. Adding your regular hours is all it takes.
+        </Alert>
+      </div>
+    ) : null;
 
   // PREVIEW: the private rows are never queried, so there is nothing on this
   // page to leak — not in the markup, and not in the serialised payload either.
   if (isPreview) {
     return (
       <>
-        {heading}
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          {title}
+          <dl className="flex items-center gap-6 text-right">
+            <Stat label="Bookable this week" value={String(slots.length)} />
+          </dl>
+        </div>
+        {noAvailabilityAlert}
         <div className="mt-6">{nav}</div>
         <p className="mt-4 text-sm text-text-secondary">
           Exactly what a family sees: your hours, minus anything blocked, minus time already held or
@@ -146,6 +163,7 @@ export default async function TutorAvailabilityPage({
             familySafe
             dayLabels={days.map((day) => day.label)}
             ariaLabel={`Bookable times a family can see, week of ${weekLabel}`}
+            {...(nowMarker === undefined ? {} : { now: nowMarker })}
           />
         </div>
         {familyBlocks.length === 0 ? (
@@ -182,31 +200,22 @@ export default async function TutorAvailabilityPage({
   );
   const notedBlocks = inThisWeek.filter((exception) => exception.privateNote !== null);
 
-  const weeklyMinutes = rules.reduce((total, rule) => {
-    const start =
-      Number(rule.localStartTime.slice(0, 2)) * 60 + Number(rule.localStartTime.slice(3, 5));
-    const end = Number(rule.localEndTime.slice(0, 2)) * 60 + Number(rule.localEndTime.slice(3, 5));
-    return total + (end - start);
-  }, 0);
-
   return (
     <>
-      {heading}
-
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <Card>
-          <p className="text-sm text-text-secondary">Regular hours each week</p>
-          <p className="mt-1 text-2xl font-semibold">{(weeklyMinutes / 60).toFixed(1)}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-text-secondary">Bookable hours, this week</p>
-          <p className="mt-1 text-2xl font-semibold">{slots.length}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-text-secondary">One-off changes, this week</p>
-          <p className="mt-1 text-2xl font-semibold">{inThisWeek.length}</p>
-        </Card>
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        {title}
+        {/*
+         * The numbers sit beside the title rather than in a row of large cards.
+         * They are context for the calendar, not the subject of the screen, and
+         * three full-width cards pushed the week itself below the fold.
+         */}
+        <dl className="flex items-center gap-6 text-right">
+          <Stat label="Regular hours a week" value={(weeklyMinutes / 60).toFixed(1)} />
+          <Stat label="Bookable this week" value={String(slots.length)} />
+          <Stat label="One-off changes" value={String(inThisWeek.length)} />
+        </dl>
       </div>
+      {noAvailabilityAlert}
 
       <div className="mt-6">{nav}</div>
 
@@ -220,6 +229,7 @@ export default async function TutorAvailabilityPage({
         timeZone={PLATFORM_TIME_ZONE}
         hasAnyRules={rules.length > 0}
         isPastWeek={last.endAt <= now}
+        {...(nowMarker === undefined ? {} : { now: nowMarker })}
         notedBlocks={notedBlocks.map((exception) => ({
           id: exception.id,
           when: `${formatDateTime(exception.startsAt)} – ${formatDateTime(exception.endsAt)}`,
@@ -252,20 +262,35 @@ function WeekNav({
 }) {
   const suffix = isPreview ? '&preview=1' : '';
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-2">
-        <Button asChild variant="secondary" size="sm">
-          <Link href={`/tutor/availability?week=${shiftDate(weekStart, -7)}${suffix}`}>
-            ← Previous
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+      <div className="flex items-center gap-3">
+        {/* Paired arrows read as one control, the way every calendar does it. */}
+        <div className="inline-flex overflow-hidden rounded-[var(--radius-medium)] border border-surface-border">
+          <Link
+            href={`/tutor/availability?week=${shiftDate(weekStart, -7)}${suffix}`}
+            aria-label="Previous week"
+            className="px-2.5 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-card-secondary hover:text-text-primary"
+          >
+            ←
           </Link>
-        </Button>
-        <p className="min-w-[11rem] text-center text-sm font-semibold">{weekLabel}</p>
-        <Button asChild variant="secondary" size="sm">
-          <Link href={`/tutor/availability?week=${shiftDate(weekStart, 7)}${suffix}`}>Next →</Link>
-        </Button>
-        {isCurrentWeek ? null : (
+          <Link
+            href={`/tutor/availability?week=${shiftDate(weekStart, 7)}${suffix}`}
+            aria-label="Next week"
+            className="border-l border-surface-border px-2.5 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-card-secondary hover:text-text-primary"
+          >
+            →
+          </Link>
+        </div>
+
+        <h2 className="font-display text-lg font-semibold text-text-primary">{weekLabel}</h2>
+
+        {isCurrentWeek ? (
+          <span className="rounded-full bg-brand-lavender px-2 py-0.5 text-xs font-medium text-brand-purple-deep">
+            This week
+          </span>
+        ) : (
           <Button asChild variant="quiet" size="sm">
-            <Link href={`/tutor/availability?week=${currentWeek}${suffix}`}>This week</Link>
+            <Link href={`/tutor/availability?week=${currentWeek}${suffix}`}>Back to this week</Link>
           </Button>
         )}
       </div>
@@ -281,6 +306,16 @@ function WeekNav({
           {isPreview ? 'Back to editing' : 'Preview as family'}
         </Link>
       </Button>
+    </div>
+  );
+}
+
+/** A number and its label, sized as context rather than as a headline. */
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs text-text-secondary">{label}</dt>
+      <dd className="font-display text-lg font-semibold text-text-primary">{value}</dd>
     </div>
   );
 }

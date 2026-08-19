@@ -228,12 +228,20 @@ describe('tutorWeekBlocks', () => {
     expect(serialised).not.toContain('personal');
   });
 
-  it('renders a one-off addition as available', () => {
+  /**
+   * A one-off addition is bookable time, but the tutor needs to see that it
+   * happens once rather than every week — so it carries its own role.
+   */
+  it('renders a one-off addition as its own kind of available', () => {
     const { blocks } = tutorWeekBlocks({
       ...empty,
       exceptions: [exception({ effectCode: 'adds' })],
     });
-    expect(blocks[0]?.role).toBe('available');
+    expect(blocks[0]?.role).toBe('available_once');
+    // Still positive availability, so a family-facing calendar accepts it.
+    expect(() => {
+      assertFamilySafe(blocks);
+    }).not.toThrow();
   });
 
   /**

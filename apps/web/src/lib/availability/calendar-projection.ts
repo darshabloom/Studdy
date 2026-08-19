@@ -133,8 +133,10 @@ export function tutorWeekBlocks(input: TutorWeekInput): TutorWeek {
         dayIndex,
         startMinutes: span.startMinutes,
         endMinutes: span.endMinutes,
-        role: adds ? 'available' : 'blocked',
-        label: adds ? 'Extra time, once' : 'Blocked',
+        // A one-off addition gets its own role so the tutor can tell it from a
+        // recurring rule while editing. Family projections never emit it.
+        role: adds ? 'available_once' : 'blocked',
+        label: adds ? 'One-off' : 'Blocked',
       });
       segments.push({
         blockId,
