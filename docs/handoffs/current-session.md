@@ -33,7 +33,7 @@ current; they are not duplicates.
 ## 2. Where the work is
 
 **Branch:** `feat/availability-and-multi-time-requests`
-**HEAD:** `10bc2839ada0963d4e0b34ec1a71b6735111569d` (`10bc283`) — _feat: shared WeekCalendar primitive (UX redesign step 1)_
+**HEAD:** `e37933b551788dc7e47db5c600d9b8e7524007ab` (`e37933b`) — _fix: make the week calendar a real week grid (step 2 visual pass)_
 **Open pull request:** [#17](https://github.com/darshabloom/Studdy/pull/17) — **DRAFT, open, unmerged.**
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
@@ -51,7 +51,10 @@ current; they are not duplicates.
 | `e8371af` | checkpoint 4 — tutor accept and decline, hold at acceptance                 |
 | `9d1ea53` | checkpoint 5 — family selection close-out, `awaiting_payment`               |
 | `905cf9e` | close-out audit fidelity, family-visible lapse reasons                      |
-| `10bc283` | **UX redesign step 1 — shared `WeekCalendar` primitive**                    |
+| `10bc283` | UX redesign step 1 — shared `WeekCalendar` primitive                        |
+| `bb2ecaf` | fresh-session checkpoint and handoff rewrite                                |
+| `793937a` | **UX redesign step 2 — calendar-first `/tutor/availability`**               |
+| `e37933b` | **step 2 visual pass — a real week grid, and the CSS purge that hid it**    |
 
 Branched from `b4464a8` (PR #14, intended lesson requests). Merged before that: PR1 bootstrap
 (`91931e5`), PR2 identity (`d3116ed`), PR3 family/students/discovery (`51c0135`).
@@ -101,10 +104,10 @@ cd S:\Studdy; pnpm exec turbo run lint --concurrency=2
 Supabase runs on 14321 (API), 14322 (database), 14323 (Studio), 14324 (Mailpit inbox).
 The analytics container is disabled locally.
 
-**Expected state after a clean run:** 28 tables classified by `check:rls`; **261 unit and
+**Expected state after a clean run:** 28 tables classified by `check:rls`; **292 unit and
 integration tests passing with 1 skipped** (4 configuration, 50 design-system, 117 domain,
-90 database including its integration suite); **64 end-to-end**. `typecheck`, `lint`,
-`format`, `check:rls` and `check:boundaries` all green.
+26 web, 95 database including its integration suite); **72 end-to-end**. `typecheck`,
+`lint`, `format`, `check:rls` and `check:boundaries` all green.
 
 **Re-seed before every end-to-end run.** The e2e suite is not idempotent against a used
 database — it creates students and leaves holds — so a second run without a reset fails in
@@ -275,7 +278,7 @@ Step 1 is done. **Steps 2–6 remain, in this order.** Rewrite or update the end
 journey alongside each step rather than leaving all test changes to the end; use targeted
 tests while building and the full suite at major boundaries and before PR readiness.
 
-### Step 2 — calendar-first `/tutor/availability` (NEXT)
+### Step 2 — calendar-first `/tutor/availability` — **DONE** (`793937a`, `e37933b`)
 
 Rebuild the tutor's availability screen around the week calendar: days as columns, time
 vertical, click-drag to create, resize, edit, delete, repeat-weekly, one-off additions,
@@ -303,7 +306,7 @@ Most relevant files:
 | `apps/web/src/lib/time.ts`                                           | `PLATFORM_TIME_ZONE`, `availabilityWindow`                                                                |
 | `packages/database/src/integration/availability.integration.test.ts` | privacy assertions that must keep passing                                                                 |
 
-### Step 3 — discovery mini calendars and the large tutor-profile calendar
+### Step 3 — discovery mini calendars and the large tutor-profile calendar (NEXT)
 
 Tutor cards get a compact real week view (`density="mini"`, `familySafe`) showing actual
 derived bookable time. The profile gets the same concept at full size with time labels and
@@ -332,6 +335,37 @@ selected/hover/focus states, responsive behaviour, useful empty states — using
 design system. The owner's standard: the next manual review should feel like a real product,
 not a demonstration that the backend works.
 
+**Now a final consistency pass, not the first time styling happens.** See §8.1.
+
+---
+
+## 8.1 STYLING IS NO LONGER DEFERRED TO STEP 6
+
+**Directed by the owner after the step 2 manual review.** Every UX step must reach a
+coherent, reviewable visual state **before** the next step begins. Not final branding and
+not pixel-perfect polish at every stage — enough layout and styling that the owner can
+judge whether the interaction itself is right.
+
+The reason is concrete. Step 2 was function-complete and fully tested, and still could not
+be reviewed: the week calendar was rendering as a vertical stack of full-width bars because
+the design system's utility classes were being purged from the CSS bundle (see below). Every
+test passed throughout. Deferring the visual state to step 6 meant a whole step was built,
+verified and handed over on top of a screen nobody could actually assess — and the next step
+would have built parent-facing calendars on that same foundation.
+
+**A trap worth knowing about, because it is silent.** The design system is a workspace
+package, so it resolves through a symlink in `node_modules`, and Tailwind's automatic
+content detection skips `node_modules`. Any utility class used _only_ inside a design system
+component is dropped from the bundle: markup and class names look right, the rules do not
+exist. `apps/web/src/app/globals.css` now carries an `@source` line pointing at
+`packages/design-system/src`. **Do not remove it**, and if new packages start holding
+components, they need the same line.
+
+Colour survived this because application code uses the same tokens; only layout collapsed.
+So the failure presents as a design problem, not a build problem. `tutor-availability.spec.ts`
+now asserts measured geometry — distinct column lefts, one shared top, absolutely positioned
+blocks, bounded height — because text and role assertions cannot see a missing stylesheet.
+
 ---
 
 ## 9. Standing rules
@@ -340,6 +374,7 @@ not a demonstration that the backend works.
   secrets. Never present example tutors as real. Never put business rules client-side.
 - Stop for approval before: merging, starting a new major slice, creating or configuring
   provider accounts, adding production secrets, or running destructive cloud commands.
+- **Each UX step reaches a reviewable visual state before the next one starts** (§8.1).
 - Run targeted tests while building and the **full suite once** before opening a pull
   request.
 - When a test fails, isolate and prove the cause before characterising it. Treat a fixture
