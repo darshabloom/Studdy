@@ -14,41 +14,63 @@ import { studentSubjectSections, subjects } from '../schema/index';
  *
  * Requires a seeded database (pnpm supabase:start && pnpm db:migrate && pnpm db:seed).
  */
+/**
+ * Skip cleanly when there is no database, matching every other integration
+ * test in this directory.
+ *
+ * `pnpm test` uses vitest's default include, so these files are picked up by
+ * the unit run as well as by `test:integration`. Without this the DB-less CI
+ * job fails on connection errors rather than skipping, which is exactly what
+ * it did.
+ */
+async function databaseAvailable(): Promise<boolean> {
+  try {
+    const { sql: probe } = createDatabaseClient();
+    await probe`select 1`;
+    await probe.end();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const available = await databaseAvailable();
+
 const { sql, db } = createDatabaseClient();
 
 let mathsSectionId: string;
 
-beforeAll(async () => {
-  const [maths] = await db
-    .select({ id: subjects.id })
-    .from(subjects)
-    .where(eq(subjects.code, 'mathematics'));
-  if (maths === undefined) throw new Error('no subjects seeded — run pnpm db:seed');
+describe.skipIf(!available)('bookable slots for a subject section', () => {
+  beforeAll(async () => {
+    const [maths] = await db
+      .select({ id: subjects.id })
+      .from(subjects)
+      .where(eq(subjects.code, 'mathematics'));
+    if (maths === undefined) throw new Error('no subjects seeded — run pnpm db:seed');
 
-  const [section] = await db
-    .select({ id: studentSubjectSections.id })
-    .from(studentSubjectSections)
-    .where(eq(studentSubjectSections.subjectId, maths.id));
-  if (section !== undefined) {
-    mathsSectionId = section.id;
-    return;
-  }
+    const [section] = await db
+      .select({ id: studentSubjectSections.id })
+      .from(studentSubjectSections)
+      .where(eq(studentSubjectSections.subjectId, maths.id));
+    if (section !== undefined) {
+      mathsSectionId = section.id;
+      return;
+    }
 
-  // The seed does not guarantee a section for this subject; make one.
-  const [created] = await sql<{ id: string }[]>`
-    with student as (
-      insert into students.student_profiles (preferred_name, independence_status_code)
-      values ('Availability Fixture', 'dependent')
-      returning id
-    )
-    insert into students.student_subject_sections (student_profile_id, subject_id, school_year_code)
-    select student.id, ${maths.id}, 'Y9' from student
-    returning id`;
-  if (created === undefined) throw new Error('could not create a subject section fixture');
-  mathsSectionId = created.id;
-});
+    // The seed does not guarantee a section for this subject; make one.
+    const [created] = await sql<{ id: string }[]>`
+      with student as (
+        insert into students.student_profiles (preferred_name, independence_status_code)
+        values ('Availability Fixture', 'dependent')
+        returning id
+      )
+      insert into students.student_subject_sections (student_profile_id, subject_id, school_year_code)
+      select student.id, ${maths.id}, 'Y9' from student
+      returning id`;
+    if (created === undefined) throw new Error('could not create a subject section fixture');
+    mathsSectionId = created.id;
+  });
 
-describe('bookable slots for a subject section', () => {
   const window = (): { from: Date; to: Date } => {
     const from = new Date();
     return { from, to: new Date(from.getTime() + 14 * 86_400_000) };

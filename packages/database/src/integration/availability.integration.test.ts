@@ -28,6 +28,28 @@ import {
  * caller does with it.
  */
 
+/**
+ * Skip cleanly when there is no database, matching every other integration
+ * test in this directory.
+ *
+ * `pnpm test` uses vitest's default include, so these files are picked up by
+ * the unit run as well as by `test:integration`. Without this the DB-less CI
+ * job fails on connection errors rather than skipping, which is exactly what
+ * it did.
+ */
+async function databaseAvailable(): Promise<boolean> {
+  try {
+    const { sql: probe } = createDatabaseClient();
+    await probe`select 1`;
+    await probe.end();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const available = await databaseAvailable();
+
 const { sql, db } = createDatabaseClient();
 
 let tutorAId: string;
@@ -48,26 +70,6 @@ async function tutorIdFor(email: string): Promise<string> {
   return row.id;
 }
 
-beforeAll(async () => {
-  tutorAId = await tutorIdFor('tutor.a@local.studdy.test');
-  tutorBId = await tutorIdFor('tutor.b@local.studdy.test');
-});
-
-afterAll(async () => {
-  if (createdReservationIds.length > 0) {
-    for (const id of createdReservationIds) {
-      await sql`delete from availability.tutor_time_reservations where id = ${id}`;
-    }
-  }
-  for (const id of createdExceptionIds) {
-    await sql`delete from availability.availability_exceptions where id = ${id}`;
-  }
-  for (const id of createdRuleIds) {
-    await sql`delete from availability.availability_rules where id = ${id}`;
-  }
-  await sql.end();
-});
-
 /** A date in the future that falls on the given weekday, as 'YYYY-MM-DD'. */
 function nextWeekday(dayOfWeek: number, weeksAhead = 1): Date {
   const base = new Date();
@@ -79,7 +81,27 @@ function nextWeekday(dayOfWeek: number, weeksAhead = 1): Date {
   return result;
 }
 
-describe('availability repository', () => {
+describe.skipIf(!available)('availability repository', () => {
+  beforeAll(async () => {
+    tutorAId = await tutorIdFor('tutor.a@local.studdy.test');
+    tutorBId = await tutorIdFor('tutor.b@local.studdy.test');
+  });
+
+  afterAll(async () => {
+    if (createdReservationIds.length > 0) {
+      for (const id of createdReservationIds) {
+        await sql`delete from availability.tutor_time_reservations where id = ${id}`;
+      }
+    }
+    for (const id of createdExceptionIds) {
+      await sql`delete from availability.availability_exceptions where id = ${id}`;
+    }
+    for (const id of createdRuleIds) {
+      await sql`delete from availability.availability_rules where id = ${id}`;
+    }
+    await sql.end();
+  });
+
   it('lists the seeded recurring rules for a tutor', async () => {
     const rules = await listAvailabilityRules(tutorAId);
     expect(rules.length).toBeGreaterThan(0);

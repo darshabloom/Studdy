@@ -18,6 +18,28 @@ import { SYNTHETIC_USERS } from '../seed/synthetic-users';
  *
  * Requires a seeded database (pnpm supabase:start && pnpm db:migrate && pnpm db:seed).
  */
+/**
+ * Skip cleanly when there is no database, matching every other integration
+ * test in this directory.
+ *
+ * `pnpm test` uses vitest's default include, so these files are picked up by
+ * the unit run as well as by `test:integration`. Without this the DB-less CI
+ * job fails on connection errors rather than skipping, which is exactly what
+ * it did.
+ */
+async function databaseAvailable(): Promise<boolean> {
+  try {
+    const { sql: probe } = createDatabaseClient();
+    await probe`select 1`;
+    await probe.end();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const available = await databaseAvailable();
+
 const { sql } = createDatabaseClient();
 
 interface Counts {
@@ -50,18 +72,18 @@ async function currentCounts(): Promise<Counts> {
   return row;
 }
 
-beforeAll(async () => {
-  const { syntheticLinks } = await currentCounts();
-  if (syntheticLinks === 0) {
-    throw new Error('no synthetic accounts seeded — run pnpm db:seed before this suite');
-  }
-});
+describe.skipIf(!available)('baseline seed safety', () => {
+  beforeAll(async () => {
+    const { syntheticLinks } = await currentCounts();
+    if (syntheticLinks === 0) {
+      throw new Error('no synthetic accounts seeded — run pnpm db:seed before this suite');
+    }
+  });
 
-afterAll(async () => {
-  await sql.end();
-});
+  afterAll(async () => {
+    await sql.end();
+  });
 
-describe('baseline seed safety', () => {
   it('refuses a second baseline seed instead of duplicating data', async () => {
     await expect(seedCleanRegistration()).rejects.toBeInstanceOf(BaselineAlreadySeededError);
   });
