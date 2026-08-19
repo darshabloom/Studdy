@@ -44,10 +44,44 @@ export interface RecurringRule {
   readonly effectiveUntil: string | null;
   readonly minimumNoticeMinutes: number | null;
   readonly maximumAdvanceBookingDays: number | null;
+  /**
+   * Which lesson format this rule offers: 'any' means either.
+   *
+   * A SCOPE ON SUPPLY, NOT A THIRD FORMAT. A lesson is delivered one way or the
+   * other, so demand is always concrete; a rule is either tied to one format or
+   * unscoped. Optional so callers written before formats existed keep working —
+   * absent reads as 'any'.
+   */
+  readonly lessonFormatCode?: LessonFormatScope;
 }
+
+/** What a lesson can actually be. `any` is only ever a scope on availability. */
+export type LessonFormat = 'online' | 'in_person';
+export type LessonFormatScope = LessonFormat | 'any';
 
 export interface AvailabilityException extends Interval {
   readonly effectCode: 'adds' | 'removes';
+  /**
+   * Scope of a one-off ADDITION. Ignored for `removes`: being unavailable is a
+   * fact about the tutor, not about how a lesson would have been delivered, so
+   * a block removes the time whatever format was asked for.
+   */
+  readonly lessonFormatCode?: LessonFormatScope;
+}
+
+/**
+ * Does an availability scope satisfy the format being asked for?
+ *
+ * No format asked means no filtering at all, which keeps every caller written
+ * before formats existed behaving exactly as it did.
+ */
+export function formatMatches(
+  scope: LessonFormatScope | undefined,
+  requested: LessonFormat | undefined,
+): boolean {
+  if (requested === undefined) return true;
+  const effective = scope ?? 'any';
+  return effective === 'any' || effective === requested;
 }
 
 export interface BookableSlotsInput {
@@ -58,6 +92,11 @@ export interface BookableSlotsInput {
   /** The window the caller wants slots for. */
   readonly window: Interval;
   readonly durationMinutes: number;
+  /**
+   * Narrow to availability that can be delivered this way. Omitted means the
+   * caller is not asking about a format and every rule contributes.
+   */
+  readonly formatCode?: LessonFormat;
   /** Applied when a rule does not carry its own. */
   readonly defaultMinimumNoticeMinutes: number;
   readonly defaultMaximumAdvanceBookingDays: number;
@@ -264,6 +303,7 @@ export function bookableSlots(input: BookableSlotsInput): Interval[] {
     defaultMaximumAdvanceBookingDays,
     now,
     stepMinutes = 30,
+    formatCode,
   } = input;
 
   if (durationMinutes <= 0) return [];
@@ -272,15 +312,21 @@ export function bookableSlots(input: BookableSlotsInput): Interval[] {
     throw new Error(`Availability window may not exceed ${MAX_WINDOW_DAYS} days.`);
   }
 
+  // Only rules that could deliver the requested format contribute anything —
+  // including their notice and advance limits. Narrowing this first matters:
+  // an in-person rule with a long notice period must not tighten the notice on
+  // an online request it can play no part in.
+  const applicableRules = rules.filter((rule) => formatMatches(rule.lessonFormatCode, formatCode));
+
   // Minimum notice and maximum advance are per rule where set. Take the
   // strictest across the contributing rules: offering a slot one rule would
   // refuse would be offering something the tutor did not agree to.
-  const notice = rules.reduce(
+  const notice = applicableRules.reduce(
     (strictest, rule) =>
       Math.max(strictest, rule.minimumNoticeMinutes ?? defaultMinimumNoticeMinutes),
-    rules.length === 0 ? defaultMinimumNoticeMinutes : 0,
+    applicableRules.length === 0 ? defaultMinimumNoticeMinutes : 0,
   );
-  const advanceDays = rules.reduce(
+  const advanceDays = applicableRules.reduce(
     (strictest, rule) =>
       Math.min(strictest, rule.maximumAdvanceBookingDays ?? defaultMaximumAdvanceBookingDays),
     defaultMaximumAdvanceBookingDays,
@@ -296,16 +342,20 @@ export function bookableSlots(input: BookableSlotsInput): Interval[] {
   if (effectiveWindow.endAt <= effectiveWindow.startAt) return [];
 
   // base recurring availability
-  const base = rules.flatMap((rule) => projectRule(rule, effectiveWindow));
+  const base = applicableRules.flatMap((rule) => projectRule(rule, effectiveWindow));
 
-  // + one-off additions
+  // + one-off additions, scoped the same way a rule is
   const additions = exceptions
-    .filter((exception) => exception.effectCode === 'adds')
+    .filter(
+      (exception) =>
+        exception.effectCode === 'adds' && formatMatches(exception.lessonFormatCode, formatCode),
+    )
     .map((exception) => ({ startAt: exception.startAt, endAt: exception.endAt }));
 
   const available = mergeIntervals([...base, ...additions]);
 
-  // - blocked time, holidays and breaks
+  // - blocked time, holidays and breaks. NOT filtered by format: a block takes
+  //   the time away whatever was asked for.
   const removals = exceptions
     .filter((exception) => exception.effectCode === 'removes')
     .map((exception) => ({ startAt: exception.startAt, endAt: exception.endAt }));

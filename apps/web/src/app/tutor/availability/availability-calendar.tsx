@@ -20,6 +20,8 @@ import {
   type CalendarActionResult,
 } from '@/lib/availability/actions';
 import type { CalendarSegment } from '@/lib/availability/calendar-projection';
+import type { FormatScope } from '@/lib/availability/actions';
+import { AvailabilityEditor, type EditorTarget, type EditorValue } from './availability-editor';
 
 /**
  * The tutor's availability, as a calendar they draw on.
@@ -89,21 +91,13 @@ export interface NotedBlock {
   readonly note: string;
 }
 
-interface PendingBlock {
-  readonly dayIndex: number;
-  readonly date: string;
-  readonly startMinutes: number;
-  readonly endMinutes: number;
-}
-
 export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNode {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [tool, setTool] = useState<Tool>('weekly');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [blockDraft, setBlockDraft] = useState<PendingBlock | null>(null);
-  const [privateNote, setPrivateNote] = useState('');
+  const [editing, setEditing] = useState<EditorTarget | null>(null);
 
   const segmentFor = (blockId: string): CalendarSegment | undefined =>
     props.segments.find((segment) => segment.blockId === blockId);
@@ -126,30 +120,157 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
     });
   };
 
+  /**
+   * A drag on empty grid opens the editor prefilled rather than saving at once.
+   *
+   * The gesture says when; it cannot say whether this is a weekly rule or a
+   * one-off, nor whether it is online-only, and guessing silently is how a
+   * tutor ends up with availability they did not mean to publish. The toolbar
+   * choice is carried in as the starting point, so the common case is one
+   * confirming click.
+   */
   const handleCreate = (dayIndex: number, startMinutes: number, endMinutes: number): void => {
     const date = props.dayDates[dayIndex];
     if (date === undefined) return;
-
-    if (tool === 'weekly') {
-      run(
-        () => createRuleFromCalendarAction(dayIndex, startMinutes, endMinutes),
-        'Weekly hours added.',
-      );
-      return;
-    }
-    if (tool === 'extra') {
-      run(
-        () => createExceptionFromCalendarAction(date, startMinutes, endMinutes, 'adds'),
-        'Extra time added for that date.',
-      );
-      return;
-    }
-    // Blocking is the one case worth pausing on: a private reason is the whole
-    // point of the row, and it cannot be attached after the fact by dragging.
     setError(null);
     setNotice(null);
-    setPrivateNote('');
-    setBlockDraft({ dayIndex, date, startMinutes, endMinutes });
+    setEditing({
+      canDelete: false,
+      value: {
+        kind: tool === 'weekly' ? 'weekly' : tool === 'extra' ? 'once' : 'blocked',
+        dayIndex,
+        date,
+        startMinutes,
+        endMinutes,
+        formatCode: 'any',
+        privateNote: '',
+      },
+    });
+  };
+
+  /** The "+ Add" path: no gesture to read, so it opens on a sensible default. */
+  const openBlankEditor = (): void => {
+    setError(null);
+    setNotice(null);
+    const dayIndex = props.now?.dayIndex ?? 0;
+    const date = props.dayDates[dayIndex] ?? props.dayDates[0] ?? '';
+    const startMinutes = Math.min(Math.max(props.now?.minutes ?? 9 * 60, 6 * 60), 21 * 60);
+    setEditing({
+      canDelete: false,
+      value: {
+        kind: tool === 'weekly' ? 'weekly' : tool === 'extra' ? 'once' : 'blocked',
+        dayIndex,
+        date,
+        // Snap to the half hour so the times read like a calendar entry.
+        startMinutes: Math.round(startMinutes / 30) * 30,
+        endMinutes: Math.round(startMinutes / 30) * 30 + 60,
+        formatCode: 'any',
+        privateNote: '',
+      },
+    });
+  };
+
+  /** Clicking a block opens the same editor on that row. */
+  const handleOpenBlock = (blockId: string): void => {
+    const segment = segmentFor(blockId);
+    if (segment === undefined) return;
+
+    if (segment.kind === 'hold' || segment.kind === 'lesson') {
+      setError(
+        segment.kind === 'hold'
+          ? 'That time is held for a family who is deciding. It clears itself when they do.'
+          : 'That is a confirmed lesson. It is changed from the lesson, not from your hours.',
+      );
+      return;
+    }
+    if (!segment.editable) {
+      setError('That period runs across several days. Remove it and add it again to change it.');
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+    setEditing({
+      rowId: segment.rowId,
+      canDelete: true,
+      value: {
+        kind:
+          segment.kind === 'rule'
+            ? 'weekly'
+            : props.blocks.find((block) => block.id === blockId)?.role === 'blocked'
+              ? 'blocked'
+              : 'once',
+        dayIndex: Math.max(props.dayDates.indexOf(segment.date), 0),
+        date: segment.date,
+        startMinutes: segment.startMinutes,
+        endMinutes: segment.endMinutes,
+        formatCode: (segment.formatCode === 'online' || segment.formatCode === 'in_person'
+          ? segment.formatCode
+          : 'any') as FormatScope,
+        privateNote: '',
+      },
+    });
+  };
+
+  /** One save path for every entry point into the editor. */
+  const saveFromEditor = (value: EditorValue, rowId: string | undefined): void => {
+    setEditing(null);
+
+    if (value.kind === 'weekly') {
+      if (rowId === undefined) {
+        run(
+          () =>
+            createRuleFromCalendarAction(
+              value.dayIndex,
+              value.startMinutes,
+              value.endMinutes,
+              value.formatCode,
+            ),
+          'Regular availability added.',
+        );
+        return;
+      }
+      run(
+        () =>
+          updateRuleFromCalendarAction(
+            rowId,
+            value.dayIndex,
+            value.startMinutes,
+            value.endMinutes,
+            value.formatCode,
+          ),
+        'Regular availability updated.',
+      );
+      return;
+    }
+
+    const effect = value.kind === 'blocked' ? 'removes' : 'adds';
+    if (rowId === undefined) {
+      run(
+        () =>
+          createExceptionFromCalendarAction(
+            value.date,
+            value.startMinutes,
+            value.endMinutes,
+            effect,
+            value.privateNote,
+            value.formatCode,
+          ),
+        value.kind === 'blocked' ? 'Time blocked.' : 'One-off availability added.',
+      );
+      return;
+    }
+    run(
+      () =>
+        updateExceptionFromCalendarAction(
+          rowId,
+          value.date,
+          value.startMinutes,
+          value.endMinutes,
+          value.formatCode,
+        ),
+      'Updated.',
+    );
   };
 
   const handleResize = (blockId: string, startMinutes: number, endMinutes: number): void => {
@@ -202,23 +323,6 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
     run(() => deleteExceptionFromCalendarAction(segment.rowId), 'One-off change removed.');
   };
 
-  const confirmBlock = (): void => {
-    const draft = blockDraft;
-    if (draft === null) return;
-    setBlockDraft(null);
-    run(
-      () =>
-        createExceptionFromCalendarAction(
-          draft.date,
-          draft.startMinutes,
-          draft.endMinutes,
-          'removes',
-          privateNote,
-        ),
-      'Time blocked.',
-    );
-  };
-
   return (
     <div className="mt-4">
       {props.isPastWeek ? (
@@ -251,7 +355,6 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
                   aria-checked={active}
                   onClick={() => {
                     setTool(option.id);
-                    setBlockDraft(null);
                   }}
                   className={`flex items-center gap-1.5 rounded-[var(--radius-gentle)] px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-purple ${
                     active
@@ -265,6 +368,10 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
               );
             })}
           </div>
+          <Button size="sm" onClick={openBlankEditor}>
+            + Add
+          </Button>
+
           <p className="text-sm text-text-secondary">
             {TOOLS.find((option) => option.id === tool)?.hint}
           </p>
@@ -286,43 +393,6 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
         </div>
       )}
 
-      {blockDraft === null ? null : (
-        <Card className="mt-4">
-          <h3 className="font-semibold">Block this time?</h3>
-          <p className="mt-1 text-sm text-text-secondary">
-            {props.dayLabels[blockDraft.dayIndex]}, {clock(blockDraft.startMinutes)} –{' '}
-            {clock(blockDraft.endMinutes)}. Families will simply not see this time. They are never
-            told that it is blocked, or why.
-          </p>
-          <label className="mt-3 block text-sm font-medium" htmlFor="private-note">
-            Private note, just for you (optional)
-          </label>
-          <input
-            id="private-note"
-            className="mt-1 w-full rounded-[var(--radius-gentle)] border border-border-default bg-surface-raised px-3 py-2 text-sm"
-            value={privateNote}
-            placeholder="Dentist, school run, holiday…"
-            onChange={(event) => {
-              setPrivateNote(event.target.value);
-            }}
-          />
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" onClick={confirmBlock} disabled={pending}>
-              Block this time
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                setBlockDraft(null);
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </Card>
-      )}
-
       <div className="mt-4" aria-busy={pending}>
         <WeekCalendar
           blocks={props.blocks}
@@ -333,7 +403,12 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
           {...(props.now === undefined ? {} : { now: props.now })}
           {...(props.isPastWeek
             ? {}
-            : { onCreate: handleCreate, onResize: handleResize, onDelete: handleDelete })}
+            : {
+                onCreate: handleCreate,
+                onResize: handleResize,
+                onDelete: handleDelete,
+                onOpenBlock: handleOpenBlock,
+              })}
         />
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
           <Legend />
@@ -370,6 +445,27 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
           </section>
         )}
       </div>
+
+      {editing === null ? null : (
+        <AvailabilityEditor
+          target={editing}
+          dayDates={props.dayDates}
+          busy={pending}
+          onCancel={() => {
+            setEditing(null);
+          }}
+          onSave={saveFromEditor}
+          onDelete={(rowId) => {
+            setEditing(null);
+            const segment = props.segments.find((candidate) => candidate.rowId === rowId);
+            if (segment?.kind === 'rule') {
+              run(() => deleteRuleFromCalendarAction(rowId), 'Regular availability removed.');
+              return;
+            }
+            run(() => deleteExceptionFromCalendarAction(rowId), 'Removed.');
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -403,14 +499,4 @@ function LegendItem({ className, label }: { className: string; label: string }):
       {label}
     </li>
   );
-}
-
-function clock(minutes: number): string {
-  const hour24 = Math.floor(minutes / 60);
-  const minute = minutes % 60;
-  const period = hour24 < 12 ? 'am' : 'pm';
-  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  return minute === 0
-    ? `${String(hour12)} ${period}`
-    : `${String(hour12)}:${String(minute).padStart(2, '0')} ${period}`;
 }

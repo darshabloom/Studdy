@@ -3,7 +3,12 @@ import {
   assertFamilySafe,
   MINUTES_IN_DAY as DESIGN_SYSTEM_MINUTES_IN_DAY,
 } from '@studdy/design-system';
-import { familyPreviewBlocks, tutorWeekBlocks } from './calendar-projection';
+import {
+  DEFAULT_CALENDAR_WINDOW,
+  familyPreviewBlocks,
+  teachingWindow,
+  tutorWeekBlocks,
+} from './calendar-projection';
 import {
   MINUTES_IN_DAY,
   calendarDayIndex,
@@ -54,6 +59,7 @@ function exception(
     startsAt: new Date('2026-08-18T02:00:00Z'),
     endsAt: new Date('2026-08-18T04:00:00Z'),
     effectCode: 'removes',
+    lessonFormatCode: 'any',
     reasonCode: 'personal',
     privateNote: 'Dentist',
     ...overrides,
@@ -347,5 +353,95 @@ describe('familyPreviewBlocks', () => {
       ZONE,
     );
     expect(blocks).toHaveLength(0);
+  });
+});
+
+describe('teachingWindow', () => {
+  /**
+   * An editor fitted to what a tutor already offers cannot show them anywhere
+   * new to offer. An evenings-only tutor would never see a Saturday morning to
+   * drag on, so the calendar would quietly enforce the shape it found.
+   */
+  it('always shows the standard teaching day, whatever the tutor currently offers', () => {
+    const eveningsOnly = tutorWeekBlocks({
+      rules: [rule({ localStartTime: '19:00:00', localEndTime: '21:00:00' })],
+      exceptions: [],
+      reservations: [],
+      days: weekDays(PLAIN_WEEK, ZONE),
+      timeZone: ZONE,
+    }).blocks;
+
+    expect(teachingWindow(eveningsOnly)).toEqual(DEFAULT_CALENDAR_WINDOW);
+    expect(DEFAULT_CALENDAR_WINDOW.dayStartMinutes).toBe(8 * 60);
+    expect(DEFAULT_CALENDAR_WINDOW.dayEndMinutes).toBe(22 * 60);
+  });
+
+  it('widens for availability outside the standard day, and never narrows', () => {
+    const early = tutorWeekBlocks({
+      rules: [rule({ localStartTime: '06:30:00', localEndTime: '08:00:00' })],
+      exceptions: [],
+      reservations: [],
+      days: weekDays(PLAIN_WEEK, ZONE),
+      timeZone: ZONE,
+    }).blocks;
+
+    const window = teachingWindow(early);
+    expect(window.dayStartMinutes).toBe(6 * 60);
+    // The late edge is untouched by an early block.
+    expect(window.dayEndMinutes).toBe(22 * 60);
+  });
+
+  it('never runs past the ends of the day', () => {
+    const window = teachingWindow([
+      { id: 'a', dayIndex: 0, startMinutes: 0, endMinutes: 24 * 60, role: 'available' },
+    ]);
+    expect(window.dayStartMinutes).toBe(0);
+    expect(window.dayEndMinutes).toBe(24 * 60);
+  });
+
+  it('shows the standard day when there is nothing at all', () => {
+    expect(teachingWindow([])).toEqual(DEFAULT_CALENDAR_WINDOW);
+  });
+});
+
+describe('lesson format on the calendar', () => {
+  const days = weekDays(PLAIN_WEEK, ZONE);
+  const empty = { rules: [], exceptions: [], reservations: [], days, timeZone: ZONE };
+
+  it('names the format on a scoped rule and stays quiet when it suits either', () => {
+    const scoped = tutorWeekBlocks({
+      ...empty,
+      rules: [rule({ lessonFormatCode: 'online' })],
+    });
+    expect(scoped.blocks[0]?.label).toBe('Weekly · Online');
+    expect(scoped.segments[0]?.formatCode).toBe('online');
+
+    const unscoped = tutorWeekBlocks({ ...empty, rules: [rule({ lessonFormatCode: 'any' })] });
+    expect(unscoped.blocks[0]?.label).toBe('Weekly');
+  });
+
+  it('scopes a one-off addition too', () => {
+    const { blocks } = tutorWeekBlocks({
+      ...empty,
+      exceptions: [exception({ effectCode: 'adds', lessonFormatCode: 'in_person' })],
+    });
+    expect(blocks[0]?.label).toBe('One-off · In person');
+  });
+
+  /**
+   * A block is about the tutor being unavailable, not about delivery, so it is
+   * never labelled with a format even if a stray value reached the row.
+   */
+  it('never labels blocked time with a format', () => {
+    const { blocks } = tutorWeekBlocks({
+      ...empty,
+      exceptions: [exception({ effectCode: 'removes', lessonFormatCode: 'online' })],
+    });
+    expect(blocks[0]?.label).toBe('Blocked');
+  });
+
+  it('carries start and end onto the segment so the editor opens filled in', () => {
+    const { segments } = tutorWeekBlocks({ ...empty, rules: [rule()] });
+    expect(segments[0]).toMatchObject({ startMinutes: 16 * 60, endMinutes: 18 * 60 });
   });
 });

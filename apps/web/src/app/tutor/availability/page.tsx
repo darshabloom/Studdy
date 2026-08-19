@@ -6,13 +6,13 @@ import {
   listTutorReservations,
   tutorProfileForUser,
 } from '@studdy/database';
-import { Alert, Button, RestrictedState, WeekCalendar, fittedWindow } from '@studdy/design-system';
+import { Alert, Button, RestrictedState, WeekCalendar } from '@studdy/design-system';
 import { zonedClockTime } from '@studdy/domain/availability';
 import { resolveIdentity } from '@/lib/identity/resolve';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 import {
-  DEFAULT_CALENDAR_WINDOW,
   familyPreviewBlocks,
+  teachingWindow,
   tutorWeekBlocks,
 } from '@/lib/availability/calendar-projection';
 import { clockToMinutes, mondayOf, shiftDate, weekDays } from '@/lib/availability/calendar-time';
@@ -158,7 +158,7 @@ export default async function TutorAvailabilityPage({
         <div className="mt-4">
           <WeekCalendar
             blocks={familyBlocks}
-            window={fittedWindow(familyBlocks, DEFAULT_CALENDAR_WINDOW)}
+            window={teachingWindow(familyBlocks)}
             mode="read"
             familySafe
             dayLabels={days.map((day) => day.label)}
@@ -191,9 +191,10 @@ export default async function TutorAvailabilityPage({
     timeZone: PLATFORM_TIME_ZONE,
   });
 
-  // Fitted across both projections so that switching to the preview does not
+  // The standard teaching window, widened by anything already on the calendar,
+  // and computed across both projections so switching to the preview does not
   // make the grid jump to a different height and re-read as a different week.
-  const window = fittedWindow([...blocks, ...familyBlocks], DEFAULT_CALENDAR_WINDOW);
+  const window = teachingWindow([...blocks, ...familyBlocks]);
 
   const inThisWeek = exceptions.filter(
     (exception) => exception.startsAt < last.endAt && exception.endsAt > first.startAt,

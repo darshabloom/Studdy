@@ -3,6 +3,8 @@ import {
   bookableSlots,
   type AvailabilityException as DomainException,
   type Interval,
+  type LessonFormat,
+  type LessonFormatScope,
   type RecurringRule,
 } from '@studdy/domain/availability';
 import { createDatabaseClient } from '../client';
@@ -56,6 +58,8 @@ export interface AvailabilityExceptionRecord {
   readonly startsAt: Date;
   readonly endsAt: Date;
   readonly effectCode: string;
+  /** online | in_person | any. Only meaningful for an `adds`. */
+  readonly lessonFormatCode: string;
   /** TUTOR-ONLY. Never selected by any family-facing projection. */
   readonly reasonCode: string | null;
   /** TUTOR-ONLY. */
@@ -106,6 +110,7 @@ export async function listAvailabilityExceptions(
         startsAt: availabilityExceptions.startsAt,
         endsAt: availabilityExceptions.endsAt,
         effectCode: availabilityExceptions.effectCode,
+        lessonFormatCode: availabilityExceptions.lessonFormatCode,
         reasonCode: availabilityExceptions.reasonCode,
         privateNote: availabilityExceptions.privateNote,
       })
@@ -254,6 +259,8 @@ export interface CreateAvailabilityExceptionInput {
   readonly startsAt: Date;
   readonly endsAt: Date;
   readonly effectCode: 'adds' | 'removes';
+  /** Scope of an addition. A `removes` keeps 'any' and blocks every format. */
+  readonly lessonFormatCode?: string;
   readonly reasonCode?: string | null;
   readonly privateNote?: string | null;
 }
@@ -272,6 +279,8 @@ export async function createAvailabilityException(
         startsAt: input.startsAt,
         endsAt: input.endsAt,
         effectCode: input.effectCode,
+        // A block is never format-scoped, whatever the caller passes.
+        lessonFormatCode: input.effectCode === 'adds' ? (input.lessonFormatCode ?? 'any') : 'any',
         reasonCode: input.reasonCode ?? null,
         privateNote: input.privateNote ?? null,
       })
@@ -310,6 +319,8 @@ export async function archiveAvailabilityException(
 export interface UpdateAvailabilityExceptionChanges {
   readonly startsAt: Date;
   readonly endsAt: Date;
+  /** Omitted leaves the stored scope alone. */
+  readonly lessonFormatCode?: string;
   /**
    * Omitted leaves the stored value alone. The private reason and note are
    * deliberately separate from the times, so moving a blocked period on the
@@ -340,6 +351,9 @@ export async function updateAvailabilityException(
       .set({
         startsAt: changes.startsAt,
         endsAt: changes.endsAt,
+        ...(changes.lessonFormatCode === undefined
+          ? {}
+          : { lessonFormatCode: changes.lessonFormatCode }),
         ...(changes.reasonCode === undefined ? {} : { reasonCode: changes.reasonCode }),
         ...(changes.privateNote === undefined ? {} : { privateNote: changes.privateNote }),
         updatedByUserId,
@@ -410,6 +424,18 @@ export async function listTutorReservations(
 // Derived slots — the ONLY availability shape any family-facing surface receives
 // ---------------------------------------------------------------------------
 
+/**
+ * A stored format code, narrowed to the scope the domain understands.
+ *
+ * The column is CHECK-constrained, so an unexpected value cannot normally
+ * exist. Falling back to 'any' rather than throwing keeps a bad row from
+ * removing a tutor's availability outright — the safe direction for a value
+ * that only ever narrows what is offered.
+ */
+function asFormatScope(value: string): LessonFormatScope {
+  return value === 'online' || value === 'in_person' ? value : 'any';
+}
+
 /** Two instants. Deliberately nothing else. */
 export interface BookableSlot {
   readonly startAt: Date;
@@ -431,6 +457,11 @@ export interface BookableSlotsQuery {
    * turns the question into plain containment.
    */
   readonly stepMinutes?: number;
+  /**
+   * Narrow to availability deliverable this way. Omitted means the caller is
+   * not asking about a format, and everything contributes exactly as before.
+   */
+  readonly formatCode?: LessonFormat;
 }
 
 /**
@@ -481,6 +512,7 @@ export async function bookableSlotsForTutors(
         effectiveUntil: availabilityRules.effectiveUntil,
         minimumNoticeMinutes: availabilityRules.minimumNoticeMinutes,
         maximumAdvanceBookingDays: availabilityRules.maximumAdvanceBookingDays,
+        lessonFormatCode: availabilityRules.lessonFormatCode,
       })
       .from(availabilityRules)
       .where(
@@ -504,6 +536,7 @@ export async function bookableSlotsForTutors(
         startsAt: availabilityExceptions.startsAt,
         endsAt: availabilityExceptions.endsAt,
         effectCode: availabilityExceptions.effectCode,
+        lessonFormatCode: availabilityExceptions.lessonFormatCode,
       })
       .from(availabilityExceptions)
       .where(
@@ -546,6 +579,7 @@ export async function bookableSlotsForTutors(
           effectiveUntil: row.effectiveUntil,
           minimumNoticeMinutes: row.minimumNoticeMinutes,
           maximumAdvanceBookingDays: row.maximumAdvanceBookingDays,
+          lessonFormatCode: asFormatScope(row.lessonFormatCode),
         }));
 
       const exceptions: DomainException[] = exceptionRows
@@ -554,6 +588,7 @@ export async function bookableSlotsForTutors(
           startAt: row.startsAt,
           endAt: row.endsAt,
           effectCode: row.effectCode === 'adds' ? 'adds' : 'removes',
+          lessonFormatCode: asFormatScope(row.lessonFormatCode),
         }));
 
       const reservations: Interval[] = reservationRows
@@ -570,6 +605,7 @@ export async function bookableSlotsForTutors(
         defaultMaximumAdvanceBookingDays: query.defaultMaximumAdvanceBookingDays ?? 60,
         now,
         ...(query.stepMinutes === undefined ? {} : { stepMinutes: query.stepMinutes }),
+        ...(query.formatCode === undefined ? {} : { formatCode: query.formatCode }),
       });
 
       // Map explicitly rather than passing the domain object through, so an

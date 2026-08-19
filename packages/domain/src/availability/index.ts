@@ -1,5 +1,6 @@
 export {
   bookableSlots,
+  formatMatches,
   mergeIntervals,
   nextBookableSlot,
   projectRule,
@@ -8,6 +9,8 @@ export {
   type AvailabilityException,
   type BookableSlotsInput,
   type Interval,
+  type LessonFormat,
+  type LessonFormatScope,
   type RecurringRule,
 } from './slots';
 export {

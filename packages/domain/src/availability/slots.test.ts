@@ -349,3 +349,160 @@ describe('bookableSlots — the layered calculation', () => {
     }
   });
 });
+
+describe('lesson format scoping', () => {
+  const window = {
+    startAt: iso('2026-08-10T00:00:00Z'),
+    endAt: iso('2026-08-15T00:00:00Z'),
+  };
+  const now = iso('2026-08-10T00:00:00Z');
+
+  /**
+   * Scope narrows SUPPLY; demand is always one concrete format. A rule is
+   * either tied to a format or open to either, which is why the third value
+   * lives on availability and never on a request.
+   */
+  it('offers an online-only rule to an online request and not an in-person one', () => {
+    const rules = [tuesdayRule({ lessonFormatCode: 'online' })];
+    const online = bookableSlots({
+      ...BASE,
+      rules,
+      exceptions: [],
+      reservations: [],
+      window,
+      now,
+      formatCode: 'online',
+    });
+    const inPerson = bookableSlots({
+      ...BASE,
+      rules,
+      exceptions: [],
+      reservations: [],
+      window,
+      now,
+      formatCode: 'in_person',
+    });
+    expect(online.length).toBeGreaterThan(0);
+    expect(inPerson).toEqual([]);
+  });
+
+  it("offers an 'any' rule to both", () => {
+    const rules = [tuesdayRule({ lessonFormatCode: 'any' })];
+    for (const formatCode of ['online', 'in_person'] as const) {
+      const slots = bookableSlots({
+        ...BASE,
+        rules,
+        exceptions: [],
+        reservations: [],
+        window,
+        now,
+        formatCode,
+      });
+      expect(slots.length).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * Every caller written before formats existed passes no format, and must be
+   * completely unaffected.
+   */
+  it('asking for no format returns exactly what it always did', () => {
+    const rules = [
+      tuesdayRule({ lessonFormatCode: 'online' }),
+      tuesdayRule({ dayOfWeek: 4, lessonFormatCode: 'in_person' }),
+    ];
+    const unscoped = bookableSlots({
+      ...BASE,
+      rules,
+      exceptions: [],
+      reservations: [],
+      window,
+      now,
+    });
+    const legacy = bookableSlots({
+      ...BASE,
+      rules: rules.map(({ lessonFormatCode: _ignored, ...rest }) => rest),
+      exceptions: [],
+      reservations: [],
+      window,
+      now,
+    });
+    expect(show(unscoped)).toEqual(show(legacy));
+    expect(unscoped.length).toBeGreaterThan(0);
+  });
+
+  it('scopes a one-off addition the same way it scopes a rule', () => {
+    const addition = {
+      startAt: iso('2026-08-12T22:00:00Z'),
+      endAt: iso('2026-08-13T00:00:00Z'),
+      effectCode: 'adds' as const,
+      lessonFormatCode: 'in_person' as const,
+    };
+    const asInPerson = bookableSlots({
+      ...BASE,
+      rules: [],
+      exceptions: [addition],
+      reservations: [],
+      window,
+      now,
+      formatCode: 'in_person',
+    });
+    const asOnline = bookableSlots({
+      ...BASE,
+      rules: [],
+      exceptions: [addition],
+      reservations: [],
+      window,
+      now,
+      formatCode: 'online',
+    });
+    expect(asInPerson.length).toBeGreaterThan(0);
+    expect(asOnline).toEqual([]);
+  });
+
+  /**
+   * A block is about the tutor, not about delivery. Being away removes the time
+   * for online lessons too, so a `removes` is deliberately never format-scoped.
+   */
+  it('removes blocked time whatever format is asked for', () => {
+    const exceptions = [
+      {
+        startAt: iso('2026-08-11T04:00:00Z'),
+        endAt: iso('2026-08-11T06:00:00Z'),
+        effectCode: 'removes' as const,
+        lessonFormatCode: 'in_person' as const,
+      },
+    ];
+    const slots = bookableSlots({
+      ...BASE,
+      rules: [tuesdayRule({ lessonFormatCode: 'any' })],
+      exceptions,
+      reservations: [],
+      window,
+      now,
+      formatCode: 'online',
+    });
+    expect(slots).toEqual([]);
+  });
+
+  /**
+   * A rule that cannot serve the request must not tighten it either. The
+   * in-person rule here demands a week of notice; an online request should not
+   * inherit that.
+   */
+  it('ignores the notice period of a rule that cannot serve the request', () => {
+    const slots = bookableSlots({
+      ...BASE,
+      rules: [
+        tuesdayRule({ lessonFormatCode: 'online' }),
+        tuesdayRule({ lessonFormatCode: 'in_person', minimumNoticeMinutes: 60 * 24 * 7 }),
+      ],
+      exceptions: [],
+      reservations: [],
+      window,
+      now,
+      formatCode: 'online',
+    });
+    expect(slots.length).toBeGreaterThan(0);
+  });
+});

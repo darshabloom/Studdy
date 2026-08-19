@@ -92,6 +92,13 @@ export interface WeekCalendarProps {
    */
   now?: { dayIndex: number; minutes: number };
   onToggleBlock?: (block: CalendarBlock) => void;
+  /**
+   * Clicking a block in edit mode. The grid stays a pure surface: it reports
+   * which block was opened and lets the screen decide what an editor looks
+   * like, so a discovery card and a tutor workspace can share this component
+   * without sharing an editor.
+   */
+  onOpenBlock?: (blockId: string) => void;
   onCreate?: (dayIndex: number, startMinutes: number, endMinutes: number) => void;
   onResize?: (id: string, startMinutes: number, endMinutes: number) => void;
   onDelete?: (id: string) => void;
@@ -121,6 +128,7 @@ export function WeekCalendar({
   ariaLabel,
   now,
   onToggleBlock,
+  onOpenBlock,
   onCreate,
   onResize,
   onDelete,
@@ -288,7 +296,9 @@ export function WeekCalendar({
                     if (position === null) return null;
                     const isSelected = selectedIds.includes(block.id);
                     const role = isSelected ? 'selected' : block.role;
-                    const interactive = mode === 'select' && onToggleBlock !== undefined;
+                    const selectable = mode === 'select' && onToggleBlock !== undefined;
+                    const openable = editable && onOpenBlock !== undefined;
+                    const interactive = selectable || openable;
                     const Tag = interactive ? 'button' : 'div';
                     const heightPx = (position.heightPercent / 100) * bodyHeight;
                     const roomForLabel = !mini && heightPx >= LABEL_MIN_HEIGHT;
@@ -297,12 +307,20 @@ export function WeekCalendar({
                       <Tag
                         key={block.id}
                         data-calendar-block
-                        {...(interactive
+                        {...(selectable
                           ? {
                               type: 'button' as const,
                               'aria-pressed': isSelected,
                               onClick: () => {
                                 onToggleBlock(block);
+                              },
+                            }
+                          : {})}
+                        {...(openable && !selectable
+                          ? {
+                              type: 'button' as const,
+                              onClick: () => {
+                                onOpenBlock(block.id);
                               },
                             }
                           : {})}
@@ -348,7 +366,8 @@ export function WeekCalendar({
                             onPointerDown={(event) => {
                               event.stopPropagation();
                             }}
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation();
                               onDelete(block.id);
                             }}
                             onKeyDown={(event) => {

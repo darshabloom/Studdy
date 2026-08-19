@@ -368,6 +368,62 @@ describe('availability repository', () => {
     expect(updated).toBe(false);
   });
 
+  /**
+   * Format scoping proven against the real derivation, not just the pure
+   * function: the column, the query and `bookableSlots` have to agree, and this
+   * is the only place that can show they do.
+   */
+  it('offers format-scoped availability only to a matching request', async () => {
+    // Four weeks out, deliberately: an earlier test in this file blocks tutor
+    // B's next 21 days, and a rule inside that window would be removed before
+    // format scoping ever got a say.
+    const day = nextWeekday(3, 4);
+    const date = day.toISOString().slice(0, 10);
+    const ruleId = await createAvailabilityRule({
+      tutorProfileId: tutorBId,
+      createdByUserId: userId,
+      dayOfWeek: 3,
+      localStartTime: '09:00',
+      localEndTime: '12:00',
+      ianaTimeZone: 'Pacific/Auckland',
+      effectiveFrom: date,
+      lessonFormatCode: 'online',
+    });
+    createdRuleIds.push(ruleId);
+
+    const from = new Date(day.getTime() - 86_400_000);
+    const to = new Date(day.getTime() + 2 * 86_400_000);
+    const forFormat = async (formatCode: 'online' | 'in_person' | undefined) =>
+      (
+        await bookableSlotsForTutors({
+          tutorProfileIds: [tutorBId],
+          from,
+          to,
+          durationMinutes: 60,
+          now: from,
+          ...(formatCode === undefined ? {} : { formatCode }),
+        })
+      ).get(tutorBId) ?? [];
+
+    const online = await forFormat('online');
+    const inPerson = await forFormat('in_person');
+    const unscoped = await forFormat(undefined);
+
+    // Counted rather than sliced by calendar day: 09:00 in Auckland is the
+    // previous day in UTC, and filtering on a UTC date silently drops exactly
+    // the slots under test.
+    //
+    // Every seeded rule is unscoped, so the difference between the two is
+    // precisely this rule: three hours on a 30-minute grid, each an hour long,
+    // is five starts (09:00 through 11:00).
+    expect(inPerson.length).toBeGreaterThan(0);
+    expect(online.length - inPerson.length).toBe(5);
+
+    // Asking without a format must behave exactly as it always did: everything
+    // contributes, including the scoped rule.
+    expect(unscoped.length).toBe(online.length);
+  });
+
   it('shows the tutor their own private note, unlike any family path', async () => {
     // Owns its fixture: the seed carries private notes of its own, so matching
     // on "first exception with a note" would assert against whichever row

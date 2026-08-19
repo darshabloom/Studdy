@@ -75,6 +75,77 @@ test.describe('tutor availability, as a calendar', () => {
   });
 
   /**
+   * The editable calendar must offer the whole teaching day, not only the hours
+   * this tutor already works. Fitting the window to existing availability would
+   * mean an evenings-only tutor never sees a Saturday morning to drag on.
+   */
+  test('shows the whole teaching day, including hours with no availability yet', async ({
+    page,
+  }) => {
+    await signIn(page, TUTOR);
+    await page.goto('/tutor/availability');
+    const calendar = page.getByRole('group', { name: /Your availability, week of/ });
+    await expect(calendar).toBeVisible({ timeout: 15_000 });
+
+    // The seeded tutor teaches late afternoons only; the morning must still be
+    // on screen and reachable.
+    await expect(calendar.getByText('9 am')).toBeVisible();
+    await expect(calendar.getByText('12 pm')).toBeVisible();
+    await expect(calendar.getByText('9 pm')).toBeVisible();
+  });
+
+  test('opens one editor from + Add, and can scope a time to a format', async ({ page }) => {
+    await signIn(page, TUTOR);
+    await page.goto('/tutor/availability');
+    await expect(page.getByRole('group', { name: /Your availability, week of/ })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await page.getByRole('button', { name: '+ Add' }).click();
+    const editor = page.getByRole('dialog', { name: 'Add availability' });
+    await expect(editor).toBeVisible();
+
+    // The precision the calendar gesture cannot offer: what kind of time this
+    // is, and which formats it can be taught in.
+    await expect(editor.getByRole('radio', { name: /Regular availability/ })).toBeVisible();
+    await expect(editor.getByRole('radio', { name: /One-off availability/ })).toBeVisible();
+    await expect(editor.getByRole('radio', { name: /Block time/ })).toBeVisible();
+    await expect(editor.getByRole('button', { name: 'Both' })).toBeVisible();
+    await expect(editor.getByRole('button', { name: 'Online' })).toBeVisible();
+    await expect(editor.getByRole('button', { name: 'In person' })).toBeVisible();
+
+    // Blocking is about the tutor, not about delivery, so it offers a private
+    // note instead of a format.
+    await editor.getByRole('radio', { name: /Block time/ }).check();
+    await expect(editor.getByRole('button', { name: 'Online' })).toHaveCount(0);
+    await expect(editor.getByText(/Private note/)).toBeVisible();
+
+    await editor.getByRole('button', { name: 'Cancel' }).click();
+    await expect(editor).toHaveCount(0);
+  });
+
+  /**
+   * The same editor, reached the other way. Two entry points that opened two
+   * different editors would drift apart in what they allow.
+   */
+  test('clicking an existing block opens the same editor, filled in', async ({ page }) => {
+    await signIn(page, TUTOR);
+    await page.goto('/tutor/availability');
+    const calendar = page.getByRole('group', { name: /Your availability, week of/ });
+    await expect(calendar).toBeVisible({ timeout: 15_000 });
+
+    await calendar.locator('[data-calendar-block]').first().click();
+
+    const editor = page.getByRole('dialog', { name: 'Edit this time' });
+    await expect(editor).toBeVisible();
+    // Prefilled from the block rather than blank.
+    await expect(editor.getByLabel('Starts')).not.toHaveValue('');
+    // An existing row cannot change what kind of time it is.
+    await expect(editor.getByRole('radio', { name: /Regular availability/ })).toBeDisabled();
+    await expect(editor.getByRole('button', { name: 'Remove' })).toBeVisible();
+  });
+
+  /**
    * That the calendar is a GRID, asserted on measured geometry.
    *
    * This exists because of a failure no other test could see. The design system

@@ -53,6 +53,11 @@ export interface CalendarSegment {
   /** The local date this segment falls on. */
   readonly date: string;
   readonly editable: boolean;
+  /** online | in_person | any. Not private; it is what the tutor offers. */
+  readonly formatCode: string;
+  /** Wall-clock minutes, so the editor can open already filled in. */
+  readonly startMinutes: number;
+  readonly endMinutes: number;
 }
 
 export interface TutorWeek {
@@ -94,7 +99,7 @@ export function tutorWeekBlocks(input: TutorWeekInput): TutorWeek {
       startMinutes: clockToMinutes(rule.localStartTime),
       endMinutes: clockToMinutes(rule.localEndTime),
       role: 'available',
-      label: 'Repeats weekly',
+      label: `Weekly${formatSuffix(rule.lessonFormatCode)}`,
     });
     segments.push({
       blockId,
@@ -102,6 +107,9 @@ export function tutorWeekBlocks(input: TutorWeekInput): TutorWeek {
       rowId: rule.id,
       date: day.date,
       editable: true,
+      formatCode: rule.lessonFormatCode,
+      startMinutes: clockToMinutes(rule.localStartTime),
+      endMinutes: clockToMinutes(rule.localEndTime),
     });
   }
 
@@ -136,7 +144,7 @@ export function tutorWeekBlocks(input: TutorWeekInput): TutorWeek {
         // A one-off addition gets its own role so the tutor can tell it from a
         // recurring rule while editing. Family projections never emit it.
         role: adds ? 'available_once' : 'blocked',
-        label: adds ? 'One-off' : 'Blocked',
+        label: adds ? `One-off${formatSuffix(exception.lessonFormatCode)}` : 'Blocked',
       });
       segments.push({
         blockId,
@@ -144,6 +152,9 @@ export function tutorWeekBlocks(input: TutorWeekInput): TutorWeek {
         rowId: exception.id,
         date: day.date,
         editable: wholeRow,
+        formatCode: exception.lessonFormatCode,
+        startMinutes: span.startMinutes,
+        endMinutes: span.endMinutes,
       });
     }
   }
@@ -171,11 +182,26 @@ export function tutorWeekBlocks(input: TutorWeekInput): TutorWeek {
         date: day.date,
         // Neither is availability, so neither is the tutor's to drag away here.
         editable: false,
+        formatCode: 'any',
+        startMinutes: span.startMinutes,
+        endMinutes: span.endMinutes,
       });
     }
   }
 
   return { blocks, segments };
+}
+
+/**
+ * ' · Online' / ' · In person', or nothing at all when the time suits either.
+ *
+ * Most availability is unscoped, so naming the common case would put a word on
+ * every block and stop the exceptions standing out.
+ */
+function formatSuffix(formatCode: string): string {
+  if (formatCode === 'online') return ' · Online';
+  if (formatCode === 'in_person') return ' · In person';
+  return '';
 }
 
 /** 'Held until Thu 20 Aug, 16:00', or plain if the hold carries no expiry. */
@@ -225,8 +251,40 @@ export function familyPreviewBlocks(
   return blocks;
 }
 
-/** A sensible window when a tutor has nothing set yet. */
+/**
+ * The hours the editable calendar always shows: 8am to 10pm.
+ *
+ * FITTING TO EXISTING AVAILABILITY IS WRONG FOR AN EDITOR. A window drawn
+ * around what a tutor already offers cannot show them anywhere new to offer —
+ * an evenings-only tutor would never see a Saturday morning to drag on, so the
+ * calendar would quietly enforce the shape it found. Tutoring runs into the
+ * evening on school days and across the daytime at weekends and in the
+ * holidays, so both ends are present from the start.
+ *
+ * Configurable per-tutor bounds can come later; this is deliberately one
+ * constant rather than a setting nobody has asked for yet.
+ */
 export const DEFAULT_CALENDAR_WINDOW: CalendarWindow = {
-  dayStartMinutes: 7 * 60,
-  dayEndMinutes: 21 * 60,
+  dayStartMinutes: 8 * 60,
+  dayEndMinutes: 22 * 60,
 };
+
+/**
+ * The teaching window, widened to include anything already on the calendar.
+ *
+ * Only ever widens. A tutor with a 7am Saturday slot or a 10.30pm evening class
+ * must still see it, so existing availability pushes the edges out rather than
+ * being hidden for falling outside the default.
+ */
+export function teachingWindow(
+  blocks: readonly CalendarBlock[],
+  base: CalendarWindow = DEFAULT_CALENDAR_WINDOW,
+): CalendarWindow {
+  let start = base.dayStartMinutes;
+  let end = base.dayEndMinutes;
+  for (const block of blocks) {
+    start = Math.min(start, Math.floor(block.startMinutes / 60) * 60);
+    end = Math.max(end, Math.ceil(block.endMinutes / 60) * 60);
+  }
+  return { dayStartMinutes: Math.max(start, 0), dayEndMinutes: Math.min(end, 24 * 60) };
+}

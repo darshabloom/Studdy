@@ -32,6 +32,18 @@ export const availabilityExceptions = availabilitySchema.table(
     /** adds = extra availability; removes = holiday, break or blocked time. */
     effectCode: text('effect_code').notNull(),
     /**
+     * Which lesson format this exception scopes, mirroring
+     * `availability_rules.lesson_format_code`: online | in_person | any.
+     *
+     * ONLY MEANINGFUL FOR `adds`. A one-off addition is availability, so it
+     * carries the same scope a recurring rule does. A `removes` keeps 'any' and
+     * removes the time whatever the format, because being unavailable is a fact
+     * about the tutor rather than about how a lesson would have been delivered.
+     * A tutor who is away but can still teach online narrows their availability
+     * rather than carving a format-shaped hole in a block.
+     */
+    lessonFormatCode: text('lesson_format_code').notNull().default('any'),
+    /**
      * SERVER-ONLY, and never rendered outside the tutor's own workspace.
      * Doc 07 §8.6: blocked time records its private reason separately from the
      * public "unavailable" label.
@@ -51,6 +63,10 @@ export const availabilityExceptions = availabilitySchema.table(
   },
   (table) => [
     check('availability_exception_effect_check', sql`${table.effectCode} in ('adds', 'removes')`),
+    check(
+      'availability_exception_format_check',
+      sql`${table.lessonFormatCode} in ('online', 'in_person', 'any')`,
+    ),
     check(
       'availability_exception_status_check',
       sql`${table.statusCode} in ('active', 'archived')`,

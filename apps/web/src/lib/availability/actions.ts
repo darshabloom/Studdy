@@ -46,6 +46,15 @@ function emptyToNull(value: string): string | null {
 // ---------------------------------------------------------------------------
 
 /**
+ * What a tutor can scope availability to.
+ *
+ * 'any' means either format. It is a SCOPE ON SUPPLY: a lesson is always
+ * delivered one way or the other, so a request carries a concrete format and
+ * only availability is ever unscoped.
+ */
+export type FormatScope = 'online' | 'in_person' | 'any';
+
+/**
  * What the calendar gets back from an edit.
  *
  * The calendar is a direct-manipulation surface: a tutor drags a block and
@@ -92,6 +101,7 @@ export async function createRuleFromCalendarAction(
   dayIndex: number,
   startMinutes: number,
   endMinutes: number,
+  lessonFormatCode: FormatScope = 'any',
 ): Promise<CalendarActionResult> {
   const { tutorProfileId, studdyUserId } = await requireTutor();
 
@@ -114,6 +124,7 @@ export async function createRuleFromCalendarAction(
     localStartTime: validated.value.localStartTime,
     localEndTime: validated.value.localEndTime,
     ianaTimeZone: validated.value.ianaTimeZone,
+    lessonFormatCode,
     // Adding hours means "from now on", not retroactively.
     effectiveFrom: new Date().toISOString().slice(0, 10),
   });
@@ -134,6 +145,7 @@ export async function updateRuleFromCalendarAction(
   dayIndex: number,
   startMinutes: number,
   endMinutes: number,
+  lessonFormatCode?: FormatScope,
 ): Promise<CalendarActionResult> {
   const { tutorProfileId, studdyUserId } = await requireTutor();
 
@@ -153,6 +165,7 @@ export async function updateRuleFromCalendarAction(
     dayOfWeek: validated.value.dayOfWeek,
     localStartTime: validated.value.localStartTime,
     localEndTime: validated.value.localEndTime,
+    ...(lessonFormatCode === undefined ? {} : { lessonFormatCode }),
   });
   if (!updated) return refused('Those hours are no longer there. Reload and try again.');
 
@@ -180,6 +193,7 @@ export async function createExceptionFromCalendarAction(
   endMinutes: number,
   effectCode: 'adds' | 'removes',
   privateNote?: string | null,
+  lessonFormatCode: FormatScope = 'any',
 ): Promise<CalendarActionResult> {
   const { tutorProfileId, studdyUserId } = await requireTutor();
   const start = splitDateTime(date, startMinutes);
@@ -205,6 +219,7 @@ export async function createExceptionFromCalendarAction(
     startsAt: validated.value.startsAt,
     endsAt: validated.value.endsAt,
     effectCode: validated.value.effectCode,
+    lessonFormatCode,
     privateNote: emptyToNull(privateNote ?? ''),
   });
 
@@ -224,6 +239,7 @@ export async function updateExceptionFromCalendarAction(
   date: string,
   startMinutes: number,
   endMinutes: number,
+  lessonFormatCode?: FormatScope,
 ): Promise<CalendarActionResult> {
   const { tutorProfileId, studdyUserId } = await requireTutor();
   const start = splitDateTime(date, startMinutes);
@@ -247,6 +263,7 @@ export async function updateExceptionFromCalendarAction(
   const updated = await updateAvailabilityException(exceptionId, tutorProfileId, studdyUserId, {
     startsAt: validated.value.startsAt,
     endsAt: validated.value.endsAt,
+    ...(lessonFormatCode === undefined ? {} : { lessonFormatCode }),
   });
   if (!updated) return refused('That one-off change is no longer there. Reload and try again.');
 
