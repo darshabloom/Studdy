@@ -33,7 +33,8 @@ current; they are not duplicates.
 ## 2. Where the work is
 
 **Branch:** `feat/availability-and-multi-time-requests`
-**HEAD:** `e37933b551788dc7e47db5c600d9b8e7524007ab` (`e37933b`) — _fix: make the week calendar a real week grid (step 2 visual pass)_
+**HEAD:** see `git log -1`. Step 2 is complete through the accessibility pass on the
+shared availability editor.
 **Open pull request:** [#17](https://github.com/darshabloom/Studdy/pull/17) — **DRAFT, open, unmerged.**
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
@@ -54,7 +55,10 @@ current; they are not duplicates.
 | `10bc283` | UX redesign step 1 — shared `WeekCalendar` primitive                        |
 | `bb2ecaf` | fresh-session checkpoint and handoff rewrite                                |
 | `793937a` | **UX redesign step 2 — calendar-first `/tutor/availability`**               |
-| `e37933b` | **step 2 visual pass — a real week grid, and the CSS purge that hid it**    |
+| `e37933b` | step 2 visual pass — a real week grid, and the CSS purge that hid it        |
+| `50d5dd9` | docs: styling is no longer deferred to step 6                               |
+| `a0d3507` | step 2 refinements — teaching-day window, shared editor, format scoping     |
+| _HEAD_    | **step 2 close-out — editor dialog accessibility**                          |
 
 Branched from `b4464a8` (PR #14, intended lesson requests). Merged before that: PR1 bootstrap
 (`91931e5`), PR2 identity (`d3116ed`), PR3 family/students/discovery (`51c0135`).
@@ -104,9 +108,9 @@ cd S:\Studdy; pnpm exec turbo run lint --concurrency=2
 Supabase runs on 14321 (API), 14322 (database), 14323 (Studio), 14324 (Mailpit inbox).
 The analytics container is disabled locally.
 
-**Expected state after a clean run:** 28 tables classified by `check:rls`; **292 unit and
-integration tests passing with 1 skipped** (4 configuration, 50 design-system, 117 domain,
-26 web, 95 database including its integration suite); **72 end-to-end**. `typecheck`,
+**Expected state after a clean run:** 28 tables classified by `check:rls`; **307 unit and
+integration tests passing with 1 skipped** (4 configuration, 50 design-system, 123 domain,
+34 web, 96 database including its integration suite); **80 end-to-end**. `typecheck`,
 `lint`, `format`, `check:rls` and `check:boundaries` all green.
 
 **Re-seed before every end-to-end run.** The e2e suite is not idempotent against a used
@@ -278,7 +282,27 @@ Step 1 is done. **Steps 2–6 remain, in this order.** Rewrite or update the end
 journey alongside each step rather than leaving all test changes to the end; use targeted
 tests while building and the full suite at major boundaries and before PR readiness.
 
-### Step 2 — calendar-first `/tutor/availability` — **DONE** (`793937a`, `e37933b`)
+### Step 2 — calendar-first `/tutor/availability` — **COMPLETE**
+
+Delivered across `793937a` (function), `e37933b` (a real week grid), `a0d3507` (teaching-day
+window, shared editor, format scoping) and the accessibility close-out at HEAD.
+
+What it is now: days as columns with time down a gutter, a fixed 08:00–22:00 teaching window
+widened — never narrowed — by anything already on the calendar, click-drag create, resize,
+delete, week navigation by URL, visually distinct holds and confirmed lessons, and
+"Preview as family" as a SEPARATE SERVER RENDER on `?preview=1`.
+
+Availability is editable two ways on purpose: direct manipulation for speed, and one shared
+dialog for precision and discoverability. `+ Add`, a drag, and clicking a block all open the
+SAME editor — prefilled where there is something to prefill. Resize stays outside it.
+
+Availability now carries a lesson-format scope (`online` / `in_person` / `any`) that really
+decides what is bookable: `availability_rules.lesson_format_code` used to be dead — the
+domain type dropped it before the derivation ever saw it — and one-off additions gained the
+same column in migration `0004`. A `removes` is deliberately never format-scoped. Passing no
+format behaves exactly as before, which is what keeps the still format-blind callers correct.
+
+The original step-2 file list below is kept for orientation; the code has moved on.
 
 Rebuild the tutor's availability screen around the week calendar: days as columns, time
 vertical, click-drag to create, resize, edit, delete, repeat-weekly, one-off additions,

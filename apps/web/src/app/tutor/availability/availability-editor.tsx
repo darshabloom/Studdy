@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Button } from '@studdy/design-system';
 import type { FormatScope } from '@/lib/availability/actions';
 
@@ -76,7 +76,18 @@ export interface AvailabilityEditorProps {
   readonly onCancel: () => void;
   readonly onSave: (value: EditorValue, rowId: string | undefined) => void;
   readonly onDelete: (rowId: string) => void;
+  /**
+   * Where focus goes if the control that opened this is gone by the time it
+   * closes. Saving refreshes the week, so the very block a tutor clicked is
+   * usually replaced — without a fallback their focus would land on the body
+   * and a keyboard user would have to tab in from the top of the page again.
+   */
+  readonly fallbackFocusRef?: RefObject<HTMLElement | null>;
 }
+
+/** Everything a person can tab to. Used to keep focus inside the dialog. */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function AvailabilityEditor({
   target,
@@ -85,10 +96,14 @@ export function AvailabilityEditor({
   onCancel,
   onSave,
   onDelete,
+  fallbackFocusRef,
 }: AvailabilityEditorProps): ReactNode {
   const [value, setValue] = useState<EditorValue>(target.value);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const isExisting = target.rowId !== undefined;
+  const titleId = 'availability-editor-title';
+  const descriptionId = 'availability-editor-description';
 
   // Reopening on a different block must reset the fields, not keep the last
   // block's times: the editor is one component serving every entry point.
@@ -96,18 +111,60 @@ export function AvailabilityEditor({
     setValue(target.value);
   }, [target]);
 
-  // Send focus into the dialog so a keyboard user is not left behind on the
-  // calendar, and let Escape close it the way a dialog is expected to.
+  /**
+   * Focus management, which is most of what makes this a dialog rather than a
+   * panel that happens to sit on top.
+   *
+   * Focus moves to the title on open, so a screen reader announces what just
+   * appeared instead of leaving the user on the calendar behind it. Tab is
+   * trapped, because tabbing onto a calendar the dialog is covering is how a
+   * keyboard user gets silently lost. On close focus returns to whatever opened
+   * this — and to the fallback when that control no longer exists, which is the
+   * normal case after a save re-renders the week.
+   */
   useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     headingRef.current?.focus();
+
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onCancel();
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onCancel();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const dialog = dialogRef.current;
+      if (dialog === null) return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+        (element) => element.offsetParent !== null || element === document.activeElement,
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (first === undefined || last === undefined) return;
+
+      // Wrap at both ends, and pull focus back in if it has escaped entirely —
+      // which it has on open, when focus sits on the non-tabbable title.
+      const active = document.activeElement;
+      if (!dialog.contains(active) || (event.shiftKey && active === first)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
+      if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
-    document.addEventListener('keydown', onKey);
+
+    document.addEventListener('keydown', onKey, true);
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onKey, true);
+      const fallback = fallbackFocusRef?.current ?? null;
+      if (opener !== null && opener.isConnected) opener.focus();
+      else if (fallback !== null && fallback.isConnected) fallback.focus();
     };
-  }, [onCancel]);
+  }, [onCancel, fallbackFocusRef]);
 
   const set = <K extends keyof EditorValue>(key: K, next: EditorValue[K]): void => {
     setValue((current) => ({ ...current, [key]: next }));
@@ -119,18 +176,26 @@ export function AvailabilityEditor({
   return (
     <div className="fixed inset-0 z-[1100] flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={isExisting ? 'Edit this time' : 'Add availability'}
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-[var(--radius-medium)] border border-surface-border bg-surface-card p-5 shadow-lg sm:rounded-[var(--radius-medium)]"
       >
         <h2
+          id={titleId}
           ref={headingRef}
           tabIndex={-1}
           className="font-display text-lg font-semibold outline-none"
         >
-          {isExisting ? 'Edit this time' : 'Add to your calendar'}
+          {isExisting ? 'Edit this time' : 'Add availability'}
         </h2>
+        <p id={descriptionId} className="mt-1 text-sm text-text-secondary">
+          {isExisting
+            ? 'Change when this happens, or remove it. Press Escape to close without saving.'
+            : 'Choose what kind of time this is and when it happens. Press Escape to close without saving.'}
+        </p>
 
         <fieldset className="mt-4">
           <legend className="text-sm font-medium">What is this?</legend>
@@ -240,23 +305,33 @@ export function AvailabilityEditor({
             <p className="mt-0.5 text-xs text-text-secondary">
               Families looking for the other kind will not be offered this time.
             </p>
+            {/*
+             * Real radios under a segmented skin. These are three mutually
+             * exclusive choices, so a radiogroup gives arrow-key movement and
+             * the right announcement for free — a row of toggle buttons would
+             * read as three unrelated switches, any number of which might be on.
+             */}
             <div className="mt-2 inline-flex rounded-[var(--radius-medium)] border border-surface-border bg-surface-card-secondary p-0.5">
               {FORMATS.map((format) => (
-                <button
+                <label
                   key={format.id}
-                  type="button"
-                  aria-pressed={value.formatCode === format.id}
-                  onClick={() => {
-                    set('formatCode', format.id);
-                  }}
-                  className={`rounded-[var(--radius-gentle)] px-3 py-1.5 text-sm font-medium transition-colors ${
+                  className={`cursor-pointer rounded-[var(--radius-gentle)] px-3 py-1.5 text-sm font-medium transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-brand-purple ${
                     value.formatCode === format.id
                       ? 'bg-surface-card text-text-primary shadow-sm'
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
+                  <input
+                    type="radio"
+                    name="availability-format"
+                    className="sr-only"
+                    checked={value.formatCode === format.id}
+                    onChange={() => {
+                      set('formatCode', format.id);
+                    }}
+                  />
                   {format.label}
-                </button>
+                </label>
               ))}
             </div>
           </fieldset>

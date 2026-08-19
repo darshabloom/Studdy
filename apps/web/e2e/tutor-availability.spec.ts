@@ -110,14 +110,14 @@ test.describe('tutor availability, as a calendar', () => {
     await expect(editor.getByRole('radio', { name: /Regular availability/ })).toBeVisible();
     await expect(editor.getByRole('radio', { name: /One-off availability/ })).toBeVisible();
     await expect(editor.getByRole('radio', { name: /Block time/ })).toBeVisible();
-    await expect(editor.getByRole('button', { name: 'Both' })).toBeVisible();
-    await expect(editor.getByRole('button', { name: 'Online' })).toBeVisible();
-    await expect(editor.getByRole('button', { name: 'In person' })).toBeVisible();
+    await expect(editor.getByRole('radio', { name: 'Both' })).toBeVisible();
+    await expect(editor.getByRole('radio', { name: 'Online' })).toBeVisible();
+    await expect(editor.getByRole('radio', { name: 'In person' })).toBeVisible();
 
     // Blocking is about the tutor, not about delivery, so it offers a private
     // note instead of a format.
     await editor.getByRole('radio', { name: /Block time/ }).check();
-    await expect(editor.getByRole('button', { name: 'Online' })).toHaveCount(0);
+    await expect(editor.getByRole('radio', { name: 'Online' })).toHaveCount(0);
     await expect(editor.getByText(/Private note/)).toBeVisible();
 
     await editor.getByRole('button', { name: 'Cancel' }).click();
@@ -143,6 +143,42 @@ test.describe('tutor availability, as a calendar', () => {
     // An existing row cannot change what kind of time it is.
     await expect(editor.getByRole('radio', { name: /Regular availability/ })).toBeDisabled();
     await expect(editor.getByRole('button', { name: 'Remove' })).toBeVisible();
+  });
+
+  /**
+   * The editor as a DIALOG, not a panel that happens to sit on top.
+   *
+   * A tutor working by keyboard has to be able to open it, move through every
+   * field, close it and end up back where they started. Without a trap, Tab
+   * walks onto the calendar the dialog is covering and they are silently lost.
+   */
+  test('the editor behaves as a dialog for a keyboard user', async ({ page }) => {
+    await signIn(page, TUTOR);
+    await page.goto('/tutor/availability');
+    await expect(page.getByRole('group', { name: /Your availability, week of/ })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    const addButton = page.getByRole('button', { name: '+ Add' });
+    await addButton.focus();
+    await page.keyboard.press('Enter');
+
+    const editor = page.getByRole('dialog', { name: 'Add availability' });
+    await expect(editor).toBeVisible();
+    // Named and described by its own heading and intro, not by a bare label.
+    await expect(editor).toHaveAccessibleDescription(/Press Escape to close/);
+
+    // Tab cannot escape onto the calendar underneath.
+    for (let press = 0; press < 25; press += 1) {
+      await page.keyboard.press('Tab');
+      const inside = await editor.evaluate((dialog) => dialog.contains(document.activeElement));
+      expect(inside).toBe(true);
+    }
+
+    // Escape closes, and focus comes back to the control that opened it.
+    await page.keyboard.press('Escape');
+    await expect(editor).toHaveCount(0);
+    await expect(addButton).toBeFocused();
   });
 
   /**
@@ -184,6 +220,9 @@ test.describe('tutor availability, as a calendar', () => {
         calendarHeight: Math.round(root.getBoundingClientRect().height),
         widestBlock: Math.max(...blocks.map((block) => block.getBoundingClientRect().width)),
         calendarWidth: Math.round(root.getBoundingClientRect().width),
+        // Hour labels in the gutter, so compactness can be judged against the
+        // hours actually on show rather than against a fixed pixel number.
+        hoursShown: root.querySelectorAll('.tabular-nums').length,
       };
     });
 
@@ -198,9 +237,18 @@ test.describe('tutor availability, as a calendar', () => {
     // A block belongs to one day, so it can never span the width of the week.
     expect(geometry.widestBlock).toBeLessThan(geometry.calendarWidth / 3);
 
-    // A week of teaching hours fits on a screen rather than running to a scroll
-    // of empty day sections. The old stacked layout was ~2,240px.
-    expect(geometry.calendarHeight).toBeLessThan(900);
+    /**
+     * Hour rows stay compact.
+     *
+     * Expressed per visible hour rather than as one pixel bound, because the
+     * window is a fixed teaching day WIDENED by anything already on the
+     * calendar — a tutor with a late-night blocked period legitimately sees
+     * more hours, and an absolute limit would fail on their data while saying
+     * nothing about row height. Sixty pixels an hour plus chrome still rules
+     * out the stacked layout, which ran to whole screens per day.
+     */
+    expect(geometry.hoursShown).toBeGreaterThan(0);
+    expect(geometry.calendarHeight).toBeLessThan(geometry.hoursShown * 60 + 120);
   });
 
   test('navigates between weeks', async ({ page }) => {

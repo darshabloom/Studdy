@@ -233,6 +233,45 @@ for overlap queries — an index, not an exclusion constraint; exceptions may ov
 
 Private reasons stay server-side. Any public surface shows only "unavailable" (§8.6).
 
+**Amended during UX step 2 (migration `0004`):** the table also carries
+`lesson_format_code` (`online` | `in_person` | `any`, default `any`, CHECK-constrained),
+mirroring `availability_rules`. See §4.2.1.
+
+### 4.2.1 Lesson format is a scope on SUPPLY
+
+Added during UX step 2, after the tutor calendar made it visible that a tutor may teach some
+hours online and others in person.
+
+**Demand is always concrete.** `intended_lesson_requests.format_code` is already constrained
+to exactly `('online', 'in_person')` — a lesson is delivered one way or the other. Only
+availability is ever unscoped, so "Both" is the existing `any` on the supply row rather than
+a third format, and rather than a pair of booleans that could both be false.
+
+Matching is `scope = 'any' or scope = requested`. `bookableSlots` takes an OPTIONAL format:
+omitted, nothing is filtered and every caller written before formats existed behaves exactly
+as it did. That is what allows discovery, the request composer and fan-out validation to stay
+format-blind until the booking journey (step 4) starts passing one.
+
+Two decisions worth keeping:
+
+- **A `removes` is never format-scoped.** Being unavailable is a fact about the tutor, not
+  about how a lesson would have been delivered, so a block takes the time whatever was asked
+  for. A tutor who is away but can still teach online narrows their availability instead of
+  carving a format-shaped hole in a block. The column exists on the row for uniformity and is
+  forced to `any` on insert for a `removes`.
+- **A rule that cannot serve the request does not constrain it.** Notice and advance limits
+  are taken across the CONTRIBUTING rules only, so an in-person rule demanding a week of
+  notice cannot tighten an online request it can play no part in. This was a latent defect
+  the format work exposed.
+
+`availability_rules.lesson_format_code` predates this work but was inert: the domain
+`RecurringRule` had no such field, so the repository dropped it on the way into the
+derivation and nothing filtered on it. It is now carried through.
+
+Note the vocabulary is deliberately not yet unified: availability says `any`, while
+`services.service_versions.format_code` says `either`. Cosmetic, and changing it would touch
+another table for no functional gain.
+
 ### 4.3 New — `bookings.request_time_options`
 
 The family's acceptable times. One row per option.

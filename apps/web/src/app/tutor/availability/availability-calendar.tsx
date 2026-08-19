@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition, type ReactNode } from 'react';
+import { useRef, useState, useTransition, type ReactNode } from 'react';
 import {
   Alert,
   Button,
@@ -98,6 +98,9 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditorTarget | null>(null);
+  // Where focus lands when the control that opened the editor is gone by the
+  // time it closes, which is the normal case once a save re-renders the week.
+  const addButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const segmentFor = (blockId: string): CalendarSegment | undefined =>
     props.segments.find((segment) => segment.blockId === blockId);
@@ -368,7 +371,7 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
               );
             })}
           </div>
-          <Button size="sm" onClick={openBlankEditor}>
+          <Button ref={addButtonRef} size="sm" onClick={openBlankEditor}>
             + Add
           </Button>
 
@@ -451,6 +454,7 @@ export function AvailabilityCalendar(props: AvailabilityCalendarProps): ReactNod
           target={editing}
           dayDates={props.dayDates}
           busy={pending}
+          fallbackFocusRef={addButtonRef}
           onCancel={() => {
             setEditing(null);
           }}
