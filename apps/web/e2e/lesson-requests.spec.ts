@@ -28,6 +28,21 @@ async function signIn(page: Page, email: string): Promise<void> {
 }
 
 /**
+ * The page text once the workspace has actually resolved.
+ *
+ * `/tutor` streams a "Loading your workspace" fallback, and `page.goto` returns
+ * as soon as the document loads — so reading `innerText` straight afterwards
+ * can capture the fallback instead of the answer. That matters most where two
+ * responses are compared for being identical: two fallbacks are identical, so
+ * the comparison would pass while proving nothing. Waiting for the fallback to
+ * clear makes the assertion mean what it says.
+ */
+async function settledBody(page: Page): Promise<string> {
+  await expect(page.getByText('Loading your workspace')).toHaveCount(0);
+  return page.locator('body').innerText();
+}
+
+/**
  * Ensure the signed-in account has a student and a subject need, creating them
  * through the interface if absent, and finish on scoped tutor discovery.
  */
@@ -235,9 +250,9 @@ test.describe('lesson requests', () => {
     // Tutor C holds no such request, so for them it is another tutor's.
     await signIn(page, 'tutor.c@local.studdy.test');
     const unowned = await page.goto(`/tutor/requests/${realReference}`);
-    const unownedBody = await page.locator('body').innerText();
+    const unownedBody = await settledBody(page);
     const missing = await page.goto('/tutor/requests/TREQ-ZZZZZZZZZZ');
-    const missingBody = await page.locator('body').innerText();
+    const missingBody = await settledBody(page);
 
     // Same status and same body: nothing in the response tells this tutor that
     // one of those references is real.

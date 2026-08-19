@@ -98,9 +98,13 @@ export default tseslint.config(
           paths: [
             {
               name: '@studdy/database',
-              importNames: ['listAvailabilityRules', 'listAvailabilityExceptions'],
+              importNames: [
+                'listAvailabilityRules',
+                'listAvailabilityExceptions',
+                'listTutorReservations',
+              ],
               message:
-                'Raw availability rules and block reasons are tutor-only. Family-facing surfaces use bookableSlotsForTutors, which returns derived positive slots and nothing else.',
+                'Raw availability rules, block reasons and reservations are tutor-only. Family-facing surfaces use bookableSlotsForTutors, which returns derived positive slots and nothing else.',
             },
           ],
         },

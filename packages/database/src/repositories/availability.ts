@@ -137,6 +137,13 @@ export interface CreateAvailabilityRuleInput {
   readonly maximumAdvanceBookingDays?: number | null;
 }
 
+export interface UpdateAvailabilityRuleChanges {
+  readonly dayOfWeek: number;
+  readonly localStartTime: string;
+  readonly localEndTime: string;
+  readonly lessonFormatCode?: string;
+}
+
 export async function createAvailabilityRule(input: CreateAvailabilityRuleInput): Promise<string> {
   const { sql: client, db } = createDatabaseClient();
   try {
@@ -179,6 +186,54 @@ export async function archiveAvailabilityRule(
     const rows = await db
       .update(availabilityRules)
       .set({ statusCode: 'archived', archivedAt: new Date(), updatedByUserId })
+      .where(
+        and(
+          eq(availabilityRules.id, ruleId),
+          eq(availabilityRules.tutorProfileId, tutorProfileId),
+          eq(availabilityRules.statusCode, 'active'),
+        ),
+      )
+      .returning({ id: availabilityRules.id });
+    return rows.length === 1;
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Change a rule in place, keeping its identity.
+ *
+ * A calendar drag is an EDIT of an existing rule, not a new rule replacing an
+ * old one. Archiving and recreating would mint a fresh id on every resize,
+ * which breaks the link between a rule and anything already referring to it and
+ * fills the tutor's history with rules they never consciously created.
+ *
+ * Ownership is folded into the WHERE clause exactly as `archiveAvailabilityRule`
+ * does, so another tutor's rule matches zero rows and returns false rather than
+ * being loaded and then refused. `status_code = 'active'` is part of the match
+ * too: an archived rule is history and does not quietly come back to life
+ * through an update.
+ */
+export async function updateAvailabilityRule(
+  ruleId: string,
+  tutorProfileId: string,
+  updatedByUserId: string,
+  changes: UpdateAvailabilityRuleChanges,
+): Promise<boolean> {
+  const { sql: client, db } = createDatabaseClient();
+  try {
+    const rows = await db
+      .update(availabilityRules)
+      .set({
+        dayOfWeek: changes.dayOfWeek,
+        localStartTime: changes.localStartTime,
+        localEndTime: changes.localEndTime,
+        ...(changes.lessonFormatCode === undefined
+          ? {}
+          : { lessonFormatCode: changes.lessonFormatCode }),
+        updatedByUserId,
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(availabilityRules.id, ruleId),
@@ -247,6 +302,105 @@ export async function archiveAvailabilityException(
       )
       .returning({ id: availabilityExceptions.id });
     return rows.length === 1;
+  } finally {
+    await client.end();
+  }
+}
+
+export interface UpdateAvailabilityExceptionChanges {
+  readonly startsAt: Date;
+  readonly endsAt: Date;
+  /**
+   * Omitted leaves the stored value alone. The private reason and note are
+   * deliberately separate from the times, so moving a blocked period on the
+   * calendar cannot silently erase why it was blocked.
+   */
+  readonly reasonCode?: string | null;
+  readonly privateNote?: string | null;
+}
+
+/**
+ * Move or resize a one-off exception in place, keeping its identity and — unless
+ * explicitly changed — its private reason and note.
+ *
+ * Same ownership guard as `archiveAvailabilityException`: the tutor profile id
+ * is part of the WHERE clause, so a posted id belonging to someone else matches
+ * nothing.
+ */
+export async function updateAvailabilityException(
+  exceptionId: string,
+  tutorProfileId: string,
+  updatedByUserId: string,
+  changes: UpdateAvailabilityExceptionChanges,
+): Promise<boolean> {
+  const { sql: client, db } = createDatabaseClient();
+  try {
+    const rows = await db
+      .update(availabilityExceptions)
+      .set({
+        startsAt: changes.startsAt,
+        endsAt: changes.endsAt,
+        ...(changes.reasonCode === undefined ? {} : { reasonCode: changes.reasonCode }),
+        ...(changes.privateNote === undefined ? {} : { privateNote: changes.privateNote }),
+        updatedByUserId,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(availabilityExceptions.id, exceptionId),
+          eq(availabilityExceptions.tutorProfileId, tutorProfileId),
+          eq(availabilityExceptions.statusCode, 'active'),
+        ),
+      )
+      .returning({ id: availabilityExceptions.id });
+    return rows.length === 1;
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * The tutor's OWN holds and confirmed lessons, for their own calendar.
+ *
+ * Tutor-workspace only. This is the counterpart to the derived slots a family
+ * receives: it says where time has gone, which is precisely what a family must
+ * never learn. A hold carries `expiresAt` so the tutor sees that it is
+ * temporary rather than a booking.
+ */
+export interface TutorReservationRecord {
+  readonly id: string;
+  readonly startAt: Date;
+  readonly endAt: Date;
+  readonly reservationTypeCode: string;
+  readonly expiresAt: Date | null;
+}
+
+export async function listTutorReservations(
+  tutorProfileId: string,
+  from: Date,
+  to: Date,
+): Promise<readonly TutorReservationRecord[]> {
+  const { sql: client, db } = createDatabaseClient();
+  try {
+    const rows = await db
+      .select({
+        id: tutorTimeReservations.id,
+        startAt: tutorTimeReservations.startAt,
+        endAt: tutorTimeReservations.endAt,
+        reservationTypeCode: tutorTimeReservations.reservationTypeCode,
+        expiresAt: tutorTimeReservations.expiresAt,
+      })
+      .from(tutorTimeReservations)
+      .where(
+        and(
+          eq(tutorTimeReservations.tutorProfileId, tutorProfileId),
+          eq(tutorTimeReservations.statusCode, 'active'),
+          lte(tutorTimeReservations.startAt, to),
+          gte(tutorTimeReservations.endAt, from),
+        ),
+      )
+      .orderBy(asc(tutorTimeReservations.startAt));
+    return rows;
   } finally {
     await client.end();
   }

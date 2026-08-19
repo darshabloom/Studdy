@@ -15,6 +15,8 @@ import {
   createAvailabilityRule,
   listAvailabilityExceptions,
   listAvailabilityRules,
+  updateAvailabilityException,
+  updateAvailabilityRule,
 } from '../repositories/availability';
 
 /**
@@ -245,6 +247,125 @@ describe('availability repository', () => {
 
     const rules = await listAvailabilityRules(tutorBId);
     expect(rules.some((rule) => rule.id === ruleId)).toBe(true);
+  });
+
+  /**
+   * The reason `updateAvailabilityRule` exists at all.
+   *
+   * A calendar resize is an edit of one rule, not a replacement of it. Were the
+   * screen to archive and recreate instead, the id would change on every drag,
+   * so this asserts the id survives — which is the whole point of the function.
+   */
+  it('updates a rule in place, keeping its identity', async () => {
+    const ruleId = await createAvailabilityRule({
+      tutorProfileId: tutorBId,
+      createdByUserId: userId,
+      dayOfWeek: 5,
+      localStartTime: '09:00',
+      localEndTime: '10:00',
+      ianaTimeZone: 'Pacific/Auckland',
+      effectiveFrom: new Date().toISOString().slice(0, 10),
+    });
+    createdRuleIds.push(ruleId);
+
+    const updated = await updateAvailabilityRule(ruleId, tutorBId, userId, {
+      dayOfWeek: 5,
+      localStartTime: '09:00',
+      localEndTime: '11:30',
+    });
+    expect(updated).toBe(true);
+
+    const rules = await listAvailabilityRules(tutorBId);
+    const found = rules.find((rule) => rule.id === ruleId);
+    expect(found).toBeDefined();
+    expect(found?.localEndTime).toBe('11:30:00');
+    // The same row, not a replacement: exactly one rule still carries this id.
+    expect(rules.filter((rule) => rule.id === ruleId)).toHaveLength(1);
+  });
+
+  it('keeps one tutor out of another tutor update path', async () => {
+    const rules = await listAvailabilityRules(tutorAId);
+    const victim = rules[0];
+    expect(victim).toBeDefined();
+    if (victim === undefined) return;
+
+    const updated = await updateAvailabilityRule(victim.id, tutorBId, userId, {
+      dayOfWeek: 0,
+      localStartTime: '01:00',
+      localEndTime: '02:00',
+    });
+    expect(updated).toBe(false);
+
+    // Genuinely unchanged, not merely reported as refused.
+    const after = await listAvailabilityRules(tutorAId);
+    const stillThere = after.find((rule) => rule.id === victim.id);
+    expect(stillThere?.localStartTime).toBe(victim.localStartTime);
+    expect(stillThere?.dayOfWeek).toBe(victim.dayOfWeek);
+  });
+
+  it('refuses to update a rule that has been archived', async () => {
+    const ruleId = await createAvailabilityRule({
+      tutorProfileId: tutorBId,
+      createdByUserId: userId,
+      dayOfWeek: 4,
+      localStartTime: '08:00',
+      localEndTime: '09:00',
+      ianaTimeZone: 'Pacific/Auckland',
+      effectiveFrom: new Date().toISOString().slice(0, 10),
+    });
+    createdRuleIds.push(ruleId);
+    expect(await archiveAvailabilityRule(ruleId, tutorBId, userId)).toBe(true);
+
+    // An archived rule is history. Reviving it through an update would restore
+    // availability the tutor believes they took down.
+    const updated = await updateAvailabilityRule(ruleId, tutorBId, userId, {
+      dayOfWeek: 4,
+      localStartTime: '08:00',
+      localEndTime: '12:00',
+    });
+    expect(updated).toBe(false);
+  });
+
+  it('moves an exception in place and leaves its private reason alone', async () => {
+    const start = new Date(Date.now() + 10 * 86_400_000);
+    start.setUTCMinutes(0, 0, 0);
+    const exceptionId = await createAvailabilityException({
+      tutorProfileId: tutorBId,
+      createdByUserId: userId,
+      startsAt: start,
+      endsAt: new Date(start.getTime() + 3_600_000),
+      effectCode: 'removes',
+      reasonCode: 'personal_commitment',
+      privateNote: 'Synthetic: moved, not rewritten.',
+    });
+    createdExceptionIds.push(exceptionId);
+
+    const movedStart = new Date(start.getTime() + 7_200_000);
+    const updated = await updateAvailabilityException(exceptionId, tutorBId, userId, {
+      startsAt: movedStart,
+      endsAt: new Date(movedStart.getTime() + 3_600_000),
+    });
+    expect(updated).toBe(true);
+
+    const exceptions = await listAvailabilityExceptions(tutorBId, new Date());
+    const found = exceptions.find((exception) => exception.id === exceptionId);
+    expect(found?.startsAt.getTime()).toBe(movedStart.getTime());
+    // Dragging a block to a different hour says nothing about why it is blocked.
+    expect(found?.reasonCode).toBe('personal_commitment');
+    expect(found?.privateNote).toBe('Synthetic: moved, not rewritten.');
+  });
+
+  it('keeps one tutor out of another tutor exception update path', async () => {
+    const exceptions = await listAvailabilityExceptions(tutorBId, new Date());
+    const victim = exceptions[0];
+    expect(victim).toBeDefined();
+    if (victim === undefined) return;
+
+    const updated = await updateAvailabilityException(victim.id, tutorAId, userId, {
+      startsAt: new Date(Date.now() + 400 * 86_400_000),
+      endsAt: new Date(Date.now() + 401 * 86_400_000),
+    });
+    expect(updated).toBe(false);
   });
 
   it('shows the tutor their own private note, unlike any family path', async () => {

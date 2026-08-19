@@ -88,6 +88,9 @@ export {
   createAvailabilityRule,
   listAvailabilityExceptions,
   listAvailabilityRules,
+  listTutorReservations,
+  updateAvailabilityException,
+  updateAvailabilityRule,
   type AvailabilityExceptionRecord,
   type AvailabilityRuleRecord,
   type BookableSlot,
@@ -96,4 +99,7 @@ export {
   type CreateAvailabilityRuleInput,
   type SubjectSectionSlotsQuery,
   type TutorBookableSlots,
+  type TutorReservationRecord,
+  type UpdateAvailabilityExceptionChanges,
+  type UpdateAvailabilityRuleChanges,
 } from './repositories/availability';
