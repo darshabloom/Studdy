@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 /**
  * End-to-end journeys for the Intended Lesson Request slice.
@@ -27,32 +27,19 @@ async function signIn(page: Page, email: string): Promise<void> {
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 15_000 });
 }
 
-/** A date input value a few days ahead, comfortably past minimum notice. */
-function futureDateValue(daysAhead: number): string {
-  const date = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
-  return date.toISOString().slice(0, 10);
-}
-
 /**
- * A lesson date unique to this attempt.
+ * The page text once the workspace has actually resolved.
  *
- * A sent request leaves a live hold on the tutor's calendar, and the platform
- * is correct to refuse a second request overlapping it — that is PD-010 and the
- * GiST exclusion constraint doing their job. So an attempt that re-books the
- * identical slot fails on a rule the application is right to enforce, and the
- * real failure is masked by a misleading one.
- *
- * A family sending another request while the first is still live would pick a
- * different time, so each attempt does too. Whole weeks keep the same weekday,
- * so weekly availability rules still match, and moving further out only
- * increases notice — there is no maximum booking horizon to breach.
- *
- * Cleaning up at the end of the journey instead would not survive a failure
- * midway, which is precisely when the next attempt runs.
+ * `/tutor` streams a "Loading your workspace" fallback, and `page.goto` returns
+ * as soon as the document loads — so reading `innerText` straight afterwards
+ * can capture the fallback instead of the answer. That matters most where two
+ * responses are compared for being identical: two fallbacks are identical, so
+ * the comparison would pass while proving nothing. Waiting for the fallback to
+ * clear makes the assertion mean what it says.
  */
-function attemptDateValue(testInfo: TestInfo, baseDaysAhead: number): string {
-  const attempt = testInfo.repeatEachIndex * 8 + testInfo.retry;
-  return futureDateValue(baseDaysAhead + attempt * 7);
+async function settledBody(page: Page): Promise<string> {
+  await expect(page.getByText('Loading your workspace')).toHaveCount(0);
+  return page.locator('body').innerText();
 }
 
 /**
@@ -101,7 +88,9 @@ async function ensureSubjectNeed(page: Page, dashboard: string): Promise<void> {
       .getByRole('link', { name: /Add a subject/ })
       .first()
       .click();
-    await page.getByLabel('Subject', { exact: true }).selectOption({ index: 1 });
+    // Pinned rather than positional: the journey depends on reaching tutors
+    // whose seeded availability covers the lesson time chosen below.
+    await page.getByLabel('Subject', { exact: true }).selectOption({ label: 'Mathematics' });
     await page.getByLabel('School year for this subject').selectOption({ label: 'Year 9' });
     await page.getByRole('button', { name: 'Save and find tutors' }).click();
   }
@@ -133,24 +122,46 @@ async function shortlistAndCompose(page: Page, dashboard: string): Promise<void>
   await expect(page.getByRole('heading', { name: 'Your shortlist' })).toBeVisible();
 }
 
+/**
+ * Reach the request composer through the combined availability grid.
+ *
+ * The shortlist leads to choosing times rather than straight to the composer:
+ * a family picks the times that suit, from real bookable availability, before
+ * anyone is asked. The composer no longer collects a time at all — it reviews
+ * what each tutor will actually be asked about.
+ */
+async function chooseTimesAndCompose(page: Page): Promise<void> {
+  await page.getByRole('link', { name: /Choose times for/ }).click();
+  await expect(page.getByRole('heading', { name: 'Choose times that suit' })).toBeVisible();
+
+  const options = page.getByRole('checkbox');
+  await expect(options.first()).toBeVisible({ timeout: 15_000 });
+  await options.nth(0).check();
+  await options.nth(1).check();
+
+  await page.getByRole('link', { name: 'Review request' }).click();
+  await expect(page.getByRole('heading', { name: 'Send your lesson request' })).toBeVisible();
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.describe('lesson requests', () => {
   test.skip(!supabaseConfigured, 'Requires local Supabase (pnpm supabase:start)');
 
-  test('parent: shortlist → compose → send → awaiting responses', async ({ page }, testInfo) => {
+  test('parent: shortlist → compose → send → awaiting responses', async ({ page }) => {
     await signIn(page, REQUEST_PARENT);
     await shortlistAndCompose(page, '/parent');
 
-    await page.getByRole('link', { name: /Send request/i }).click();
-    await expect(page.getByRole('heading', { name: 'Send your lesson request' })).toBeVisible();
+    await chooseTimesAndCompose(page);
 
     // Honest payment copy: nothing may claim a card exists.
     await expect(page.getByText('You will not be charged when requests are sent')).toBeVisible();
     await expect(page.getByText('your card will not be charged')).toHaveCount(0);
 
-    await page.getByLabel('Lesson date').fill(attemptDateValue(testInfo, 6));
-    await page.getByLabel('Start time').fill('16:00');
+    // The times were chosen on the availability grid, so the composer has none
+    // to collect — it shows what each tutor will actually be asked about.
+    await expect(page.getByText(/Times you chose \(2\)/)).toBeVisible();
+    await expect(page.getByText(/Will be asked about:/).first()).toBeVisible();
     await page.getByRole('button', { name: /Send request to/ }).click();
 
     await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
@@ -174,14 +185,11 @@ test.describe('lesson requests', () => {
     await expect(page.getByText('Your shortlist is still saved')).toBeVisible();
   });
 
-  test('independent student: same journey through the same screens', async ({ page }, testInfo) => {
+  test('independent student: same journey through the same screens', async ({ page }) => {
     await signIn(page, REQUEST_STUDENT);
     await shortlistAndCompose(page, '/student');
 
-    await page.getByRole('link', { name: /Send request/i }).click();
-    await expect(page.getByRole('heading', { name: 'Send your lesson request' })).toBeVisible();
-    await page.getByLabel('Lesson date').fill(attemptDateValue(testInfo, 7));
-    await page.getByLabel('Start time').fill('15:30');
+    await chooseTimesAndCompose(page);
     await page.getByRole('button', { name: /Send request to/ }).click();
 
     await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
@@ -193,20 +201,6 @@ test.describe('lesson requests', () => {
     await page.goto('/tutor/requests');
     await expect(page.getByRole('heading', { name: 'Lesson requests' })).toBeVisible();
 
-    // Responding is honestly deferred, not faked with dead controls.
-    await expect(page.getByText('Responding opens in the next release')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Decline' })).toHaveCount(0);
-
-    const holds = page.getByText('Temporary request hold');
-    if ((await holds.count()) > 0) {
-      await expect(holds.first()).toBeVisible();
-      await expect(
-        page.getByText(/This time is held in your calendar until/).first(),
-      ).toBeVisible();
-      await expect(page.getByText(/released automatically/).first()).toBeVisible();
-    }
-
     // Nothing on the page may reveal a competitor, a fan-out or an ILR.
     const body = (await page.locator('body').innerText()).toLowerCase();
     expect(body).not.toContain('lr-');
@@ -216,6 +210,103 @@ test.describe('lesson requests', () => {
     expect(body).not.toContain('position');
     const html = await page.content();
     expect(html).not.toMatch(/intendedLessonRequestId/i);
+  });
+
+  test('tutor: accepts one offered time and sees the hold with its expiry', async ({ page }) => {
+    await signIn(page, 'tutor.a@local.studdy.test');
+    await page.goto('/tutor/requests');
+    await page.getByRole('link', { name: /with /i }).first().click();
+    await expect(page).toHaveURL(/\/tutor\/requests\/TREQ-/);
+
+    await expect(
+      page.getByRole('heading', { name: 'Can you do one of these times?' }),
+    ).toBeVisible();
+    await page.getByRole('radio').first().check();
+    await page.getByRole('button', { name: 'Accept this time' }).click();
+
+    // The hold exists only now, and is shown with its expiry (D-1, D-8).
+    await expect(page.getByText('You accepted this time')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/held on your calendar until/)).toBeVisible();
+    await expect(page.getByText(/may or may not become a booking/)).toBeVisible();
+
+    // Still nothing about anyone else.
+    const body = (await page.locator('body').innerText()).toLowerCase();
+    expect(body).not.toContain('lr-');
+    expect(body).not.toContain('another tutor');
+  });
+
+  test('tutor: an unowned reference is indistinguishable from a missing one', async ({ page }) => {
+    // SP-007 used to get "no HTTP-status oracle" for free because no tutor-side
+    // [reference] route existed. This route removes that, so the property has
+    // to be proven: a reference belonging to another tutor and one that never
+    // existed must answer identically.
+    await signIn(page, 'tutor.a@local.studdy.test');
+    await page.goto('/tutor/requests');
+    await page.getByRole('link', { name: /with /i }).first().click();
+    await expect(page).toHaveURL(/\/tutor\/requests\/TREQ-/);
+    const realReference = new URL(page.url()).pathname.split('/').pop() ?? '';
+    expect(realReference).toMatch(/^TREQ-/);
+
+    // Tutor C holds no such request, so for them it is another tutor's.
+    await signIn(page, 'tutor.c@local.studdy.test');
+    const unowned = await page.goto(`/tutor/requests/${realReference}`);
+    const unownedBody = await settledBody(page);
+    const missing = await page.goto('/tutor/requests/TREQ-ZZZZZZZZZZ');
+    const missingBody = await settledBody(page);
+
+    // Same status and same body: nothing in the response tells this tutor that
+    // one of those references is real.
+    expect(unowned?.status()).toBe(missing?.status());
+    expect(unownedBody).toBe(missingBody);
+    // And neither leaks the request itself.
+    expect(unownedBody).not.toContain(realReference);
+  });
+
+  test('family: chooses the accepted tutor and time, and lands before payment', async ({
+    page,
+  }) => {
+    // The independent student's request is the live one by this point: the
+    // parent's was withdrawn earlier in this serial file, and the tutor
+    // accepted a time on the student's.
+    await signIn(page, REQUEST_STUDENT);
+    await page.goto('/requests');
+    await page.getByRole('link', { name: 'View request' }).first().click();
+    await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
+
+    await expect(page.getByText('Ready for you to choose')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('link', { name: 'Choose your tutor' }).click();
+    await expect(page.getByRole('heading', { name: 'Choose your tutor' })).toBeVisible();
+
+    // A tutor and a time together (D-5), not a tutor then a time.
+    await page.getByRole('radio').first().check();
+    await page.getByRole('button', { name: 'Choose this tutor' }).click();
+
+    await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
+    // Chosen, but explicitly NOT booked: nobody has paid.
+    await expect(page.getByText('You chose your tutor')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/not booked until that is done/)).toBeVisible();
+    // The status says "Payment next", never "Booked": `fulfilled` is reserved
+    // for a confirmed booking, and nobody has paid.
+    await expect(page.getByText('Payment next')).toBeVisible();
+  });
+
+  test('tutor: a closed request says nothing about why it closed', async ({ page }) => {
+    // Every family-side and system-side ending renders identically. A tutor
+    // who was not chosen must not be able to tell that from a withdrawal.
+    await signIn(page, 'tutor.a@local.studdy.test');
+    await page.goto('/tutor/requests');
+
+    const body = (await page.locator('body').innerText()).toLowerCase();
+    for (const forbidden of [
+      'another tutor',
+      'not selected',
+      'was chosen',
+      'another_tutor_selected',
+      'selection_window_lapsed',
+      'lr-',
+    ]) {
+      expect(body, `closure must not explain itself: "${forbidden}"`).not.toContain(forbidden);
+    }
   });
 
   test('a tutor cannot reach the family request routes', async ({ page }) => {

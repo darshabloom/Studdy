@@ -112,6 +112,25 @@ be protecting a slot nobody could still book.
 
 ### 3.1 Parent / guardian
 
+> **SUPERSEDED IN PRESENTATION, not in model.** The owner reviewed the working slice and
+> directed a user-journey and interaction redesign before PR #17 may merge. The screen
+> sequence in the table below is **shortlist-first, and that is no longer the normal path**.
+>
+> The normal journey is now: **Child → Subject → Tutor → Lesson length → Online/In person →
+> Availability → Review → Send request**, entered from a tutor card or profile with the
+> tutor and any known child/subject context prefilled. **Shortlisting is optional** — a
+> saving and comparison feature, never a prerequisite for booking. The multi-tutor fan-out
+> in this table survives intact as an optional "Ask shortlisted tutors" journey reached from
+> the shortlist.
+>
+> Also changed: **1–5 acceptable times, not 2–5**; lesson length is chosen from the tutor's
+> **published service durations**; and a `student_subject_section` is find-or-created **at
+> send**, never as a side effect of browsing.
+>
+> Everything else in this document — the data model, the state machines, the acceptance and
+> selection transactions, and the whole of §7's access model — **stands unchanged**. See
+> `docs/handoffs/current-session.md` §6 for the authoritative redesign and its steps.
+
 | #   | Screen                                   | What happens                                                                                                                                                                                                                                                                                                                                                           |
 | --- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | `/sign-up` → `/verify` → `/welcome`      | Account, email verification, display and family name. Unchanged.                                                                                                                                                                                                                                                                                                       |
@@ -214,6 +233,45 @@ for overlap queries — an index, not an exclusion constraint; exceptions may ov
 
 Private reasons stay server-side. Any public surface shows only "unavailable" (§8.6).
 
+**Amended during UX step 2 (migration `0004`):** the table also carries
+`lesson_format_code` (`online` | `in_person` | `any`, default `any`, CHECK-constrained),
+mirroring `availability_rules`. See §4.2.1.
+
+### 4.2.1 Lesson format is a scope on SUPPLY
+
+Added during UX step 2, after the tutor calendar made it visible that a tutor may teach some
+hours online and others in person.
+
+**Demand is always concrete.** `intended_lesson_requests.format_code` is already constrained
+to exactly `('online', 'in_person')` — a lesson is delivered one way or the other. Only
+availability is ever unscoped, so "Both" is the existing `any` on the supply row rather than
+a third format, and rather than a pair of booleans that could both be false.
+
+Matching is `scope = 'any' or scope = requested`. `bookableSlots` takes an OPTIONAL format:
+omitted, nothing is filtered and every caller written before formats existed behaves exactly
+as it did. That is what allows discovery, the request composer and fan-out validation to stay
+format-blind until the booking journey (step 4) starts passing one.
+
+Two decisions worth keeping:
+
+- **A `removes` is never format-scoped.** Being unavailable is a fact about the tutor, not
+  about how a lesson would have been delivered, so a block takes the time whatever was asked
+  for. A tutor who is away but can still teach online narrows their availability instead of
+  carving a format-shaped hole in a block. The column exists on the row for uniformity and is
+  forced to `any` on insert for a `removes`.
+- **A rule that cannot serve the request does not constrain it.** Notice and advance limits
+  are taken across the CONTRIBUTING rules only, so an in-person rule demanding a week of
+  notice cannot tighten an online request it can play no part in. This was a latent defect
+  the format work exposed.
+
+`availability_rules.lesson_format_code` predates this work but was inert: the domain
+`RecurringRule` had no such field, so the repository dropped it on the way into the
+derivation and nothing filtered on it. It is now carried through.
+
+Note the vocabulary is deliberately not yet unified: availability says `any`, while
+`services.service_versions.format_code` says `either`. Cosmetic, and changing it would touch
+another table for no functional gain.
+
 ### 4.3 New — `bookings.request_time_options`
 
 The family's acceptable times. One row per option.
@@ -293,9 +351,39 @@ Server-only, like every other close reason, and never rendered to a tutor.
 
 ## 5. State machines
 
-### Intended Lesson Request — unchanged, 5 states
+### Intended Lesson Request — 6 states
 
-`draft`, `awaiting_responses`, `ready_for_selection`, `fulfilled`, `closed`.
+`draft`, `awaiting_responses`, `ready_for_selection`, `awaiting_payment`, `fulfilled`,
+`closed`.
+
+**Amended by the owner during checkpoint 5.** Revisions up to this point had selection move
+the ILR straight to `fulfilled`. That was wrong: `fulfilled` is terminal and means the
+request **resulted in a confirmed booking**, which is also what the interface says — it
+renders as "Booked". Landing there at selection would have claimed a booking for a lesson
+nobody had paid for, and would have left a payment failure needing a transition _backwards_
+out of a terminal state.
+
+Selection therefore lands on **`awaiting_payment`**, and the payment slice moves
+`awaiting_payment → fulfilled` on confirmation, or `awaiting_payment → closed` with the
+existing reason `payment_window_lapsed` when it does not. Payment failure now has a forward
+path.
+
+`awaiting_responses → fulfilled` is removed with it: every route to a confirmed booking runs
+through selection and then payment, so nothing can reach "Booked" without both having
+happened.
+
+| From                | To                          | Trigger                                  |
+| ------------------- | --------------------------- | ---------------------------------------- |
+| draft               | awaiting_responses, closed  | requester sends / abandons               |
+| awaiting_responses  | ready_for_selection, closed | a tutor accepts / withdrawal or expiry   |
+| ready_for_selection | awaiting_payment, closed    | selection completes / withdrawal, lapse  |
+| awaiting_payment    | fulfilled, closed           | payment confirms / payment window lapses |
+| fulfilled           | —                           | terminal: a confirmed booking            |
+| closed              | —                           | terminal                                 |
+
+`awaiting_payment` is deliberately **not** an "open" status for the response and selection
+expiry sweep: by then the decision has been made, and the payment window is a different
+clock owned by the payment slice.
 
 ### Tutor Request — unchanged, 7 states
 

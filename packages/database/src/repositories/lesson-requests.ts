@@ -1,17 +1,24 @@
-import { and, eq, inArray, lte } from 'drizzle-orm';
+import { and, eq, inArray, lte, ne } from 'drizzle-orm';
 import {
+  acceptanceHoldExpiry,
   assignPositions,
   calculateDeadlines,
+  offeredSubset,
   validateFanOut,
+  OPEN_ILR_STATUSES,
   type FanOutTarget,
+  type IlrStatus,
   type RequestRules,
 } from '@studdy/domain/bookings';
+import { zonedClockTime, zonedDateOnly } from '@studdy/domain/availability';
 import { createDatabaseClient } from '../client';
 import {
   auditEvents,
   domainEvents,
   intendedLessonRequests,
   outboxEntries,
+  requestTimeOptions,
+  tutorRequestTimeOptions,
   services,
   serviceVersions,
   statusTransitions,
@@ -21,6 +28,7 @@ import {
   tutorRequests,
   tutorTimeReservations,
 } from '../schema/index';
+import { bookableSlotsForTutors } from './availability';
 import { loadRequestRules } from './rule-settings';
 
 /**
@@ -30,16 +38,63 @@ import { loadRequestRules } from './rule-settings';
  * ledger are deliberately NOT here — they belong to later slices.
  */
 
+/**
+ * Tutors grouped by their own lesson length, so availability is derived once
+ * per distinct duration rather than once per tutor.
+ */
+function groupByDuration(
+  targets: readonly FanOutTarget[],
+  durationByTutor: ReadonlyMap<string, number>,
+): ReadonlyMap<number, string[]> {
+  const groups = new Map<number, string[]>();
+  for (const target of targets) {
+    const duration = durationByTutor.get(target.tutorProfileId) ?? 60;
+    const existing = groups.get(duration);
+    if (existing === undefined) groups.set(duration, [target.tutorProfileId]);
+    else existing.push(target.tutorProfileId);
+  }
+  return groups;
+}
+
 /** Postgres SQLSTATEs surfaced by the guarantees this slice relies on. */
 const UNIQUE_VIOLATION = '23505';
 const EXCLUSION_VIOLATION = '23P01';
 
-/** Drizzle wraps driver errors, so the SQLSTATE sits on the cause chain. */
+/**
+ * SQLSTATEs meaning "this write lost a race with a concurrent one".
+ *
+ * The exclusion constraint is the usual way an acceptance loses the calendar,
+ * but under real concurrency the same collision can surface as a serialization
+ * failure or a deadlock instead — Postgres decides which, and the choice is not
+ * ours. All three mean the same thing to the tutor: the time went while they
+ * were taking it. Treating only 23P01 as a lost race left the other two
+ * escaping as a raw "Failed query" error, which is both a worse message and a
+ * flaky test.
+ */
+const LOST_RACE_SQLSTATES = new Set([
+  EXCLUSION_VIOLATION,
+  '40001', // serialization_failure
+  '40P01', // deadlock_detected
+  '55P03', // lock_not_available
+]);
+
+/** A five-character SQLSTATE: two digits then three alphanumerics. */
+const SQLSTATE = /^\d{2}[0-9A-Z]{3}$/;
+
+/**
+ * Drizzle wraps driver errors, so the SQLSTATE sits on the cause chain.
+ *
+ * The wrapper carries a `code` of its own, so taking the first `code` found
+ * returns drizzle's rather than Postgres's and the real SQLSTATE is never
+ * seen — which turned a clean "that time has gone" into an unhandled query
+ * error. Walk the whole chain and take the first value actually shaped like a
+ * SQLSTATE.
+ */
 function postgresErrorCode(error: unknown): string | null {
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current !== null && current !== undefined; depth += 1) {
     const code = (current as { code?: unknown }).code;
-    if (typeof code === 'string') return code;
+    if (typeof code === 'string' && SQLSTATE.test(code)) return code;
     current = (current as { cause?: unknown }).cause;
   }
   return null;
@@ -69,8 +124,12 @@ export interface CreateIntendedLessonRequestInput {
    * tutor to another tutor's cheaper price.
    */
   readonly tutorProfileIds: readonly string[];
-  readonly proposedStartAt: Date;
-  readonly proposedEndAt: Date;
+  /**
+   * The times the family would accept, as start instants (D-3). Each tutor is
+   * offered only the subset they can actually do; a tutor who can do none is
+   * not sent a request at all.
+   */
+  readonly proposedStarts: readonly Date[];
   readonly formatCode: string;
   readonly timeZone: string;
   readonly notesForTutors: string | null;
@@ -85,6 +144,20 @@ export interface CreatedIntendedLessonRequest {
   readonly intendedLessonRequestId: string;
   readonly reference: string;
   readonly tutorRequestReferences: readonly string[];
+  /**
+   * Tutors who could do none of the chosen times and were therefore not asked
+   * (D-2). The caller surfaces this so the family learns it before sending
+   * rather than discovering a silent omission afterwards.
+   */
+  readonly notAskedTutorProfileIds: readonly string[];
+}
+
+/** No tutor could do any of the chosen times, so nothing was sent. */
+export class NoTutorAvailableError extends Error {
+  override name = 'NoTutorAvailableError';
+  constructor() {
+    super('None of the chosen tutors are free at any of those times.');
+  }
 }
 
 /**
@@ -119,6 +192,7 @@ export async function createIntendedLessonRequest(
       .select({
         tutorProfileId: services.tutorProfileId,
         serviceVersionId: serviceVersions.id,
+        durationMinutes: serviceVersions.durationMinutes,
         tutorFirstName: tutorProfiles.publicFirstName,
       })
       .from(serviceVersions)
@@ -149,12 +223,23 @@ export async function createIntendedLessonRequest(
       serviceVersionId: versionByTutor.get(tutorProfileId)!,
     }));
 
+    const durationByTutor = new Map(
+      offerings.map((row) => [row.tutorProfileId, row.durationMinutes]),
+    );
+    // The family-side record needs one lesson length. Where invited tutors
+    // differ, take the longest: the family should plan for the longest lesson
+    // they might get, and each tutor's own option rows still snapshot their own
+    // length.
+    const familyDurationMinutes = Math.max(
+      ...targets.map((target) => durationByTutor.get(target.tutorProfileId) ?? 60),
+    );
+
     const validation = validateFanOut(
       rules,
       {
         targets,
-        proposedStartAt: input.proposedStartAt,
-        proposedEndAt: input.proposedEndAt,
+        proposedStarts: input.proposedStarts,
+        durationMinutes: familyDurationMinutes,
         formatCode: input.formatCode,
         hasPaymentMethodOnFile: input.hasPaymentMethodOnFile,
         paymentExemptionCode: input.paymentExemptionCode,
@@ -167,8 +252,82 @@ export async function createIntendedLessonRequest(
       );
     }
 
-    const deadlines = calculateDeadlines(rules, input.proposedStartAt, now);
-    const positioned = assignPositions(targets);
+    // Work out, against live availability, which of the chosen times each tutor
+    // can actually do.
+    //
+    // Every offered time is checked, not just one: a tutor may accept any of
+    // them, so each has to be a time they were genuinely free for. This is also
+    // what stops the request path being an availability oracle — a tutor is
+    // only ever asked about times they could accept, so a later "no longer
+    // available" cannot be read as "we asked about a time you never offered".
+    //
+    // `stepMinutes: 1` aligns the grid to the proposed start rather than the
+    // 30-minute grid a family is shown, so this asks "is this lesson inside the
+    // tutor's open time" rather than "does it sit on our display grid": a tutor
+    // free 16:00–19:00 genuinely is free at 17:15.
+    const bookableStartsByTutor = new Map<string, Date[]>();
+    for (const startAt of validation.value.proposedStarts) {
+      for (const [durationMinutes, group] of groupByDuration(targets, durationByTutor)) {
+        const endAt = new Date(startAt.getTime() + durationMinutes * 60_000);
+        const bookable = await bookableSlotsForTutors({
+          tutorProfileIds: group,
+          from: startAt,
+          to: endAt,
+          durationMinutes,
+          stepMinutes: 1,
+          now,
+        });
+        for (const tutorProfileId of group) {
+          const canDoIt = (bookable.get(tutorProfileId) ?? []).some(
+            (slot) => slot.startAt.getTime() === startAt.getTime(),
+          );
+          if (!canDoIt) continue;
+          const existing = bookableStartsByTutor.get(tutorProfileId);
+          if (existing === undefined) bookableStartsByTutor.set(tutorProfileId, [startAt]);
+          else existing.push(startAt);
+        }
+      }
+    }
+
+    // A tutor who can do none of the chosen times is not asked at all (D-2).
+    // An unanswerable request is worse than no request: the tutor can only
+    // decline, and the family waits out a deadline for an answer that was
+    // never possible.
+    const offeredByTutor = new Map<string, readonly Date[]>();
+    const notAskedTutorProfileIds: string[] = [];
+    for (const target of targets) {
+      const subset = offeredSubset(
+        validation.value.proposedStarts,
+        bookableStartsByTutor.get(target.tutorProfileId) ?? [],
+      );
+      if (subset.length === 0) notAskedTutorProfileIds.push(target.tutorProfileId);
+      else offeredByTutor.set(target.tutorProfileId, subset);
+    }
+    if (offeredByTutor.size === 0) throw new NoTutorAvailableError();
+
+    const askedTargets = targets.filter((target) => offeredByTutor.has(target.tutorProfileId));
+
+    // The family's own deadline runs from the soonest time they offered.
+    const earliestStart = validation.value.proposedStarts[0]!;
+    const familyDeadlines = calculateDeadlines(rules, earliestStart, now);
+
+    // Each tutor's response window runs from the soonest time THEY were
+    // offered — never the family's earliest.
+    //
+    // A shared deadline leaks the set the tutor cannot see. The window is
+    // clamped to `earliest − minimum notice`, so a tutor offered only Saturday
+    // but shown a deadline of 2pm today learns both that an earlier option
+    // exists and, by adding the notice back, exactly when it is. The response
+    // tiers leak the same thing more coarsely. Deriving from the tutor's own
+    // subset is also what D-8 means by "how far ahead the lesson is": for a
+    // tutor, that is the lesson they could actually accept.
+    const deadlinesByTutor = new Map<string, ReturnType<typeof calculateDeadlines>>();
+    for (const target of askedTargets) {
+      const ownEarliest = offeredByTutor.get(target.tutorProfileId)![0]!;
+      deadlinesByTutor.set(target.tutorProfileId, calculateDeadlines(rules, ownEarliest, now));
+    }
+
+    const positioned = assignPositions(askedTargets);
 
     return await db.transaction(async (tx) => {
       const [ilr] = await tx
@@ -178,20 +337,40 @@ export async function createIntendedLessonRequest(
           requestedByUserId: input.requestedByUserId,
           familyAccountId: input.familyAccountId,
           statusCode: 'awaiting_responses',
-          proposedStartAt: input.proposedStartAt,
-          proposedEndAt: input.proposedEndAt,
           durationMinutes: validation.value.durationMinutes,
           formatCode: input.formatCode,
           timeZone: input.timeZone,
           notesForTutors: input.notesForTutors,
           // Snapshotted: later configuration changes never move this.
-          decisionDeadlineAt: deadlines.decisionDeadlineAt,
+          decisionDeadlineAt: familyDeadlines.decisionDeadlineAt,
           deadlineRuleVersion,
           sentAt: now,
           createdByUserId: input.requestedByUserId,
         })
         .returning({ id: intendedLessonRequests.id, reference: intendedLessonRequests.reference });
       if (ilr === undefined) throw new Error('intended_lesson_requests insert returned no row');
+
+      // The family's full set of acceptable times. Server-only and family-side:
+      // its size alone would tell a tutor how flexible the family is.
+      const optionIdByStart = new Map<number, string>();
+      for (const [index, startAt] of validation.value.proposedStarts.entries()) {
+        const endAt = new Date(startAt.getTime() + validation.value.durationMinutes * 60_000);
+        const [option] = await tx
+          .insert(requestTimeOptions)
+          .values({
+            intendedLessonRequestId: ilr.id,
+            position: index + 1,
+            startsAt: startAt,
+            endsAt: endAt,
+            localDate: zonedDateOnly(startAt, input.timeZone),
+            localStartTime: zonedClockTime(startAt, input.timeZone),
+            ianaTimeZone: input.timeZone,
+            statusCode: 'offered',
+          })
+          .returning({ id: requestTimeOptions.id });
+        if (option === undefined) throw new Error('request_time_options insert returned no row');
+        optionIdByStart.set(startAt.getTime(), option.id);
+      }
 
       const references: string[] = [];
       for (const target of positioned) {
@@ -203,7 +382,7 @@ export async function createIntendedLessonRequest(
             serviceVersionId: target.serviceVersionId,
             position: target.position,
             statusCode: 'sent',
-            respondByAt: deadlines.respondByAt,
+            respondByAt: deadlinesByTutor.get(target.tutorProfileId)!.respondByAt,
             deadlineRuleVersion,
             sentAt: now,
             createdByUserId: input.requestedByUserId,
@@ -212,17 +391,25 @@ export async function createIntendedLessonRequest(
         if (request === undefined) throw new Error('tutor_requests insert returned no row');
         references.push(request.reference);
 
-        // The hold. Overlap is rejected by the exclusion constraint, which is
-        // what makes fan-out atomic against concurrent requests.
-        await tx.insert(tutorTimeReservations).values({
-          tutorProfileId: target.tutorProfileId,
-          tutorRequestId: request.id,
-          startAt: input.proposedStartAt,
-          endAt: input.proposedEndAt,
-          statusCode: 'active',
-          reservationTypeCode: 'request_hold',
-          expiresAt: deadlines.respondByAt,
-        });
+        // This tutor's own offered subset, with their own lesson length. Times
+        // are snapshotted rather than joined at read time: this row is the
+        // record of what this tutor was offered, and a later change to the
+        // family's options must not rewrite that history.
+        const tutorDuration = durationByTutor.get(target.tutorProfileId) ?? 60;
+        for (const startAt of offeredByTutor.get(target.tutorProfileId) ?? []) {
+          await tx.insert(tutorRequestTimeOptions).values({
+            tutorRequestId: request.id,
+            requestTimeOptionId: optionIdByStart.get(startAt.getTime())!,
+            startsAt: startAt,
+            endsAt: new Date(startAt.getTime() + tutorDuration * 60_000),
+            statusCode: 'offered',
+          });
+        }
+
+        // NO calendar hold here. A request is a question, and holding three
+        // tutors' calendars on speculation took real bookable time from people
+        // who had not agreed to anything (D-1). The hold is taken at
+        // acceptance, by the tutor who actually said yes.
 
         await tx.insert(statusTransitions).values({
           entityType: 'tutor_request',
@@ -239,7 +426,10 @@ export async function createIntendedLessonRequest(
         // this tutor's reference — nothing about siblings.
         await tx.insert(outboxEntries).values({
           eventType: 'tutor_request.sent',
-          payload: { tutorRequestReference: request.reference, respondByAt: deadlines.respondByAt },
+          payload: {
+            tutorRequestReference: request.reference,
+            respondByAt: deadlinesByTutor.get(target.tutorProfileId)!.respondByAt,
+          },
           idempotencyKey: `tutor_request.sent:${request.id}`,
           correlationId: input.correlationId,
         });
@@ -264,7 +454,11 @@ export async function createIntendedLessonRequest(
         actorUserId: input.requestedByUserId,
         correlationId: input.correlationId,
         occurredAt: now,
-        newValue: { tutorCount: positioned.length, proposedStartAt: input.proposedStartAt },
+        newValue: {
+          tutorCount: positioned.length,
+          timeOptionCount: validation.value.proposedStarts.length,
+          earliestStartAt: earliestStart,
+        },
         riskLevel: 'low',
       });
 
@@ -281,6 +475,7 @@ export async function createIntendedLessonRequest(
         intendedLessonRequestId: ilr.id,
         reference: ilr.reference,
         tutorRequestReferences: references,
+        notAskedTutorProfileIds,
       };
     });
   } catch (error) {
@@ -352,6 +547,20 @@ export async function withdrawRequest(input: WithdrawInput): Promise<{ withdrawn
         .where(eq(intendedLessonRequests.id, input.intendedLessonRequestId))
         .for('update');
       if (ilr === undefined) return { withdrawnCount: 0 };
+
+      // The ILR must still be open to responses or selection.
+      //
+      // Without this, a withdrawal racing a selection half-applies: it locks
+      // the ILR before selection touches it, reads `ready_for_selection`, then
+      // blocks on the winner's row. Selection commits, and the withdrawal
+      // resumes to find the winner `selected` — still inside its withdrawable
+      // set — closes it and releases its hold, while its own ILR guard
+      // (`awaiting_responses`/`ready_for_selection`) matches nothing. The
+      // result was an ILR stuck in `awaiting_payment` with no chosen tutor and
+      // no held time. Re-reading the locked status closes that window.
+      if (!OPEN_ILR_STATUSES.includes(ilr.statusCode as IlrStatus)) {
+        return { withdrawnCount: 0 };
+      }
 
       const targetFilter =
         input.tutorRequestId === undefined
@@ -560,8 +769,183 @@ export async function expireOverdueRequests(options: {
         }
       }
 
+      // An acceptance whose selection hold has lapsed (design §8.2). The
+      // family did not choose in time, so the tutor's calendar is given back
+      // rather than held on the chance a decision arrives later — retaining it
+      // would cost them real bookable time to protect nothing.
+      const lapsedAcceptances = await tx
+        .update(tutorRequests)
+        .set({
+          statusCode: 'closed',
+          closedAt: now,
+          closeReasonCode: 'selection_window_lapsed',
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(tutorRequests.statusCode, 'accepted'),
+            lte(tutorRequests.acceptanceHoldExpiresAt, now),
+          ),
+        )
+        .returning({ id: tutorRequests.id, ilrId: tutorRequests.intendedLessonRequestId });
+
+      if (lapsedAcceptances.length > 0) {
+        const releasedLapsed = await tx
+          .update(tutorTimeReservations)
+          .set({
+            statusCode: 'released',
+            releasedAt: now,
+            releaseReasonCode: 'selection_window_lapsed',
+            updatedAt: now,
+          })
+          .where(
+            and(
+              inArray(
+                tutorTimeReservations.tutorRequestId,
+                lapsedAcceptances.map((row) => row.id),
+              ),
+              eq(tutorTimeReservations.statusCode, 'active'),
+            ),
+          )
+          .returning({ id: tutorTimeReservations.id });
+        releasedHolds += releasedLapsed.length;
+
+        for (const row of lapsedAcceptances) {
+          await tx.insert(statusTransitions).values({
+            entityType: 'tutor_request',
+            entityId: row.id,
+            fromStatusCode: 'accepted',
+            toStatusCode: 'closed',
+            actorUserId: null,
+            reasonCode: 'selection_window_lapsed',
+            correlationId: options.correlationId,
+            occurredAt: now,
+          });
+          // Same neutral event as every other closure: nothing in it says the
+          // family ran out of time rather than choosing someone else.
+          await tx.insert(outboxEntries).values({
+            eventType: 'tutor_request.closed',
+            payload: { tutorRequestId: row.id },
+            idempotencyKey: `tutor_request.closed:${row.id}`,
+            correlationId: options.correlationId,
+          });
+        }
+      }
+
+      // A SELECTED request whose hold has reached its natural expiry.
+      //
+      // Selection deliberately does not extend the hold. Payment is a later
+      // slice with its own window, and inventing one here would be inventing
+      // that slice's policy — but leaving the hold to sit `active` past its
+      // expiry would be worse: §12 forbids retaining a hold beyond its natural
+      // expiry, the tutor's own screen promises it is "released either way when
+      // it expires", and an expired-but-active row keeps blocking that slot for
+      // every other family because availability filters on status, not time.
+      //
+      // So the hold dies exactly when it said it would. Without payment the
+      // selection lapses, which is the truthful outcome: no payment, no
+      // booking. `payment_window_lapsed` already exists for precisely this.
+      const lapsedSelections = await tx
+        .update(tutorRequests)
+        .set({
+          statusCode: 'closed',
+          closedAt: now,
+          closeReasonCode: 'payment_window_lapsed',
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(tutorRequests.statusCode, 'selected'),
+            lte(tutorRequests.acceptanceHoldExpiresAt, now),
+          ),
+        )
+        .returning({ id: tutorRequests.id, ilrId: tutorRequests.intendedLessonRequestId });
+
+      if (lapsedSelections.length > 0) {
+        const releasedSelected = await tx
+          .update(tutorTimeReservations)
+          .set({
+            statusCode: 'released',
+            releasedAt: now,
+            releaseReasonCode: 'payment_window_lapsed',
+            updatedAt: now,
+          })
+          .where(
+            and(
+              inArray(
+                tutorTimeReservations.tutorRequestId,
+                lapsedSelections.map((row) => row.id),
+              ),
+              eq(tutorTimeReservations.statusCode, 'active'),
+            ),
+          )
+          .returning({ id: tutorTimeReservations.id });
+        releasedHolds += releasedSelected.length;
+
+        for (const row of lapsedSelections) {
+          await tx.insert(statusTransitions).values({
+            entityType: 'tutor_request',
+            entityId: row.id,
+            fromStatusCode: 'selected',
+            toStatusCode: 'closed',
+            actorUserId: null,
+            reasonCode: 'payment_window_lapsed',
+            correlationId: options.correlationId,
+            occurredAt: now,
+          });
+          await tx.insert(outboxEntries).values({
+            eventType: 'tutor_request.closed',
+            payload: { tutorRequestId: row.id },
+            idempotencyKey: `tutor_request.closed:${row.id}`,
+            correlationId: options.correlationId,
+          });
+        }
+
+        // The ILR follows its winner: `awaiting_payment → closed`, the forward
+        // path the state machine already provides.
+        await tx
+          .update(intendedLessonRequests)
+          .set({
+            statusCode: 'closed',
+            closedAt: now,
+            closeReasonCode: 'payment_window_lapsed',
+            updatedAt: now,
+          })
+          .where(
+            and(
+              inArray(
+                intendedLessonRequests.id,
+                lapsedSelections.map((row) => row.ilrId),
+              ),
+              eq(intendedLessonRequests.statusCode, 'awaiting_payment'),
+            ),
+          );
+      }
+
+      // Options whose start time has passed are finished with, on both sides
+      // (design §8.1). A request may thus become unanswerable before its own
+      // deadline; it still expires on its own clock, so its terminal timing
+      // stays driven by the tutor rather than by anyone else's activity.
+      await tx
+        .update(requestTimeOptions)
+        .set({ statusCode: 'lapsed', updatedAt: now })
+        .where(
+          and(eq(requestTimeOptions.statusCode, 'offered'), lte(requestTimeOptions.startsAt, now)),
+        );
+      await tx
+        .update(tutorRequestTimeOptions)
+        .set({ statusCode: 'lapsed', updatedAt: now })
+        .where(
+          and(
+            eq(tutorRequestTimeOptions.statusCode, 'offered'),
+            lte(tutorRequestTimeOptions.startsAt, now),
+          ),
+        );
+
       // Close any ILR past its decision deadline, or with nothing live left.
-      const candidateIlrIds = [...new Set(due.map((row) => row.ilrId))];
+      const candidateIlrIds = [
+        ...new Set([...due.map((row) => row.ilrId), ...lapsedAcceptances.map((row) => row.ilrId)]),
+      ];
       const overdue = await tx
         .select({ id: intendedLessonRequests.id })
         .from(intendedLessonRequests)
@@ -638,6 +1022,567 @@ export async function expireOverdueRequests(options: {
         releasedHolds,
       };
     });
+  } finally {
+    await sql.end();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tutor responses — accept and decline
+// ---------------------------------------------------------------------------
+
+/**
+ * The chosen time cannot be taken.
+ *
+ * ONE error for every cause: the option was already claimed, the family
+ * withdrew it, its start has passed, or another accepted hold now covers the
+ * tutor's calendar. A tutor learns that this time is gone and nothing about
+ * who or what took it — distinguishing those causes would tell them another
+ * party acted, which is the whole point of the boundary.
+ */
+export class TimeNoLongerAvailableError extends Error {
+  override name = 'TimeNoLongerAvailableError';
+  constructor() {
+    super('That time is no longer available.');
+  }
+}
+
+/** The request is not this tutor's, or is no longer awaiting their answer. */
+export class RequestNotOpenError extends Error {
+  override name = 'RequestNotOpenError';
+  constructor() {
+    super('That request is no longer open.');
+  }
+}
+
+export interface AcceptTutorRequestInput {
+  /** The TREQ- reference the tutor addressed. */
+  readonly reference: string;
+  /** Resolved from the session — never from a URL, form field or header. */
+  readonly tutorProfileId: string;
+  /** Which of their offered times they are claiming. */
+  readonly tutorRequestTimeOptionId: string;
+  readonly actorUserId: string;
+  readonly correlationId: string;
+  readonly now?: Date;
+}
+
+export interface AcceptedTutorRequest {
+  readonly startAt: Date;
+  readonly endAt: Date;
+  readonly holdExpiresAt: Date;
+}
+
+/**
+ * Accept exactly one offered time (design §6, D-4).
+ *
+ * Every step is status-guarded, so a concurrent duplicate cannot double-apply,
+ * and the whole thing is one transaction: a failure leaves no claimed option,
+ * no status change and no reservation. The GiST exclusion constraint is the
+ * final arbiter on the calendar — only the database can decide that without a
+ * race — and a 23P01 rolls the lot back.
+ *
+ * This is where the hold is taken (D-1). Nothing was reserved at send; the
+ * tutor who actually says yes is the one whose calendar is committed.
+ */
+export async function acceptTutorRequestTime(
+  input: AcceptTutorRequestInput,
+): Promise<AcceptedTutorRequest> {
+  const { sql, db } = createDatabaseClient();
+  const now = input.now ?? new Date();
+  try {
+    const { rules, deadlineRuleVersion } = await loadRequestRules(db);
+
+    // Ownership is part of the authoritative query, not a check afterwards: a
+    // reference belonging to another tutor matches zero rows and is
+    // indistinguishable from one that does not exist.
+    const [request] = await db
+      .select({
+        id: tutorRequests.id,
+        intendedLessonRequestId: tutorRequests.intendedLessonRequestId,
+        statusCode: tutorRequests.statusCode,
+        tutorProfileId: tutorRequests.tutorProfileId,
+      })
+      .from(tutorRequests)
+      .where(
+        and(
+          eq(tutorRequests.reference, input.reference),
+          eq(tutorRequests.tutorProfileId, input.tutorProfileId),
+        ),
+      );
+    if (request === undefined || request.statusCode !== 'sent') throw new RequestNotOpenError();
+
+    return await db.transaction(async (tx) => {
+      // 1. Claim exactly one still-offered option. Zero rows means it was
+      //    already claimed, withdrawn or lapsed — abort.
+      const [claimed] = await tx
+        .update(tutorRequestTimeOptions)
+        .set({ statusCode: 'claimed', claimedAt: now })
+        .where(
+          and(
+            eq(tutorRequestTimeOptions.id, input.tutorRequestTimeOptionId),
+            eq(tutorRequestTimeOptions.tutorRequestId, request.id),
+            eq(tutorRequestTimeOptions.statusCode, 'offered'),
+          ),
+        )
+        .returning({
+          id: tutorRequestTimeOptions.id,
+          startAt: tutorRequestTimeOptions.startsAt,
+          endAt: tutorRequestTimeOptions.endsAt,
+          requestTimeOptionId: tutorRequestTimeOptions.requestTimeOptionId,
+        });
+      if (claimed === undefined) throw new TimeNoLongerAvailableError();
+
+      const holdExpiresAt = acceptanceHoldExpiry(rules, now, claimed.startAt);
+
+      // 2. Move the request, only from 'sent'.
+      const [moved] = await tx
+        .update(tutorRequests)
+        .set({
+          statusCode: 'accepted',
+          acceptedTimeOptionId: claimed.id,
+          acceptanceHoldExpiresAt: holdExpiresAt,
+          holdRuleVersion: deadlineRuleVersion,
+          respondedAt: now,
+          updatedByUserId: input.actorUserId,
+        })
+        .where(and(eq(tutorRequests.id, request.id), eq(tutorRequests.statusCode, 'sent')))
+        .returning({ id: tutorRequests.id });
+      if (moved === undefined) throw new RequestNotOpenError();
+
+      // 3. Take the ONE reservation. Overlap raises 23P01 and rolls back the
+      //    whole transaction, so the tutor is told the time is gone rather
+      //    than ending up double-booked.
+      await tx.insert(tutorTimeReservations).values({
+        tutorProfileId: request.tutorProfileId,
+        tutorRequestId: request.id,
+        startAt: claimed.startAt,
+        endAt: claimed.endAt,
+        statusCode: 'active',
+        reservationTypeCode: 'request_hold',
+        expiresAt: holdExpiresAt,
+      });
+
+      // 4. Family-side bookkeeping.
+      await tx
+        .update(requestTimeOptions)
+        .set({ statusCode: 'taken' })
+        .where(eq(requestTimeOptions.id, claimed.requestTimeOptionId));
+      await tx
+        .update(intendedLessonRequests)
+        .set({ statusCode: 'ready_for_selection' })
+        .where(
+          and(
+            eq(intendedLessonRequests.id, request.intendedLessonRequestId),
+            eq(intendedLessonRequests.statusCode, 'awaiting_responses'),
+          ),
+        );
+
+      // 5. Audit, transition, domain event, outbox.
+      await tx.insert(statusTransitions).values({
+        entityType: 'tutor_request',
+        entityId: request.id,
+        fromStatusCode: 'sent',
+        toStatusCode: 'accepted',
+        actorUserId: input.actorUserId,
+        reasonCode: 'tutor_accepted',
+        correlationId: input.correlationId,
+        occurredAt: now,
+      });
+      await tx.insert(auditEvents).values({
+        category: 'business',
+        action: 'tutor_request.accepted',
+        entityType: 'tutor_request',
+        entityId: request.id,
+        actorUserId: input.actorUserId,
+        correlationId: input.correlationId,
+        occurredAt: now,
+        newValue: { startAt: claimed.startAt, holdExpiresAt },
+        riskLevel: 'low',
+      });
+      await tx.insert(domainEvents).values({
+        eventType: 'tutor_request.accepted',
+        entityType: 'tutor_request',
+        entityId: request.id,
+        payload: { startAt: claimed.startAt, holdExpiresAt },
+        correlationId: input.correlationId,
+        occurredAt: now,
+      });
+      await tx.insert(outboxEntries).values({
+        eventType: 'tutor_request.accepted',
+        payload: { tutorRequestReference: input.reference, startAt: claimed.startAt },
+        idempotencyKey: `tutor_request.accepted:${request.id}`,
+        correlationId: input.correlationId,
+      });
+
+      return { startAt: claimed.startAt, endAt: claimed.endAt, holdExpiresAt };
+    });
+  } catch (error) {
+    const code = postgresErrorCode(error);
+    // The calendar was taken between the guard and the write. Same error a
+    // claimed option raises: the difference carries no information.
+    if (code !== null && LOST_RACE_SQLSTATES.has(code)) throw new TimeNoLongerAvailableError();
+    throw error;
+  } finally {
+    await sql.end();
+  }
+}
+
+export interface DeclineTutorRequestInput {
+  readonly reference: string;
+  readonly tutorProfileId: string;
+  readonly actorUserId: string;
+  readonly declineReasonCode?: string | null;
+  readonly correlationId: string;
+  readonly now?: Date;
+}
+
+/**
+ * Decline a request outright.
+ *
+ * Declining takes no calendar time and releases nothing, because a request
+ * held nothing to begin with. The reason, if given, is server-side and for the
+ * platform — it is never rendered to the family as a distinguishing signal.
+ */
+export async function declineTutorRequest(input: DeclineTutorRequestInput): Promise<void> {
+  const { sql, db } = createDatabaseClient();
+  const now = input.now ?? new Date();
+  try {
+    const [request] = await db
+      .select({ id: tutorRequests.id, statusCode: tutorRequests.statusCode })
+      .from(tutorRequests)
+      .where(
+        and(
+          eq(tutorRequests.reference, input.reference),
+          eq(tutorRequests.tutorProfileId, input.tutorProfileId),
+        ),
+      );
+    if (request === undefined || request.statusCode !== 'sent') throw new RequestNotOpenError();
+
+    await db.transaction(async (tx) => {
+      const [moved] = await tx
+        .update(tutorRequests)
+        .set({
+          statusCode: 'declined',
+          declineReasonCode: input.declineReasonCode ?? null,
+          respondedAt: now,
+          closedAt: now,
+          updatedByUserId: input.actorUserId,
+        })
+        .where(and(eq(tutorRequests.id, request.id), eq(tutorRequests.statusCode, 'sent')))
+        .returning({ id: tutorRequests.id });
+      if (moved === undefined) throw new RequestNotOpenError();
+
+      // The tutor's own offered rows close with the request. They are marked
+      // lapsed rather than given a "declined" status of their own: the option
+      // vocabulary describes availability, not the answer.
+      await tx
+        .update(tutorRequestTimeOptions)
+        .set({ statusCode: 'lapsed' })
+        .where(
+          and(
+            eq(tutorRequestTimeOptions.tutorRequestId, request.id),
+            eq(tutorRequestTimeOptions.statusCode, 'offered'),
+          ),
+        );
+
+      await tx.insert(statusTransitions).values({
+        entityType: 'tutor_request',
+        entityId: request.id,
+        fromStatusCode: 'sent',
+        toStatusCode: 'declined',
+        actorUserId: input.actorUserId,
+        reasonCode: input.declineReasonCode ?? 'tutor_declined',
+        correlationId: input.correlationId,
+        occurredAt: now,
+      });
+      await tx.insert(auditEvents).values({
+        category: 'business',
+        action: 'tutor_request.declined',
+        entityType: 'tutor_request',
+        entityId: request.id,
+        actorUserId: input.actorUserId,
+        correlationId: input.correlationId,
+        occurredAt: now,
+        riskLevel: 'low',
+      });
+      await tx.insert(outboxEntries).values({
+        eventType: 'tutor_request.declined',
+        payload: { tutorRequestReference: input.reference },
+        idempotencyKey: `tutor_request.declined:${request.id}`,
+        correlationId: input.correlationId,
+      });
+    });
+  } finally {
+    await sql.end();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Family selection — choosing one accepted tutor and time
+// ---------------------------------------------------------------------------
+
+/** The chosen combination is no longer selectable. */
+export class SelectionNoLongerAvailableError extends Error {
+  override name = 'SelectionNoLongerAvailableError';
+  constructor() {
+    super('That tutor and time is no longer available to choose.');
+  }
+}
+
+export interface SelectAcceptedRequestInput {
+  /** The family's LR- reference. */
+  readonly reference: string;
+  /** Student profiles the caller may act for, resolved from the session. */
+  readonly studentProfileIds: readonly string[];
+  /** The winning Tutor Request, by its TREQ- reference. */
+  readonly tutorRequestReference: string;
+  readonly actorUserId: string;
+  readonly correlationId: string;
+  readonly now?: Date;
+}
+
+export interface SelectionOutcome {
+  readonly tutorFirstName: string;
+  readonly startAt: Date;
+  readonly closedCount: number;
+}
+
+/**
+ * Choose one accepted tutor and time, and close the rest (design §3.1 step 11, D-5).
+ *
+ * ONE transaction, every step status-guarded, so a double submission or two
+ * guardians clicking at once cannot half-apply it. The winner keeps its
+ * reservation; every competing request closes as plain `closed` with the real
+ * reason server-side, and their holds are released immediately — a tutor who
+ * was not chosen gets their calendar time back at once rather than waiting out
+ * a hold that no longer protects anything.
+ *
+ * The ILR lands on `awaiting_payment`, NOT `fulfilled`. `fulfilled` is terminal
+ * and means a confirmed booking; a request that nobody has paid for is not one,
+ * and treating it as one would leave payment failure with nowhere to go but
+ * backwards out of a terminal state.
+ */
+export async function selectAcceptedTutorRequest(
+  input: SelectAcceptedRequestInput,
+): Promise<SelectionOutcome> {
+  const { sql, db } = createDatabaseClient();
+  const now = input.now ?? new Date();
+  try {
+    // A session with no student profiles can act on nothing. Guarding here
+    // keeps it a clean refusal rather than an empty-IN driver error.
+    if (input.studentProfileIds.length === 0) throw new SelectionNoLongerAvailableError();
+
+    // Ownership is part of the authoritative query: an ILR belonging to
+    // another family matches zero rows rather than being found and refused.
+    const [ilr] = await db
+      .select({
+        id: intendedLessonRequests.id,
+        statusCode: intendedLessonRequests.statusCode,
+      })
+      .from(intendedLessonRequests)
+      .innerJoin(
+        studentSubjectSections,
+        eq(intendedLessonRequests.studentSubjectSectionId, studentSubjectSections.id),
+      )
+      .where(
+        and(
+          eq(intendedLessonRequests.reference, input.reference),
+          inArray(studentSubjectSections.studentProfileId, [...input.studentProfileIds]),
+        ),
+      );
+    if (ilr === undefined || ilr.statusCode !== 'ready_for_selection') {
+      throw new SelectionNoLongerAvailableError();
+    }
+
+    return await db.transaction(async (tx) => {
+      // 1. The winner, only from 'accepted', and only within this ILR. Zero
+      //    rows means it was withdrawn, expired or never accepted — abort.
+      const [winner] = await tx
+        .update(tutorRequests)
+        .set({ statusCode: 'selected', updatedByUserId: input.actorUserId })
+        .where(
+          and(
+            eq(tutorRequests.reference, input.tutorRequestReference),
+            eq(tutorRequests.intendedLessonRequestId, ilr.id),
+            eq(tutorRequests.statusCode, 'accepted'),
+          ),
+        )
+        .returning({
+          id: tutorRequests.id,
+          tutorProfileId: tutorRequests.tutorProfileId,
+          acceptedTimeOptionId: tutorRequests.acceptedTimeOptionId,
+        });
+      if (winner === undefined) throw new SelectionNoLongerAvailableError();
+
+      const [claimed] = await tx
+        .select({ startAt: tutorRequestTimeOptions.startsAt })
+        .from(tutorRequestTimeOptions)
+        .where(eq(tutorRequestTimeOptions.id, winner.acceptedTimeOptionId!));
+      if (claimed === undefined) throw new SelectionNoLongerAvailableError();
+
+      const [tutor] = await tx
+        .select({ firstName: tutorProfiles.publicFirstName })
+        .from(tutorProfiles)
+        .where(eq(tutorProfiles.id, winner.tutorProfileId));
+
+      // 2. Every competing request closes — as `closed`, never a status that
+      //    says "not selected". A distinct status would tell the tutor a
+      //    competitor existed; the real reason stays server-side.
+      //
+      //    Their prior status is read first: an UPDATE ... RETURNING gives the
+      //    new row, so recording the transition without this would log
+      //    `from: null` and lose whether the tutor had accepted or was still
+      //    deciding when the family chose.
+      const beforeClose = await tx
+        .select({ id: tutorRequests.id, statusCode: tutorRequests.statusCode })
+        .from(tutorRequests)
+        .where(
+          and(
+            eq(tutorRequests.intendedLessonRequestId, ilr.id),
+            ne(tutorRequests.id, winner.id),
+            inArray(tutorRequests.statusCode, ['sent', 'accepted']),
+          ),
+        );
+      const statusBeforeClose = new Map(beforeClose.map((row) => [row.id, row.statusCode]));
+
+      const losers = await tx
+        .update(tutorRequests)
+        .set({
+          statusCode: 'closed',
+          closeReasonCode: 'another_tutor_selected',
+          closedAt: now,
+          updatedByUserId: input.actorUserId,
+        })
+        .where(
+          and(
+            eq(tutorRequests.intendedLessonRequestId, ilr.id),
+            ne(tutorRequests.id, winner.id),
+            inArray(tutorRequests.statusCode, ['sent', 'accepted']),
+          ),
+        )
+        .returning({ id: tutorRequests.id });
+
+      // 3. Release the losers' holds at once. Retaining them to blur the
+      //    timing of this decision would cost those tutors real bookable time
+      //    to obscure an inference the guarantee does not even cover.
+      if (losers.length > 0) {
+        await tx
+          .update(tutorTimeReservations)
+          .set({ statusCode: 'released', releasedAt: now })
+          .where(
+            and(
+              inArray(
+                tutorTimeReservations.tutorRequestId,
+                losers.map((row) => row.id),
+              ),
+              eq(tutorTimeReservations.statusCode, 'active'),
+            ),
+          );
+      }
+      // The winner's reservation is deliberately left active and untouched.
+
+      // 4. Any option the family offered that nobody took is finished with.
+      await tx
+        .update(requestTimeOptions)
+        .set({ statusCode: 'withdrawn' })
+        .where(
+          and(
+            eq(requestTimeOptions.intendedLessonRequestId, ilr.id),
+            eq(requestTimeOptions.statusCode, 'offered'),
+          ),
+        );
+
+      // 5. The ILR moves on to payment, only from 'ready_for_selection'.
+      const [movedIlr] = await tx
+        .update(intendedLessonRequests)
+        .set({ statusCode: 'awaiting_payment', updatedByUserId: input.actorUserId })
+        .where(
+          and(
+            eq(intendedLessonRequests.id, ilr.id),
+            eq(intendedLessonRequests.statusCode, 'ready_for_selection'),
+          ),
+        )
+        .returning({ id: intendedLessonRequests.id });
+      if (movedIlr === undefined) throw new SelectionNoLongerAvailableError();
+
+      // 6. Audit, transitions, events.
+      await tx.insert(statusTransitions).values({
+        entityType: 'tutor_request',
+        entityId: winner.id,
+        fromStatusCode: 'accepted',
+        toStatusCode: 'selected',
+        actorUserId: input.actorUserId,
+        reasonCode: 'family_selected',
+        correlationId: input.correlationId,
+        occurredAt: now,
+      });
+      for (const loser of losers) {
+        await tx.insert(statusTransitions).values({
+          entityType: 'tutor_request',
+          entityId: loser.id,
+          fromStatusCode: statusBeforeClose.get(loser.id) ?? null,
+          toStatusCode: 'closed',
+          actorUserId: input.actorUserId,
+          reasonCode: 'another_tutor_selected',
+          correlationId: input.correlationId,
+          occurredAt: now,
+        });
+        // One outbox entry per closed tutor, carrying only their own
+        // reference — nothing about the winner or how many others existed.
+        await tx.insert(outboxEntries).values({
+          eventType: 'tutor_request.closed',
+          payload: { tutorRequestId: loser.id },
+          idempotencyKey: `tutor_request.closed:${loser.id}`,
+          correlationId: input.correlationId,
+        });
+      }
+      await tx.insert(statusTransitions).values({
+        entityType: 'intended_lesson_request',
+        entityId: ilr.id,
+        fromStatusCode: 'ready_for_selection',
+        toStatusCode: 'awaiting_payment',
+        actorUserId: input.actorUserId,
+        reasonCode: 'family_selected',
+        correlationId: input.correlationId,
+        occurredAt: now,
+      });
+      await tx.insert(auditEvents).values({
+        category: 'business',
+        action: 'intended_lesson_request.selected',
+        entityType: 'intended_lesson_request',
+        entityId: ilr.id,
+        actorUserId: input.actorUserId,
+        correlationId: input.correlationId,
+        occurredAt: now,
+        newValue: { closedCount: losers.length, startAt: claimed.startAt },
+        riskLevel: 'low',
+      });
+      await tx.insert(domainEvents).values({
+        eventType: 'intended_lesson_request.selected',
+        entityType: 'intended_lesson_request',
+        entityId: ilr.id,
+        payload: { startAt: claimed.startAt },
+        correlationId: input.correlationId,
+        occurredAt: now,
+      });
+
+      return {
+        tutorFirstName: tutor?.firstName ?? 'Your tutor',
+        startAt: claimed.startAt,
+        closedCount: losers.length,
+      };
+    });
+  } catch (error) {
+    // Two guardians choosing different winners at the same instant lock each
+    // other's rows in opposite order and one is killed as a deadlock. The
+    // transaction rolled back whole, so the honest answer is the same as any
+    // other lost race rather than a raw driver error.
+    const code = postgresErrorCode(error);
+    if (code !== null && LOST_RACE_SQLSTATES.has(code)) {
+      throw new SelectionNoLongerAvailableError();
+    }
+    throw error;
   } finally {
     await sql.end();
   }

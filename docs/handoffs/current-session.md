@@ -1,7 +1,7 @@
 # Studdy — session handoff
 
-**Written 7 August 2026.** Everything here was verified against the code at the time of
-writing, not copied forward from an earlier handoff.
+**Rewritten during the UX-redesign slice.** Everything here was verified against the code
+and git state at the time of writing, not copied forward from an earlier handoff.
 
 This file is written for a **fresh Claude Code session with no memory of the previous
 conversation**. It should be enough to continue safely on its own.
@@ -32,31 +32,47 @@ current; they are not duplicates.
 
 ## 2. Where the work is
 
-**Branch:** `feat/intended-lesson-request`
-**Latest commit:** `64c8ad6` — _docs: preserve source material and add a durable session checkpoint_
-(code commit `660ce1d` — _feat: intended lesson requests, fan-out, holds, withdrawal and expiry_)
-**Open pull request:** [#14](https://github.com/darshabloom/Studdy/pull/14) — **ready for the
-owner's review.** Every item of the approved branch scope is complete: the protected expiry
-route, the seeded request scenarios, both end-to-end booking journeys, the tutor read-only
-request and temporary-hold experience, the Fable security review with its findings applied,
-and the full suite run. **Do not merge without explicit approval.**
-**Working tree:** clean. Nothing is waiting to be committed.
+**Branch:** `feat/availability-and-multi-time-requests`
+**HEAD:** see `git log -1`. Step 2 is complete through the accessibility pass on the
+shared availability editor.
+**Open pull request:** [#17](https://github.com/darshabloom/Studdy/pull/17) — **DRAFT, open, unmerged.**
+**Working tree:** clean. Nothing uncommitted, nothing stashed.
 
-> **CI has not run on this branch.** There are zero GitHub Actions runs for
-> `feat/intended-lesson-request` — not a broken workflow (`CI` is active and ran
-> successfully on PR3's branch), most likely exhausted Actions minutes or a repository
-> restriction. **Check the Actions tab and billing before relying on CI.** All verification
-> reported for this branch was run locally against a real database. The one thing local
-> runs do not fully substitute for is proving migrations apply from an empty database on a
-> fresh CI Supabase instance.
+> **Do not merge PR #17 without the owner's explicit approval.** It is deliberately a draft.
+> The backend is complete and reviewed; the UX redesign below is what makes the slice
+> acceptable, and it is only one step in.
 
-**Merged so far:** PR1 bootstrap (`91931e5`), PR2 identity (`d3116ed`), PR3 family/students/discovery (`51c0135`).
+### Commits on this branch, oldest first
+
+| Commit    | What                                                                        |
+| --------- | --------------------------------------------------------------------------- |
+| `bf3ff05` | checkpoint 1 — availability schema, slot calculation, `/tutor/availability` |
+| `5a9e8ad` | checkpoint 2 — discovery availability signals, combined time grid           |
+| `3c1f465` | checkpoint 3 — multi-time requests, per-tutor option subsets                |
+| `e8371af` | checkpoint 4 — tutor accept and decline, hold at acceptance                 |
+| `9d1ea53` | checkpoint 5 — family selection close-out, `awaiting_payment`               |
+| `905cf9e` | close-out audit fidelity, family-visible lapse reasons                      |
+| `10bc283` | UX redesign step 1 — shared `WeekCalendar` primitive                        |
+| `bb2ecaf` | fresh-session checkpoint and handoff rewrite                                |
+| `793937a` | **UX redesign step 2 — calendar-first `/tutor/availability`**               |
+| `e37933b` | step 2 visual pass — a real week grid, and the CSS purge that hid it        |
+| `50d5dd9` | docs: styling is no longer deferred to step 6                               |
+| `a0d3507` | step 2 refinements — teaching-day window, shared editor, format scoping     |
+| _HEAD_    | **step 2 close-out — editor dialog accessibility**                          |
+
+Branched from `b4464a8` (PR #14, intended lesson requests). Merged before that: PR1 bootstrap
+(`91931e5`), PR2 identity (`d3116ed`), PR3 family/students/discovery (`51c0135`).
 
 **Repository location: `S:\Studdy`.** Not `E:\ExternalStorage\Projects\Studdy` — that path
 is on an exFAT volume which cannot store symlinks, so pnpm workspaces cannot install there.
 A stale copy still exists at the E: path; **ignore it**. `S:` is an NTFS virtual disk
-mounted at logon by the scheduled task "Mount StuddyDev Disk". If `S:` is missing after a
-reboot, run elevated: `diskpart /s E:\ExternalStorage\StuddyDev-mount.txt`.
+mounted at logon by the scheduled task "Mount StuddyDev Disk". If `S:` goes missing —
+which happens mid-session, not only after a reboot — run
+`Start-ScheduledTask -TaskName 'Mount StuddyDev Disk'`; it remounts without elevation,
+whereas `Mount-DiskImage` fails with "Access is denied". Guard shell commands with
+`if (-not (Test-Path 'S:\Studdy\package.json')) { exit 1 }` before `Set-Location`: when `S:`
+is gone, `Set-Location S:\Studdy` fails but the rest of the command still runs, silently
+executing against the stale exFAT copy.
 
 ---
 
@@ -92,9 +108,15 @@ cd S:\Studdy; pnpm exec turbo run lint --concurrency=2
 Supabase runs on 14321 (API), 14322 (database), 14323 (Studio), 14324 (Mailpit inbox).
 The analytics container is disabled locally.
 
-**Expected state after a clean run:** 24 tables classified by `check:rls`; 143 unit tests
-(4 configuration, 30 design-system, 67 domain, 42 database); 42 integration tests + 1
-skipped; 50 e2e.
+**Expected state after a clean run:** 28 tables classified by `check:rls`; **307 unit and
+integration tests passing with 1 skipped** (4 configuration, 50 design-system, 123 domain,
+34 web, 96 database including its integration suite); **80 end-to-end**. `typecheck`,
+`lint`, `format`, `check:rls` and `check:boundaries` all green.
+
+**Re-seed before every end-to-end run.** The e2e suite is not idempotent against a used
+database — it creates students and leaves holds — so a second run without a reset fails in
+ways that look like code defects. Run `pnpm db:reset && pnpm db:migrate && pnpm db:seed`
+first. CI is unaffected because it seeds a fresh instance.
 
 ---
 
@@ -142,78 +164,84 @@ The local values are the Supabase CLI's standard demo keys, printed by
 
 ---
 
-## 6. What `feat/intended-lesson-request` delivered
+## 6. What this branch delivered, and what is authoritative now
 
-> ### PARTLY SUPERSEDED — read before building on this branch
->
-> On 7 August 2026, after manually reviewing the parent and tutor journeys, the owner
-> approved a redesign: **[docs/design/multi-time-availability-redesign.md](../design/multi-time-availability-redesign.md)**.
->
-> **Superseded by that design — do not extend:**
->
-> - The **single-time composer.** A family no longer proposes one universal lesson time.
->   Requests carry 2–5 acceptable times, and each tutor is offered only the subset they can
->   actually do. `intended_lesson_requests.proposed_start_at/proposed_end_at` move out to a
->   new `bookings.request_time_options` table.
-> - **Hold-at-send.** Sending a Tutor Request will create **no** calendar reservation. One
->   reservation is created when a tutor accepts one offered time, revalidated atomically at
->   that moment.
-> - **PD-010 as written.** Fan-out stays atomic, but its precondition becomes "every invited
->   tutor has at least one currently offerable time" rather than "every tutor's hold
->   succeeded".
->
-> **Remains authoritative — the redesign builds directly on it:**
->
-> - `availability.tutor_time_reservations` and its **GiST exclusion constraint**. Kept
->   exactly as built; the redesign leans on it harder than this branch does.
-> - All **seven Tutor Request statuses**, including every family-side and system-side ending
->   collapsing into `closed` with the real reason in the server-only `close_reason_code`.
-> - The whole **privacy architecture**: SP-005 (server-only tables, no browser grants),
->   SP-006 (the four-layer tutor boundary), SP-008 (server-side pricing), SP-009 (random,
->   non-correlatable `TREQ-` references), SP-010 (the protected expiry route).
-> - **Transaction discipline**: status-guarded updates, audit event, status transition,
->   domain event and outbox entry written in one transaction.
-> - `expireOverdueRequests` — idempotent, batched, scheduler-independent. Extended, not
->   rewritten.
-> - Versioned rule settings with **snapshotted deadlines** (PD-012), the shortlist surviving
->   request creation (PD-009), and the `LR-`/`TREQ-` prefixes (PD-018).
->
-> **The next slice branches cleanly from `main` after this merges** — it is not stacked on
-> this branch.
+### The backend slice is complete and reviewed (checkpoints 1–5)
 
-**Approved scope:** ILR creation, fan-out to up to three tutors, temporary holds,
-withdrawal and expiry. **Explicitly excluded:** tutor accept/decline, selection close-out,
-Booking creation, Stripe, ledger.
+Tutor availability (recurring rules, one-off additions, blocked periods with private
+reasons) in a server-only `availability` schema; derived bookable-slot calculation; a
+family-facing availability surface scoped to a real student/subject context; multi-time
+requests with per-tutor offered subsets; tutor accept and decline with the hold taken at
+acceptance; and family selection close-out landing on `awaiting_payment`.
 
-**Database — four tables, all server-only:**
-`bookings.intended_lesson_requests` (`LR-`), `bookings.tutor_requests` (`TREQ-`),
-`availability.tutor_time_reservations`, `platform.rule_settings`.
+Each checkpoint had its own focused Fable review, and every finding was applied before the
+checkpoint was committed. The substantive ones, all fixed: the request path was an
+availability oracle; one shared response deadline leaked a time the tutor was never
+offered; the tutor projection showed the family-side lesson length; availability
+eligibility omitted `visibility_state_code`; and the winner's hold outlived its natural
+expiry indefinitely.
 
-Guarantees enforced by the database rather than application logic:
+**Key invariants to preserve.** Families receive derived positive slots only — two instants,
+never a reason for a gap. Tutors see their own offered subset, never the size of the
+family's full set. Every family-side and system-side ending collapses into one `closed`
+status with the reason server-only. Lesson duration is server-authoritative from the tutor's
+published service version. Nothing is held at send; the hold arrives at acceptance and dies
+at its natural expiry.
 
-- GiST exclusion constraint — overlapping **active** holds for one tutor are
-  unrepresentable (`reviewed-sql/constraints/0005`).
-- Partial unique indexes — fan-out cap of three, and one live request per tutor per ILR.
-- No `anon`/`authenticated` grants, no schema usage, RLS enabled with no policies
-  (`reviewed-sql/rls/0004`).
-- `bookings.generate_tutor_request_reference()` (`reviewed-sql/functions/0006`) mirrors the
-  TypeScript generator in `packages/database/src/schema/bookings/reference.ts`.
+### THE UX REDESIGN IS NOW AUTHORITATIVE
 
-**Routes added:** `/requests`, `/requests/new`, `/requests/[reference]`, `/tutor/requests`,
-`/api/jobs/expire-requests`. Entry point added to `/shortlist/[subjectSectionId]`.
+**The owner reviewed the working slice and directed a user-journey and interaction redesign
+before PR #17 may merge.** Where this handoff, `docs/design/multi-time-availability-redesign.md`
+or any screen disagrees with the redesign below, **the redesign wins**. In particular the
+older shortlist-first presentation described in the design document's §3.1 is superseded.
 
-**Expiry has no scheduler attached.** The Vercel Cron entry was removed — the Hobby plan
-allows a once-daily schedule only, which is too coarse for hour-based deadlines, and the
-frequency was deliberately not reduced to fit. Inngest is the required production
-mechanism. See `documentation/operations/scheduled-jobs.md`.
+What changes, and what does not:
 
-**Commands:** `createIntendedLessonRequest` (all-or-nothing fan-out; ILR, tutor requests,
-holds, audit, transitions, domain event and outbox entries in one transaction),
-`withdrawRequest`, `expireOverdueRequests` (idempotent, batched, scheduler-independent).
+- **Backend is retained essentially unchanged.** This is a presentation-layer redesign. The
+  multi-tutor and multi-time model stays.
+- **Shortlisting is optional.** It is a saving and comparison feature, never a prerequisite
+  for booking. A family requesting one tutor must never pass through the multi-tutor
+  workflow.
+- **Multi-tutor fan-out remains, as an optional power feature** reached from the shortlist
+  as "Ask shortlisted tutors".
+- **Lesson length comes from the tutor's published service durations.** The family chooses
+  among what that tutor actually offers. No client-controlled arbitrary durations.
+- **A `student_subject_section` is created only at send** — find-or-create at that moment,
+  never as a side effect of browsing the booking wizard. At review it is honest to say
+  "Mathematics will be added to Fox's subjects."
+- **Time options become 1–5, not 2–5**, with copy that recommends rather than requires:
+  "Choose one or more times that work for you. Choosing a few gives the tutor more options."
+  Planned for step 4, where it is visible.
+- **The final action must say it is sending a request**, not claiming a confirmed booking,
+  even though the journey may begin under a "Book a lesson" intent.
 
-**Tests passing:** 67 domain unit (30 in bookings), 42 integration, 50 e2e. Integration
-proves fan-out atomicity, the concurrent race for one slot, terminal states surviving a
-later expiry sweep, expiry idempotency, per-tutor pricing, and the privacy assertions.
+### Step 1 is COMPLETE — the shared `WeekCalendar` (`10bc283`)
+
+One calendar for the whole product, in `@studdy/design-system`:
+`packages/design-system/src/components/calendar/`.
+
+- **Geometry model:** `geometry.ts` is pure — no dates, no time zones. It works in
+  wall-clock coordinates: **day index (0 = Monday) plus minutes past local midnight**. The
+  caller converts instants using the one zone the platform schedules in, so the grid maths
+  is testable without a clock and zone handling lives in one place rather than one copy per
+  calendar.
+- **Modes:** `read`, `select`, `edit`. Edit supports click-drag create, a resize handle and
+  delete.
+- **`density="mini"`** drops labels and shrinks rows but **preserves real day and time
+  geometry** — it is deliberately not an abstract density heatmap, so a parent can glance
+  and see "Tuesday and Thursday evenings".
+- **`fittedWindow`** narrows the visible hours to the data, padded to whole hours, so a
+  calendar does not waste its height on hours nobody teaches.
+- **`familySafe` / `assertFamilySafe`** refuse tutor-private roles (`blocked`, `hold`,
+  `lesson`) in any family-facing calendar. The component renders whatever blocks it is given
+  and **cannot tell a derived slot from a raw rule by looking** — that is the risk of sharing
+  one calendar, so the boundary is asserted rather than assumed.
+- **"Preview as family" must be fed the derived positive-only bookable-slot projection**,
+  exactly what a family receives — never raw rules, blocks, private notes or exception
+  reasons. Only the tutor's own edit mode may receive raw rules and exceptions.
+
+20 geometry tests cover placement, clamping, drag normalisation in both directions,
+click-to-create, snapping, window fitting and the family-safe refusal.
 
 ---
 
@@ -250,33 +278,117 @@ later expiry sweep, expiry idempotency, per-tutor pricing, and the privacy asser
 
 ## 8. The exact next tasks, in order
 
-**The slice plan changed on 7 August 2026.** The owner replaced the very small slices with
-one fuller vertical slice, because the small ones were technically safe but left each role
-with little usable functionality. `feat/tutor-request-response` and
-`feat/multi-tutor-selection` no longer exist as separate branches — both are folded in below.
+Step 1 is done. **Steps 2–6 remain, in this order.** Rewrite or update the end-to-end
+journey alongside each step rather than leaving all test changes to the end; use targeted
+tests while building and the full suite at major boundaries and before PR readiness.
 
-1. **Owner's manual review of PR #14, then the owner merges it.** Do not merge without
-   explicit approval. §6 records what it supersedes and what stays authoritative.
-2. **`feat/availability-and-multi-time-requests`** — branched **cleanly from `main`** after
-   PR #14 merges, never stacked on it. One vertical slice: tutor availability management →
-   family sees real availability → multi-time request → per-tutor offered subsets → tutor
-   accept/decline → hold at acceptance → family response view → tutor selection →
-   close-out. Build against
-   [docs/design/multi-time-availability-redesign.md](../design/multi-time-availability-redesign.md),
-   which carries the approved decisions D-1 to D-8, the five ordered checkpoints, and the
-   tutor-workspace acceptance criterion. **Do not start without the owner's go-ahead.**
-3. **`feat/stripe-booking-confirmation`** — still separately gated. Requires the owner's
-   approval before any provider account is created or configured.
+### Step 2 — calendar-first `/tutor/availability` — **COMPLETE**
 
-Fable security reviews are expected before the migrations for checkpoints 2, 3 and 4 are
-finalised: the widened family availability surface, the per-tutor option subset, the
-acceptance transaction, and the selection close-out.
+Delivered across `793937a` (function), `e37933b` (a real week grid), `a0d3507` (teaching-day
+window, shared editor, format scoping) and the accessibility close-out at HEAD.
 
-**Both questions that used to block this work are now answered.** PD-012 has approved
-provisional launch values (design §2, D-8), and the multi-tutor disclosure question is
-settled: tutors may be told generally that Studdy allows families to contact several tutors,
-but no individual Tutor Request may reveal whether others were contacted, their number,
-identity, responses, or why it closed.
+What it is now: days as columns with time down a gutter, a fixed 08:00–22:00 teaching window
+widened — never narrowed — by anything already on the calendar, click-drag create, resize,
+delete, week navigation by URL, visually distinct holds and confirmed lessons, and
+"Preview as family" as a SEPARATE SERVER RENDER on `?preview=1`.
+
+Availability is editable two ways on purpose: direct manipulation for speed, and one shared
+dialog for precision and discoverability. `+ Add`, a drag, and clicking a block all open the
+SAME editor — prefilled where there is something to prefill. Resize stays outside it.
+
+Availability now carries a lesson-format scope (`online` / `in_person` / `any`) that really
+decides what is bookable: `availability_rules.lesson_format_code` used to be dead — the
+domain type dropped it before the derivation ever saw it — and one-off additions gained the
+same column in migration `0004`. A `removes` is deliberately never format-scoped. Passing no
+format behaves exactly as before, which is what keeps the still format-blind callers correct.
+
+The original step-2 file list below is kept for orientation; the code has moved on.
+
+Rebuild the tutor's availability screen around the week calendar: days as columns, time
+vertical, click-drag to create, resize, edit, delete, repeat-weekly, one-off additions,
+one-off blocked periods, week navigation, and visually distinct holds and confirmed lessons
+when they exist. Replace the long "What families can book" pill list with a
+**"Preview as family"** mode fed the derived projection.
+
+**Backend addition required.** Availability rules and exceptions currently support create
+and archive only — there is no update path, so a resize would otherwise archive-and-recreate
+and lose identity. Add `updateAvailabilityRule` and `updateAvailabilityException`, guarded on
+ownership exactly as `archiveAvailabilityRule` is.
+
+Most relevant files:
+
+| File                                                                 | Why                                                                                                       |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/app/tutor/availability/page.tsx`                       | the screen to rebuild                                                                                     |
+| `apps/web/src/app/tutor/availability/availability-forms.tsx`         | the list-and-form UI being replaced                                                                       |
+| `apps/web/src/lib/availability/actions.ts`                           | server actions; needs update actions                                                                      |
+| `packages/database/src/repositories/availability.ts`                 | `listAvailabilityRules`, `listAvailabilityExceptions`, create/archive — add the two update functions here |
+| `packages/database/src/index.ts`                                     | export the new functions                                                                                  |
+| `packages/design-system/src/components/calendar/week-calendar.tsx`   | the primitive to drive                                                                                    |
+| `packages/design-system/src/components/calendar/geometry.ts`         | wall-clock coordinates and `assertFamilySafe`                                                             |
+| `packages/domain/src/availability/presentation.ts`                   | `zonedDateOnly`, `zonedClockTime`, `zonedTimeToUtc` — instant ↔ wall-clock conversion                     |
+| `apps/web/src/lib/time.ts`                                           | `PLATFORM_TIME_ZONE`, `availabilityWindow`                                                                |
+| `packages/database/src/integration/availability.integration.test.ts` | privacy assertions that must keep passing                                                                 |
+
+### Step 3 — discovery mini calendars and the large tutor-profile calendar (NEXT)
+
+Tutor cards get a compact real week view (`density="mini"`, `familySafe`) showing actual
+derived bookable time. The profile gets the same concept at full size with time labels and
+selectable availability. Replace the pill lists. Touches
+`apps/web/src/components/discovery/tutor-card.tsx`, `tutor-slots.tsx`,
+`apps/web/src/app/(discovery)/tutors/page.tsx` and `.../tutors/[reference]/page.tsx`.
+
+### Step 4 — the `/book` journey
+
+Child → Subject → Tutor → Lesson length → Online/In person → Availability → Review → Send
+request. Entering from a tutor card or profile prefills the tutor and any known child and
+subject context so those steps are skipped. Lesson length is chosen from that tutor's
+published service versions. The subject section is find-or-created **at send**. This is where
+the **1–5 time options** change lands: `PROVISIONAL_REQUEST_RULES.minTimeOptions`, the seeded
+`requests.min_time_options` value, and the copy in `validateChosenTimes`.
+
+### Step 5 — demote the shortlist
+
+`/shortlist/[id]` keeps saving and comparing. `/shortlist/[id]/times` becomes the optional
+"Ask shortlisted tutors" multi-tutor journey, reached only from the shortlist.
+
+### Step 6 — cohesive visual-design pass
+
+Hierarchy, spacing, card proportions, typography, button hierarchy, calendar states,
+selected/hover/focus states, responsive behaviour, useful empty states — using the existing
+design system. The owner's standard: the next manual review should feel like a real product,
+not a demonstration that the backend works.
+
+**Now a final consistency pass, not the first time styling happens.** See §8.1.
+
+---
+
+## 8.1 STYLING IS NO LONGER DEFERRED TO STEP 6
+
+**Directed by the owner after the step 2 manual review.** Every UX step must reach a
+coherent, reviewable visual state **before** the next step begins. Not final branding and
+not pixel-perfect polish at every stage — enough layout and styling that the owner can
+judge whether the interaction itself is right.
+
+The reason is concrete. Step 2 was function-complete and fully tested, and still could not
+be reviewed: the week calendar was rendering as a vertical stack of full-width bars because
+the design system's utility classes were being purged from the CSS bundle (see below). Every
+test passed throughout. Deferring the visual state to step 6 meant a whole step was built,
+verified and handed over on top of a screen nobody could actually assess — and the next step
+would have built parent-facing calendars on that same foundation.
+
+**A trap worth knowing about, because it is silent.** The design system is a workspace
+package, so it resolves through a symlink in `node_modules`, and Tailwind's automatic
+content detection skips `node_modules`. Any utility class used _only_ inside a design system
+component is dropped from the bundle: markup and class names look right, the rules do not
+exist. `apps/web/src/app/globals.css` now carries an `@source` line pointing at
+`packages/design-system/src`. **Do not remove it**, and if new packages start holding
+components, they need the same line.
+
+Colour survived this because application code uses the same tokens; only layout collapsed.
+So the failure presents as a design problem, not a build problem. `tutor-availability.spec.ts`
+now asserts measured geometry — distinct column lefts, one shared top, absolutely positioned
+blocks, bounded height — because text and role assertions cannot see a missing stylesheet.
 
 ---
 
@@ -286,6 +398,7 @@ identity, responses, or why it closed.
   secrets. Never present example tutors as real. Never put business rules client-side.
 - Stop for approval before: merging, starting a new major slice, creating or configuring
   provider accounts, adding production secrets, or running destructive cloud commands.
+- **Each UX step reaches a reviewable visual state before the next one starts** (§8.1).
 - Run targeted tests while building and the **full suite once** before opening a pull
   request.
 - When a test fails, isolate and prove the cause before characterising it. Treat a fixture
@@ -296,23 +409,59 @@ identity, responses, or why it closed.
 
 ---
 
-## 10. The prompt to start a fresh session
+## 10. Deferred, non-blocking follow-ups
 
-Paste this verbatim. It is recorded here so it survives the loss of the conversation that
-produced this checkpoint.
+These are known, deliberate and **not** blockers for the UX steps. Do not spend the slice on
+them; do not silently drop them either.
 
+- **The payment window is a real dependency.** Without it every selection eventually lapses
+  when the acceptance hold expires — honest, but it means the journey ends in a lapse rather
+  than a booking. A proposed rule awaits the owner's review in
+  `docs/decisions/payment-window-proposal.md`. No Stripe or ledger work has been done, and
+  none is in scope.
+- **Rate limiting on the availability surface.** One request derives up to 50 tutors'
+  fortnight calendars and cadence is unbounded; a platform sweep is single-digit requests.
+  Characterised with a concrete recommendation (20/min per account, 500/day, 60s derivation
+  cache) in the checkpoint 2 review.
+- **Local e2e re-runs assume a fresh database** (see §3).
+- **Cosmetic and audit nits** from the checkpoint 5 review: a loser's family time option
+  stays labelled "taken" after the loser closes; the expiry sweep hard-codes the open-ILR
+  status list in three places rather than referencing `OPEN_ILR_STATUSES`.
+- **CI has not run on this branch.** All verification reported here was run locally against a
+  real database. Check the Actions tab before relying on CI.
+
+---
+
+## 11. FIRST PROMPT FOR FRESH CLAUDE SESSION
+
+Paste this verbatim into a new Claude Code session:
+
+```text
+Work in S:\Studdy (not E:\ExternalStorage\Projects\Studdy — that is a stale exFAT copy).
+If S: is missing, run: Start-ScheduledTask -TaskName 'Mount StuddyDev Disk'
+
+Read docs/handoffs/current-session.md first, in full, before anything else.
+
+Then confirm against the actual repo and git state:
+- the branch is feat/availability-and-multi-time-requests
+- HEAD is 10bc2839ada0963d4e0b34ec1a71b6735111569d (10bc283)
+- the working tree is clean
+- PR #17 exists, is a draft, and is unmerged
+- step 1 is present: packages/design-system/src/components/calendar/ contains geometry.ts,
+  geometry.test.ts and week-calendar.tsx, and WeekCalendar is exported from
+  @studdy/design-system
+
+Then, in your own words and without copying the handoff's phrasing back to me, summarise:
+- the approved UX redesign and why it supersedes the older shortlist-first presentation
+- what WeekCalendar is, its geometry model, its three modes, what density="mini" and
+  fittedWindow do, and what familySafe/assertFamilySafe protects
+- why "Preview as family" must be fed derived bookable slots rather than raw tutor rules
+
+Then identify the next task and state what it involves, including any backend addition it
+needs.
+
+Do NOT begin implementation. Stop after that summary and wait for me to confirm your
+recovered context is correct.
 ```
-Continue the Studdy build. Read docs/handoffs/current-session.md first, then
-claude/studdy-fable-handoff-brief.md and docs/decisions/. Work in S:\Studdy.
 
-Current state: branch feat/intended-lesson-request, commit 64c8ad6.
-PR #14 is ready for my review. Do not merge without my explicit approval.
-
-Confirm you have read the handoff and tell me: the approved seven Tutor Request
-statuses, what is in and out of scope for this branch, and the next task in order.
-Do not start implementation until I approve.
-```
-
-If the branch has moved on since this file was written, correct the commit and the
-pull-request line before using it — and use **"PR #N is open and in progress"** instead of
-"ready for my review" whenever any part of that branch's approved scope is still unfinished.
+---

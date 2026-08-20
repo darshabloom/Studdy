@@ -34,6 +34,9 @@ export default async function RequestDetailPage({
   ).length;
   const isOpen =
     request.statusCode === 'awaiting_responses' || request.statusCode === 'ready_for_selection';
+  const acceptedCount = request.tutorRequests.filter(
+    (entry) => entry.statusCode === 'accepted',
+  ).length;
 
   return (
     <>
@@ -44,16 +47,26 @@ export default async function RequestDetailPage({
             {request.subjectDisplayName} for {request.studentPreferredName}
           </h1>
         </div>
-        <FamilyRequestStatus statusCode={request.statusCode} />
+        <FamilyRequestStatus
+          statusCode={request.statusCode}
+          closeReasonCode={request.closeReasonCode}
+        />
       </div>
 
       <Card className="mt-6">
         <h2 className="text-lg font-semibold">The lesson you asked for</h2>
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-text-secondary">When</dt>
+            <dt className="text-text-secondary">Times you offered</dt>
             <dd className="font-medium">
-              {formatLessonDateTime(request.proposedStartAt, request.timeZone)}
+              <ul className="flex flex-col gap-1">
+                {request.timeOptions.map((option) => (
+                  <li key={option.startAt.toISOString()} className="tabular-nums">
+                    {formatLessonDateTime(option.startAt, request.timeZone)}
+                    {option.statusCode === 'taken' ? ' · taken' : ''}
+                  </li>
+                ))}
+              </ul>
             </dd>
           </div>
           <div>
@@ -81,11 +94,35 @@ export default async function RequestDetailPage({
         ) : null}
       </Card>
 
-      {isOpen ? (
+      {request.statusCode === 'ready_for_selection' && acceptedCount > 0 ? (
+        <div className="mt-6">
+          <Alert tone="information" title="Ready for you to choose">
+            <p>
+              {acceptedCount === 1
+                ? 'A tutor has accepted one of your times.'
+                : `${String(acceptedCount)} tutors have accepted one of your times.`}{' '}
+              Choosing keeps that tutor&rsquo;s time and closes the others. Nothing is charged yet.
+            </p>
+            <p className="mt-3">
+              <Button size="sm" asChild>
+                <Link href={`/requests/${request.reference}/select`}>Choose your tutor</Link>
+              </Button>
+            </p>
+          </Alert>
+        </div>
+      ) : request.statusCode === 'awaiting_payment' ? (
+        <div className="mt-6">
+          <Alert tone="information" title="You chose your tutor">
+            Their time is held while payment is set up. The lesson is not booked until that is done,
+            and payment arrives in the next release.
+          </Alert>
+        </div>
+      ) : isOpen ? (
         <div className="mt-6">
           <Alert tone="information" title="What happens next">
-            Each tutor replies separately, and no tutor can see who else you asked. Choosing a tutor
-            and confirming the booking arrives in the next release — nothing is charged now.
+            Each tutor replies separately, and no tutor can see who else you asked. When one accepts
+            a time you offered, you will be able to choose them here. Nothing is held or charged
+            until then.
           </Alert>
         </div>
       ) : null}

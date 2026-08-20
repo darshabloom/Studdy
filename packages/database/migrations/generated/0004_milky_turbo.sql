@@ -1,0 +1,2 @@
+ALTER TABLE "availability"."availability_exceptions" ADD COLUMN "lesson_format_code" text DEFAULT 'any' NOT NULL;--> statement-breakpoint
+ALTER TABLE "availability"."availability_exceptions" ADD CONSTRAINT "availability_exception_format_check" CHECK ("availability"."availability_exceptions"."lesson_format_code" in ('online', 'in_person', 'any'));

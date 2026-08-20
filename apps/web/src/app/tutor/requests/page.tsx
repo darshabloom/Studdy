@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { listRequestsForTutor, tutorProfileForUser } from '@studdy/database';
 import { Alert, Card, EmptyState, RestrictedState } from '@studdy/design-system';
 import {
@@ -51,9 +52,9 @@ export default async function TutorRequestsPage() {
       </p>
 
       <div className="mt-4">
-        <Alert tone="information" title="Responding opens in the next release">
-          You can see everything you need to assess these requests now. Accepting and declining
-          arrive in the next Studdy release — nothing you do here affects a request yet.
+        <Alert tone="information" title="Accepting holds the time">
+          Open a request to accept one of the times you were offered, or to decline. Accepting holds
+          that time on your calendar while the family decides.
         </Alert>
       </div>
 
@@ -79,11 +80,29 @@ export default async function TutorRequestsPage() {
                     <div>
                       <p className="text-sm text-text-muted">{request.reference}</p>
                       <p className="text-lg font-semibold">
-                        {request.subjectDisplayName} with {request.studentPreferredName}
+                        <Link
+                          className="hover:underline"
+                          href={`/tutor/requests/${request.reference}`}
+                        >
+                          {request.subjectDisplayName} with {request.studentPreferredName}
+                        </Link>
                       </p>
-                      <p className="mt-1 text-sm text-text-secondary">
-                        {formatLessonDateTime(request.proposedStartAt, request.timeZone)}
-                      </p>
+                      {/* The times THIS tutor was offered. Never a count of
+                          the family's full set — only their own subset. */}
+                      <ul className="mt-1 flex flex-col gap-0.5 text-sm text-text-secondary">
+                        {request.offeredTimes.map((option) => (
+                          <li key={option.startAt.toISOString()} className="tabular-nums">
+                            {formatLessonDateTime(option.startAt, request.timeZone)}
+                            {/* Deliberately cause-free. Today `unavailable`
+                                only ever means this tutor's own calendar
+                                filled, but withdrawal and selection close-out
+                                will land on the same status, and a wording
+                                that named a cause would then either be false
+                                or invite a second, distinguishing string. */}
+                            {option.statusCode === 'unavailable' ? ' · no longer available' : ''}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                     <TutorRequestStatus statusCode={request.statusCode} />
                   </div>

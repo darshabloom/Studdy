@@ -75,4 +75,40 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    /**
+     * Availability privacy boundary.
+     *
+     * The tutor-workspace reads return a block's reason code and private note
+     * in full, which is correct for the tutor's own screens and wrong
+     * everywhere else. Families receive derived bookable slots — two instants
+     * and nothing more — so that a gap cannot be read back as "booked",
+     * "blocked privately" or "not working".
+     *
+     * Until now that separation was doc-comment discipline: nothing stopped a
+     * family-facing server component from calling the tutor-only reads and
+     * serialising a private note into its props. This makes it a build error.
+     */
+    files: ['apps/web/src/**/*.ts', 'apps/web/src/**/*.tsx'],
+    ignores: ['apps/web/src/app/tutor/**', 'apps/web/src/lib/availability/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@studdy/database',
+              importNames: [
+                'listAvailabilityRules',
+                'listAvailabilityExceptions',
+                'listTutorReservations',
+              ],
+              message:
+                'Raw availability rules, block reasons and reservations are tutor-only. Family-facing surfaces use bookableSlotsForTutors, which returns derived positive slots and nothing else.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

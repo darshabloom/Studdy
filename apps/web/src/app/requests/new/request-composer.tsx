@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState, useState } from 'react';
-import { Alert, Button, Field, Label } from '@studdy/design-system';
+import { Alert, Button, Label, StatusBadge } from '@studdy/design-system';
 import { sendLessonRequestAction, type RequestFormState } from '@/lib/requests/actions';
 
 const initialState: RequestFormState = { error: null };
@@ -12,6 +13,13 @@ export interface ComposerTutor {
   /** Serialised: BigInt cannot cross the server/client boundary. */
   priceAmountMinor: string;
   currencyCode: string;
+  /** Which of the chosen times this tutor can actually do, already formatted. */
+  canDoLabels: readonly string[];
+}
+
+export interface ChosenTime {
+  iso: string;
+  label: string;
 }
 
 export interface RequestComposerProps {
@@ -19,7 +27,8 @@ export interface RequestComposerProps {
   subjectDisplayName: string;
   studentName: string;
   fanOutCap: number;
-  minimumNoticeHours: number;
+  timesHref: string;
+  chosenTimes: readonly ChosenTime[];
   shortlist: readonly ComposerTutor[];
 }
 
@@ -29,21 +38,32 @@ function formatMoney(amountMinor: string, currencyCode: string): string {
   );
 }
 
+/**
+ * The last look before a request goes out.
+ *
+ * The times are already decided — they came from the availability grid, where
+ * they were real bookable slots. What is left is who to ask, and the honest
+ * statement of what each tutor will actually be asked about.
+ *
+ * A tutor who can do none of the chosen times is shown as such and cannot be
+ * selected: sending them a request they can only decline wastes their time and
+ * leaves the family waiting out a deadline for an answer that was never
+ * possible (D-2).
+ */
 export function RequestComposer({
   subjectSectionId,
   subjectDisplayName,
   studentName,
   fanOutCap,
-  minimumNoticeHours,
+  timesHref,
+  chosenTimes,
   shortlist,
 }: RequestComposerProps) {
   const [state, formAction, pending] = useActionState(sendLessonRequestAction, initialState);
+  const askable = shortlist.filter((tutor) => tutor.canDoLabels.length > 0);
   const [selected, setSelected] = useState<readonly string[]>(
-    shortlist.slice(0, fanOutCap).map((tutor) => tutor.tutorProfileId),
+    askable.slice(0, fanOutCap).map((tutor) => tutor.tutorProfileId),
   );
-  const [lessonDate, setLessonDate] = useState('');
-  const [lessonTime, setLessonTime] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState('60');
   const [formatCode, setFormatCode] = useState('online');
   const [notes, setNotes] = useState('');
 
@@ -58,6 +78,7 @@ export function RequestComposer({
   }
 
   const chosen = shortlist.filter((tutor) => selected.includes(tutor.tutorProfileId));
+  const unavailable = shortlist.filter((tutor) => tutor.canDoLabels.length === 0);
 
   return (
     <form action={formAction} className="flex flex-col gap-5" noValidate>
@@ -71,16 +92,42 @@ export function RequestComposer({
         />
       ))}
       {/*
-        Only tutor ids are submitted. The priced service version is resolved
-        server-side from the subject, so the browser cannot influence pricing.
+        Only tutor ids and the chosen instants are submitted. The priced service
+        version is resolved server-side from the subject, so the browser cannot
+        influence pricing, and each tutor's offered subset is recomputed against
+        live availability rather than trusted from here.
       */}
-      <input type="hidden" name="lessonDate" value={lessonDate} />
-      <input type="hidden" name="lessonTime" value={lessonTime} />
-      <input type="hidden" name="durationMinutes" value={durationMinutes} />
+      {chosenTimes.map((time) => (
+        <input key={time.iso} type="hidden" name="time" value={time.iso} />
+      ))}
       <input type="hidden" name="formatCode" value={formatCode} />
       <input type="hidden" name="notesForTutors" value={notes} />
 
       {state.error !== null ? <Alert tone="critical">{state.error}</Alert> : null}
+      {state.issues?.['times'] !== undefined ? (
+        <Alert tone="critical">{state.issues['times']}</Alert>
+      ) : null}
+
+      <div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-medium text-text-primary">
+            Times you chose ({chosenTimes.length})
+          </h2>
+          <Button variant="quiet" size="sm" asChild>
+            <Link href={timesHref}>Change times</Link>
+          </Button>
+        </div>
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {chosenTimes.map((time) => (
+            <li
+              key={time.iso}
+              className="rounded-md bg-surface-muted px-2 py-1 text-sm tabular-nums text-text-secondary"
+            >
+              {time.label}
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <fieldset>
         <legend className="mb-2 block text-sm font-medium text-text-primary">
@@ -94,32 +141,50 @@ export function RequestComposer({
         <div className="flex flex-col gap-2">
           {shortlist.map((tutor) => {
             const isSelected = selected.includes(tutor.tutorProfileId);
+            const canDoNone = tutor.canDoLabels.length === 0;
             const atCap = !isSelected && selected.length >= fanOutCap;
+            const disabled = canDoNone || atCap;
             return (
               <label
                 key={tutor.tutorProfileId}
-                className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius-medium)] border p-4 ${
-                  isSelected
-                    ? 'border-brand-purple bg-brand-lavender/50'
-                    : atCap
-                      ? 'border-surface-border bg-surface-card-secondary opacity-60'
-                      : 'border-surface-border bg-surface-card hover:border-text-muted'
+                className={`flex items-start gap-3 rounded-[var(--radius-medium)] border p-4 ${
+                  canDoNone
+                    ? 'cursor-not-allowed border-surface-border bg-surface-card-secondary opacity-70'
+                    : isSelected
+                      ? 'cursor-pointer border-brand-purple bg-brand-lavender/50'
+                      : atCap
+                        ? 'cursor-not-allowed border-surface-border bg-surface-card-secondary opacity-60'
+                        : 'cursor-pointer border-surface-border bg-surface-card hover:border-text-muted'
                 }`}
               >
                 <input
                   type="checkbox"
                   className="mt-1"
-                  checked={isSelected}
-                  disabled={atCap}
-                  onChange={() => toggle(tutor.tutorProfileId)}
+                  checked={isSelected && !canDoNone}
+                  disabled={disabled}
+                  onChange={() => {
+                    toggle(tutor.tutorProfileId);
+                  }}
                 />
-                <span>
-                  <span className="block font-medium text-text-primary">
-                    {tutor.tutorFirstName}
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-text-primary">{tutor.tutorFirstName}</span>
+                    {canDoNone ? (
+                      <StatusBadge family="pending">None of your times</StatusBadge>
+                    ) : (
+                      <StatusBadge family="active">
+                        {tutor.canDoLabels.length} of your {chosenTimes.length}
+                      </StatusBadge>
+                    )}
                   </span>
                   <span className="block text-sm text-text-secondary">
                     {formatMoney(tutor.priceAmountMinor, tutor.currencyCode)} for this lesson
                   </span>
+                  {canDoNone ? null : (
+                    <span className="mt-1 block text-sm text-text-muted">
+                      Will be asked about: {tutor.canDoLabels.join(' · ')}
+                    </span>
+                  )}
                 </span>
               </label>
             );
@@ -127,60 +192,36 @@ export function RequestComposer({
         </div>
       </fieldset>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field
-          label="Lesson date"
-          name="lessonDateInput"
-          type="date"
-          required
-          value={lessonDate}
-          onChange={(event) => setLessonDate(event.target.value)}
-          error={state.issues?.['lessonDate'] ?? state.issues?.['proposedStartAt']}
-          helper={`At least ${minimumNoticeHours} hours from now.`}
-        />
-        <Field
-          label="Start time"
-          name="lessonTimeInput"
-          type="time"
-          required
-          value={lessonTime}
-          onChange={(event) => setLessonTime(event.target.value)}
-        />
-      </div>
+      {unavailable.length > 0 ? (
+        <Alert tone="warning" title="Some tutors cannot do any of your times">
+          {unavailable.map((tutor) => tutor.tutorFirstName).join(' and ')}{' '}
+          {unavailable.length === 1 ? 'is' : 'are'} not free at any of the times you chose, so they
+          will not be asked. You can{' '}
+          <Link className="underline" href={timesHref}>
+            add a time they can do
+          </Link>{' '}
+          or send without them.
+        </Alert>
+      ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col">
-          <Label htmlFor="duration">How long</Label>
-          <select
-            id="duration"
-            className="h-10 w-full rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card px-3 text-base text-text-primary hover:border-text-muted"
-            value={durationMinutes}
-            onChange={(event) => setDurationMinutes(event.target.value)}
-          >
-            <option value="30">30 minutes</option>
-            <option value="45">45 minutes</option>
-            <option value="60">1 hour</option>
-            <option value="90">1 hour 30 minutes</option>
-            <option value="120">2 hours</option>
-          </select>
-        </div>
-        <div className="flex flex-col">
-          <Label htmlFor="format">Where</Label>
-          <select
-            id="format"
-            className="h-10 w-full rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card px-3 text-base text-text-primary hover:border-text-muted"
-            value={formatCode}
-            onChange={(event) => setFormatCode(event.target.value)}
-          >
-            <option value="online">Online</option>
-            <option value="in_person">In person</option>
-          </select>
-          {state.issues?.['formatCode'] !== undefined ? (
-            <p role="alert" className="mt-1 text-sm text-status-critical">
-              {state.issues['formatCode']}
-            </p>
-          ) : null}
-        </div>
+      <div className="flex flex-col sm:max-w-xs">
+        <Label htmlFor="format">Where</Label>
+        <select
+          id="format"
+          className="h-10 w-full rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card px-3 text-base text-text-primary hover:border-text-muted"
+          value={formatCode}
+          onChange={(event) => {
+            setFormatCode(event.target.value);
+          }}
+        >
+          <option value="online">Online</option>
+          <option value="in_person">In person</option>
+        </select>
+        {state.issues?.['formatCode'] !== undefined ? (
+          <p role="alert" className="mt-1 text-sm text-status-critical">
+            {state.issues['formatCode']}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-col">
@@ -189,9 +230,10 @@ export function RequestComposer({
           id="notes"
           rows={3}
           className="w-full rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card p-3 text-base text-text-primary hover:border-text-muted"
-          placeholder=""
           value={notes}
-          onChange={(event) => setNotes(event.target.value)}
+          onChange={(event) => {
+            setNotes(event.target.value);
+          }}
         />
         <p className="mt-1 text-sm text-text-secondary">
           Every tutor you ask sees this, along with {studentName}&rsquo;s year level and{' '}

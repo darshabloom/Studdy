@@ -50,3 +50,11 @@ export { ruleSettings } from './platform/rule-settings';
 export { intendedLessonRequests } from './bookings/intended-lesson-requests';
 export { tutorRequests } from './bookings/tutor-requests';
 export { tutorTimeReservations } from './availability/tutor-time-reservations';
+
+// tutor availability (feat/availability-and-multi-time-requests)
+export { availabilityRules } from './availability/availability-rules';
+export { availabilityExceptions } from './availability/availability-exceptions';
+
+// multi-time requests (feat/availability-and-multi-time-requests)
+export { requestTimeOptions } from './bookings/request-time-options';
+export { tutorRequestTimeOptions } from './bookings/tutor-request-time-options';

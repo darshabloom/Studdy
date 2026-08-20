@@ -35,14 +35,25 @@ export const intendedLessonRequests = bookingsSchema.table(
     familyAccountId: uuid('family_account_id').references(() => familyAccounts.id, {
       onDelete: 'restrict',
     }),
-    /** draft | awaiting_responses | ready_for_selection | fulfilled | closed */
+    /**
+     * draft | awaiting_responses | ready_for_selection | awaiting_payment |
+     * fulfilled | closed
+     *
+     * `fulfilled` is terminal and means a CONFIRMED BOOKING — not "the family
+     * chose someone". Selection lands on `awaiting_payment`, so a payment
+     * failure closes forward rather than needing to reverse out of a terminal
+     * state.
+     */
     statusCode: text('status_code').notNull().default('awaiting_responses'),
     /** Why it closed, for the requesting family only — never shown to tutors. */
     closeReasonCode: text('close_reason_code'),
 
-    // The intended lesson, as proposed. Immutable once sent.
-    proposedStartAt: timestamp('proposed_start_at', { withTimezone: true }).notNull(),
-    proposedEndAt: timestamp('proposed_end_at', { withTimezone: true }).notNull(),
+    /**
+     * The intended lesson. The *times* live in `request_time_options`: a
+     * request carries several acceptable times (D-3), not one, and a single
+     * proposed instant here would be a second source of truth for a set that
+     * can be partly taken, partly lapsed.
+     */
     durationMinutes: integer('duration_minutes').notNull(),
     /** online | in_person */
     formatCode: text('format_code').notNull(),
@@ -70,10 +81,9 @@ export const intendedLessonRequests = bookingsSchema.table(
   (table) => [
     check(
       'ilr_status_check',
-      sql`${table.statusCode} in ('draft', 'awaiting_responses', 'ready_for_selection', 'fulfilled', 'closed')`,
+      sql`${table.statusCode} in ('draft', 'awaiting_responses', 'ready_for_selection', 'awaiting_payment', 'fulfilled', 'closed')`,
     ),
     check('ilr_format_check', sql`${table.formatCode} in ('online', 'in_person')`),
-    check('ilr_time_order_check', sql`${table.proposedEndAt} > ${table.proposedStartAt}`),
     check('ilr_duration_positive_check', sql`${table.durationMinutes} > 0`),
     index('ilr_section_idx').on(table.studentSubjectSectionId),
     // Expiry sweeps scan open requests by deadline.

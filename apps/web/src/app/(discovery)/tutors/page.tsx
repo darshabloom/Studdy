@@ -1,10 +1,16 @@
 import Link from 'next/link';
-import { listShortlist, listSubjects, searchPublicTutors } from '@studdy/database';
+import {
+  bookableSlotsForSubjectSection,
+  listShortlist,
+  listSubjects,
+  searchPublicTutors,
+} from '@studdy/database';
 import { Alert, Button, EmptyState, StatusBadge } from '@studdy/design-system';
 import { schoolYearNumber } from '@studdy/domain/students';
 import { SHORTLIST_MAX_TUTORS, type PublicTutorResult } from '@studdy/domain/discovery';
 import { TutorCard } from '@/components/discovery/tutor-card';
 import { resolveDiscoveryContext } from '@/lib/discovery/context';
+import { availabilityWindow } from '@/lib/time';
 
 export const metadata = { title: 'Find a Tutor' };
 
@@ -63,6 +69,21 @@ export default async function TutorsPage({
         params.maxPrice !== undefined && params.maxPrice !== '' ? BigInt(params.maxPrice) : null,
     }),
   ]);
+
+  // Real bookable times, but only for a signed-in family acting on a real
+  // student/subject context (§7). A signed-out visitor sees the coarse label
+  // and nothing derived, so discovery is not an open calendar endpoint.
+  const slotsByTutorReference = new Map<string, readonly { startAt: Date; endAt: Date }[]>();
+  if (activeSection !== null && tutors.length > 0) {
+    const availability = await bookableSlotsForSubjectSection({
+      subjectSectionId: activeSection.subjectSectionId,
+      tutorReferences: tutors.map((tutor) => tutor.tutorReference),
+      ...availabilityWindow(),
+    });
+    for (const entry of availability) {
+      slotsByTutorReference.set(entry.tutorReference, entry.slots);
+    }
+  }
 
   const shortlist =
     activeSection !== null ? await listShortlist(activeSection.subjectSectionId) : [];
@@ -236,6 +257,11 @@ export default async function TutorsPage({
                 }
                 alreadyShortlisted={shortlistedReferences.has(tutor.tutorReference)}
                 shortlistFull={shortlistFull}
+                slots={
+                  activeSection === null
+                    ? undefined
+                    : (slotsByTutorReference.get(tutor.tutorReference) ?? [])
+                }
               />
             ))}
           </div>

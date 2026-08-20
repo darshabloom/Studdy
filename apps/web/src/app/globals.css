@@ -1,6 +1,22 @@
 @import 'tailwindcss';
 @import '@studdy/design-system/styles/tokens.css';
 
+/*
+ * The design system is a workspace package, so it resolves through a symlink in
+ * node_modules — and Tailwind's automatic content detection deliberately skips
+ * node_modules. Without this line, every utility class used ONLY inside a
+ * design system component is purged from the bundle: the components still
+ * render and still carry the right class names, but the rules behind them do
+ * not exist.
+ *
+ * That failure is quiet and badly misleading. Colour mostly survived, because
+ * the same tokens are used in application code too, so screens looked broadly
+ * right; what vanished was layout — `grid-cols-7`, `absolute`, `w-14` — which
+ * is why the week calendar collapsed into a vertical stack of full-width bars
+ * and read as a design problem rather than a missing stylesheet.
+ */
+@source '../../../../packages/design-system/src';
+
 body {
   background-color: var(--color-surface-page);
   color: var(--color-text-primary);

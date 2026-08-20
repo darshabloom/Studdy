@@ -13,7 +13,7 @@ describe('Intended Lesson Request transitions', () => {
   it('opens for responses and can close from any open state', () => {
     expect(canTransitionIlr('draft', 'awaiting_responses')).toBe(true);
     expect(canTransitionIlr('awaiting_responses', 'closed')).toBe(true);
-    expect(canTransitionIlr('ready_for_selection', 'fulfilled')).toBe(true);
+    expect(canTransitionIlr('ready_for_selection', 'awaiting_payment')).toBe(true);
   });
 
   it('never reopens a terminal request', () => {
@@ -25,6 +25,35 @@ describe('Intended Lesson Request transitions', () => {
 
   it('cannot skip straight from draft to fulfilled', () => {
     expect(canTransitionIlr('draft', 'fulfilled')).toBe(false);
+  });
+
+  it('selection lands on awaiting_payment, never on fulfilled', () => {
+    // `fulfilled` is terminal and means a confirmed booking — the interface
+    // renders it as "Booked". Reaching it at selection would claim a booking
+    // for a lesson nobody has paid for.
+    expect(canTransitionIlr('ready_for_selection', 'fulfilled')).toBe(false);
+    expect(canTransitionIlr('awaiting_responses', 'fulfilled')).toBe(false);
+  });
+
+  it('gives payment a forward path in both directions of outcome', () => {
+    // Success and failure both move forwards. Nothing has to reverse out of a
+    // terminal state, which is what made `fulfilled`-at-selection unworkable.
+    expect(canTransitionIlr('awaiting_payment', 'fulfilled')).toBe(true);
+    expect(canTransitionIlr('awaiting_payment', 'closed')).toBe(true);
+    expect(isTerminalIlrStatus('awaiting_payment')).toBe(false);
+  });
+
+  it('reaches a confirmed booking only through selection and then payment', () => {
+    const path = [
+      'draft',
+      'awaiting_responses',
+      'ready_for_selection',
+      'awaiting_payment',
+    ] as const;
+    for (const [index, from] of path.entries()) {
+      const next = path[index + 1] ?? 'fulfilled';
+      expect(canTransitionIlr(from, next), `${from} → ${next}`).toBe(true);
+    }
   });
 });
 

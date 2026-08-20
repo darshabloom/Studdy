@@ -2,12 +2,14 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { createDatabaseClient } from '../client';
 import {
   intendedLessonRequests,
+  requestTimeOptions,
   services,
   serviceVersions,
   studentProfiles,
   studentSubjectSections,
   subjects,
   tutorProfiles,
+  tutorRequestTimeOptions,
   tutorRequests,
   tutorTimeReservations,
 } from '../schema/index';
@@ -25,6 +27,32 @@ import {
 // Family-facing projection: the requester sees their own request in full.
 // ---------------------------------------------------------------------------
 
+export interface RequestTimeOptionView {
+  readonly startAt: Date;
+  readonly endAt: Date;
+  readonly position: number;
+  /** offered | taken | lapsed | withdrawn */
+  readonly statusCode: string;
+}
+
+export interface OfferedTimeView {
+  readonly startAt: Date;
+  readonly endAt: Date;
+  /** offered | claimed | unavailable | lapsed */
+  readonly statusCode: string;
+}
+
+export interface TutorOfferedTimeView extends OfferedTimeView {
+  /**
+   * This offered row's own id — what the tutor names when accepting.
+   *
+   * Their own record, not `request_time_option_id`: that one identifies the
+   * family's option and belongs to the other side of the boundary, so it is
+   * never selected here.
+   */
+  readonly tutorRequestTimeOptionId: string;
+}
+
 export interface FamilyTutorRequestView {
   readonly tutorRequestId: string;
   readonly reference: string;
@@ -36,14 +64,16 @@ export interface FamilyTutorRequestView {
   readonly tutorReference: string;
   readonly priceAmountMinor: bigint;
   readonly currencyCode: string;
+  /** Which of the family's times this tutor was actually asked about. */
+  readonly offeredTimes: readonly OfferedTimeView[];
 }
 
 export interface FamilyRequestView {
   readonly intendedLessonRequestId: string;
   readonly reference: string;
   readonly statusCode: string;
-  readonly proposedStartAt: Date;
-  readonly proposedEndAt: Date;
+  /** Every time the family offered, in the order they chose them. */
+  readonly timeOptions: readonly RequestTimeOptionView[];
   readonly durationMinutes: number;
   readonly formatCode: string;
   readonly timeZone: string;
@@ -67,8 +97,6 @@ export async function listRequestsForStudents(
         id: intendedLessonRequests.id,
         reference: intendedLessonRequests.reference,
         statusCode: intendedLessonRequests.statusCode,
-        proposedStartAt: intendedLessonRequests.proposedStartAt,
-        proposedEndAt: intendedLessonRequests.proposedEndAt,
         durationMinutes: intendedLessonRequests.durationMinutes,
         formatCode: intendedLessonRequests.formatCode,
         timeZone: intendedLessonRequests.timeZone,
@@ -114,12 +142,56 @@ export async function listRequestsForStudents(
       )
       .orderBy(tutorRequests.position);
 
+    // The family's own full set of times, and the subset each tutor was asked
+    // about. Both are family-side reads: this projection serves the requester.
+    const options = await db
+      .select({
+        ilrId: requestTimeOptions.intendedLessonRequestId,
+        startAt: requestTimeOptions.startsAt,
+        endAt: requestTimeOptions.endsAt,
+        position: requestTimeOptions.position,
+        statusCode: requestTimeOptions.statusCode,
+      })
+      .from(requestTimeOptions)
+      .where(
+        inArray(
+          requestTimeOptions.intendedLessonRequestId,
+          rows.map((row) => row.id),
+        ),
+      )
+      .orderBy(requestTimeOptions.position);
+
+    const offered =
+      children.length === 0
+        ? []
+        : await db
+            .select({
+              tutorRequestId: tutorRequestTimeOptions.tutorRequestId,
+              startAt: tutorRequestTimeOptions.startsAt,
+              endAt: tutorRequestTimeOptions.endsAt,
+              statusCode: tutorRequestTimeOptions.statusCode,
+            })
+            .from(tutorRequestTimeOptions)
+            .where(
+              inArray(
+                tutorRequestTimeOptions.tutorRequestId,
+                children.map((child) => child.tutorRequestId),
+              ),
+            )
+            .orderBy(tutorRequestTimeOptions.startsAt);
+
     return rows.map((row) => ({
       intendedLessonRequestId: row.id,
       reference: row.reference,
       statusCode: row.statusCode,
-      proposedStartAt: row.proposedStartAt,
-      proposedEndAt: row.proposedEndAt,
+      timeOptions: options
+        .filter((option) => option.ilrId === row.id)
+        .map((option) => ({
+          startAt: option.startAt,
+          endAt: option.endAt,
+          position: option.position,
+          statusCode: option.statusCode,
+        })),
       durationMinutes: row.durationMinutes,
       formatCode: row.formatCode,
       timeZone: row.timeZone,
@@ -140,6 +212,13 @@ export async function listRequestsForStudents(
           tutorReference: child.tutorReference,
           priceAmountMinor: child.priceAmountMinor,
           currencyCode: child.currencyCode,
+          offeredTimes: offered
+            .filter((entry) => entry.tutorRequestId === child.tutorRequestId)
+            .map((entry) => ({
+              startAt: entry.startAt,
+              endAt: entry.endAt,
+              statusCode: entry.statusCode,
+            })),
         })),
     }));
   } finally {
@@ -181,9 +260,16 @@ export interface TutorRequestView {
   readonly statusCode: string;
   readonly respondByAt: Date;
   readonly sentAt: Date;
-  /** The proposed lesson, which the tutor needs to assess the request. */
-  readonly proposedStartAt: Date;
-  readonly proposedEndAt: Date;
+  /**
+   * The times THIS tutor was offered, and nothing else.
+   *
+   * Never the family's full set: its size alone would tell the tutor how
+   * flexible the family is, and by extension how easily replaced this tutor
+   * would be. A tutor whose subset is smaller than the family's set cannot
+   * tell that from this projection, because nothing here counts anything they
+   * were not asked about.
+   */
+  readonly offeredTimes: readonly TutorOfferedTimeView[];
   readonly durationMinutes: number;
   readonly formatCode: string;
   readonly timeZone: string;
@@ -231,13 +317,19 @@ export async function listRequestsForTutor(
   try {
     const rows = await db
       .select({
+        tutorRequestId: tutorRequests.id,
         reference: tutorRequests.reference,
         statusCode: tutorRequests.statusCode,
         respondByAt: tutorRequests.respondByAt,
         sentAt: tutorRequests.sentAt,
-        proposedStartAt: intendedLessonRequests.proposedStartAt,
-        proposedEndAt: intendedLessonRequests.proposedEndAt,
-        durationMinutes: intendedLessonRequests.durationMinutes,
+        // THIS tutor's own lesson length, not the family-side figure.
+        //
+        // The ILR stores the longest duration across the invited tutors, so a
+        // 60-minute tutor invited alongside a 90-minute one would have been
+        // shown "90 minutes" — a number they know is not theirs, and therefore
+        // proof that someone else was asked. Their own service version is both
+        // the truthful answer and the one that reveals nothing.
+        durationMinutes: serviceVersions.durationMinutes,
         formatCode: intendedLessonRequests.formatCode,
         timeZone: intendedLessonRequests.timeZone,
         notesForTutors: intendedLessonRequests.notesForTutors,
@@ -280,7 +372,41 @@ export async function listRequestsForTutor(
       )
       .orderBy(desc(tutorRequests.sentAt));
 
-    return rows;
+    if (rows.length === 0) return [];
+
+    // Only this tutor's own offered rows. `request_time_option_id` is
+    // deliberately not selected: it is an identifier from the family's side of
+    // the boundary, and nothing tutor-facing has any use for it.
+    const offered = await db
+      .select({
+        tutorRequestTimeOptionId: tutorRequestTimeOptions.id,
+        tutorRequestId: tutorRequestTimeOptions.tutorRequestId,
+        startAt: tutorRequestTimeOptions.startsAt,
+        endAt: tutorRequestTimeOptions.endsAt,
+        statusCode: tutorRequestTimeOptions.statusCode,
+      })
+      .from(tutorRequestTimeOptions)
+      .where(
+        inArray(
+          tutorRequestTimeOptions.tutorRequestId,
+          rows.map((row) => row.tutorRequestId),
+        ),
+      )
+      .orderBy(tutorRequestTimeOptions.startsAt);
+
+    // Map explicitly and drop the internal id, so the view a tutor receives
+    // carries no key belonging to the request record itself.
+    return rows.map(({ tutorRequestId, ...view }) => ({
+      ...view,
+      offeredTimes: offered
+        .filter((entry) => entry.tutorRequestId === tutorRequestId)
+        .map((entry) => ({
+          tutorRequestTimeOptionId: entry.tutorRequestTimeOptionId,
+          startAt: entry.startAt,
+          endAt: entry.endAt,
+          statusCode: entry.statusCode,
+        })),
+    }));
   } finally {
     await sql.end();
   }

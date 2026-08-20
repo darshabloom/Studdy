@@ -47,7 +47,15 @@ export default async function RequestsPage() {
                       {request.subjectDisplayName} for {request.studentPreferredName}
                     </p>
                     <p className="mt-1 text-sm text-text-secondary">
-                      {formatLessonDateTime(request.proposedStartAt, request.timeZone)}
+                      {request.timeOptions.length === 0
+                        ? 'No times recorded'
+                        : `${formatLessonDateTime(request.timeOptions[0]!.startAt, request.timeZone)}${
+                            request.timeOptions.length > 1
+                              ? ` and ${String(request.timeOptions.length - 1)} other ${
+                                  request.timeOptions.length === 2 ? 'time' : 'times'
+                                }`
+                              : ''
+                          }`}
                     </p>
                     <p className="mt-1 text-sm text-text-secondary">
                       Sent to {request.tutorRequests.length}{' '}
@@ -55,7 +63,10 @@ export default async function RequestsPage() {
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <FamilyRequestStatus statusCode={request.statusCode} />
+                    <FamilyRequestStatus
+                      statusCode={request.statusCode}
+                      closeReasonCode={request.closeReasonCode}
+                    />
                     <Button size="sm" variant="secondary" asChild>
                       <Link href={`/requests/${request.reference}`}>View request</Link>
                     </Button>

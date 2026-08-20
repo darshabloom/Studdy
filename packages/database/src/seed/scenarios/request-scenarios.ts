@@ -8,8 +8,38 @@ import {
   subjects,
   tutorProfiles,
 } from '../../schema/index';
+import { bookableSlotsForSubjectSection } from '../../repositories/availability';
 import { createIntendedLessonRequest } from '../../repositories/lesson-requests';
 import { setRuleSetting } from '../../repositories/rule-settings';
+
+/**
+ * Real bookable start times shared by the target tutors.
+ *
+ * A request may now only offer times its tutors can actually do, so a seed
+ * cannot invent "five days from now" and expect it to be accepted — the seeded
+ * tutors work weekday afternoons, and an arbitrary instant almost never lands
+ * inside those hours. Deriving from live availability keeps the scenarios
+ * honest against whatever the availability seed produced.
+ */
+async function bookableStartsFor(
+  target: { subjectSectionId: string; tutorProfileIds: readonly string[] },
+  count: number,
+): Promise<Date[]> {
+  const from = new Date();
+  const availability = await bookableSlotsForSubjectSection({
+    subjectSectionId: target.subjectSectionId,
+    from,
+    to: new Date(from.getTime() + 21 * 24 * 60 * 60 * 1000),
+  });
+  const wanted = new Set(target.tutorProfileIds);
+  const starts = availability
+    .filter((entry) => wanted.has(entry.tutorProfileId))
+    .flatMap((entry) => entry.slots.map((slot) => slot.startAt.getTime()));
+  return [...new Set(starts)]
+    .sort((a, b) => a - b)
+    .slice(0, count)
+    .map((at) => new Date(at));
+}
 
 /**
  * Seeded request scenarios for the ILR slice.
@@ -124,14 +154,20 @@ export async function seedMultiTutorRequestPending(): Promise<void> {
     return;
   }
 
-  const start = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+  const proposedStarts = await bookableStartsFor(target, 2);
+  if (proposedStarts.length < 2) {
+    console.warn(
+      'skipped multi_tutor_request_pending: the seeded tutors have no bookable times to offer. ' +
+        'Run the discovery seed so they have availability.',
+    );
+    return;
+  }
   const created = await createIntendedLessonRequest({
     studentSubjectSectionId: target.subjectSectionId,
     requestedByUserId: target.requesterUserId,
     familyAccountId: null,
     tutorProfileIds: target.tutorProfileIds,
-    proposedStartAt: start,
-    proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+    proposedStarts,
     formatCode: 'online',
     timeZone: 'Pacific/Auckland',
     notesForTutors: 'Working towards an end-of-term algebra test.',
@@ -156,16 +192,20 @@ export async function seedExpiredRequest(): Promise<void> {
     return;
   }
 
-  // Two hours ahead is the minimum notice, so this is valid to create; we then
-  // rewind its deadlines so an expiry run has something genuinely overdue.
-  const start = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  // Created against genuinely bookable times, then its deadlines are rewound
+  // so an expiry run has something actually overdue to close.
+  const singleTutor = { ...target, tutorProfileIds: target.tutorProfileIds.slice(0, 1) };
+  const proposedStarts = await bookableStartsFor(singleTutor, 2);
+  if (proposedStarts.length < 2) {
+    console.warn('skipped request_expired: the seeded tutor has no bookable times to offer.');
+    return;
+  }
   const created = await createIntendedLessonRequest({
     studentSubjectSectionId: target.subjectSectionId,
     requestedByUserId: target.requesterUserId,
     familyAccountId: null,
-    tutorProfileIds: target.tutorProfileIds.slice(0, 1),
-    proposedStartAt: start,
-    proposedEndAt: new Date(start.getTime() + 60 * 60 * 1000),
+    tutorProfileIds: singleTutor.tutorProfileIds,
+    proposedStarts,
     formatCode: 'online',
     timeZone: 'Pacific/Auckland',
     notesForTutors: null,

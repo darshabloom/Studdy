@@ -6,7 +6,10 @@ import { redirect } from 'next/navigation';
 import {
   createIntendedLessonRequest,
   findRequestForStudents,
+  NoTutorAvailableError,
   RequestValidationError,
+  selectAcceptedTutorRequest,
+  SelectionNoLongerAvailableError,
   SlotUnavailableError,
   withdrawRequest,
 } from '@studdy/database';
@@ -16,6 +19,19 @@ export interface RequestFormState {
   error: string | null;
   issues?: Record<string, string>;
 }
+
+/**
+ * The zone lesson times are entered and stored in.
+ *
+ * The form collects a wall-clock date and time, which is meaningless without a
+ * zone. Constructing `new Date('2026-09-01T16:00:00')` would read it in the
+ * *server's* zone — 16:00 on a developer's machine in Auckland, but 16:00 UTC
+ * on a CI runner or a deployed host, i.e. a different lesson four in the
+ * morning. Availability rules are stored against this zone, so the entered time
+ * has to be resolved against it too or a request lands outside the hours the
+ * tutor actually offered.
+ */
+const REQUEST_TIME_ZONE = 'Pacific/Auckland';
 
 /**
  * Send an Intended Lesson Request to the chosen tutors.
@@ -46,24 +62,24 @@ export async function sendLessonRequestAction(
     return { error: null, issues: { targets: 'Choose at least one tutor.' } };
   }
 
-  const date = String(formData.get('lessonDate') ?? '');
-  const time = String(formData.get('lessonTime') ?? '');
-  const durationMinutes = Number(formData.get('durationMinutes') ?? 60);
   const formatCode = String(formData.get('formatCode') ?? 'online');
   const notes = String(formData.get('notesForTutors') ?? '').trim();
 
-  if (date === '' || time === '') {
-    return {
-      error: null,
-      issues: { lessonDate: 'Choose the date and time you would like the lesson.' },
-    };
+  // The times the family chose on the availability grid. They arrive as
+  // instants rather than a wall-clock date and time, because they were picked
+  // from real bookable slots — there is no wall clock left to interpret, and
+  // nothing for a zone mismatch to shift.
+  const proposedStarts: Date[] = [];
+  for (const raw of formData.getAll('time').map(String)) {
+    const at = new Date(raw);
+    if (Number.isNaN(at.getTime())) {
+      return { error: null, issues: { times: 'One of those times could not be understood.' } };
+    }
+    proposedStarts.push(at);
   }
-
-  const proposedStartAt = new Date(`${date}T${time}:00`);
-  if (Number.isNaN(proposedStartAt.getTime())) {
-    return { error: null, issues: { lessonDate: 'That date and time could not be understood.' } };
+  if (proposedStarts.length === 0) {
+    return { error: null, issues: { times: 'Choose the times that would suit you.' } };
   }
-  const proposedEndAt = new Date(proposedStartAt.getTime() + durationMinutes * 60 * 1000);
 
   let reference: string;
   try {
@@ -72,10 +88,9 @@ export async function sendLessonRequestAction(
       requestedByUserId: context.studdyUserId,
       familyAccountId: context.familyAccountId,
       tutorProfileIds,
-      proposedStartAt,
-      proposedEndAt,
+      proposedStarts,
       formatCode,
-      timeZone: 'Pacific/Auckland',
+      timeZone: REQUEST_TIME_ZONE,
       notesForTutors: notes === '' ? null : notes,
       // No payment method exists until the Stripe slice; the gate is
       // configuration-driven and currently disabled.
@@ -88,16 +103,66 @@ export async function sendLessonRequestAction(
     if (error instanceof RequestValidationError) {
       return { error: null, issues: error.issues };
     }
+    if (error instanceof NoTutorAvailableError) {
+      return {
+        error:
+          'None of the tutors you chose are free at any of those times any more, so nothing was sent. Go back and choose some different times.',
+      };
+    }
     if (error instanceof SlotUnavailableError) {
       return {
         error:
-          'One of the tutors you chose is no longer free at that time, so nothing was sent. Choose another time, or a different tutor, and try again.',
+          'One of the tutors you chose is no longer free at those times, so nothing was sent. Choose another time, or a different tutor, and try again.',
       };
     }
     throw error;
   }
 
   revalidatePath('/requests');
+  redirect(`/requests/${reference}`);
+}
+
+/**
+ * Choose one accepted tutor and time (design §3.1 step 11, D-5).
+ *
+ * The family's scope comes from the session: `selectAcceptedTutorRequest`
+ * filters the request by the student profiles this user may act for, so a
+ * reference belonging to another family matches nothing rather than being
+ * found and refused.
+ */
+export async function selectTutorAction(
+  _previous: RequestFormState,
+  formData: FormData,
+): Promise<RequestFormState> {
+  const context = await resolveDiscoveryContext();
+  if (context === null) return { error: 'Sign in to choose a tutor.' };
+
+  const reference = String(formData.get('reference') ?? '');
+  const tutorRequestReference = String(formData.get('tutorRequestReference') ?? '');
+  if (reference === '' || tutorRequestReference === '') {
+    return { error: null, issues: { selection: 'Choose the tutor and time you would like.' } };
+  }
+
+  try {
+    await selectAcceptedTutorRequest({
+      reference,
+      studentProfileIds: context.students.map((student) => student.studentProfileId),
+      tutorRequestReference,
+      actorUserId: context.studdyUserId,
+      correlationId: `cor_${randomUUID()}`,
+    });
+  } catch (error) {
+    if (error instanceof SelectionNoLongerAvailableError) {
+      return {
+        error:
+          'That tutor and time is no longer available to choose. Refresh to see what is still open.',
+      };
+    }
+    throw error;
+  }
+
+  revalidatePath('/requests');
+  revalidatePath(`/requests/${reference}`);
   redirect(`/requests/${reference}`);
 }
 

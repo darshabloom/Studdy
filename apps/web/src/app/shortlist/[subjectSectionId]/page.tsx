@@ -137,8 +137,8 @@ export default async function ShortlistPage({
         {entries.length > 0 ? (
           <div className="mt-6 flex flex-wrap gap-2">
             <Button asChild>
-              <Link href={`/requests/new?section=${section.subjectSectionId}`}>
-                Send request to {entries.length} {entries.length === 1 ? 'tutor' : 'tutors'}
+              <Link href={`/shortlist/${section.subjectSectionId}/times`}>
+                Choose times for {entries.length} {entries.length === 1 ? 'tutor' : 'tutors'}
               </Link>
             </Button>
             <Button variant="secondary" asChild>

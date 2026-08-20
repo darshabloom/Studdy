@@ -4,10 +4,16 @@ export {
   type RequestRules,
   type ResponseDeadlineTier,
 } from './request-rules';
-export { calculateDeadlines, selectResponseTier, type DeadlineCalculation } from './deadlines';
+export {
+  acceptanceHoldExpiry,
+  calculateDeadlines,
+  selectResponseTier,
+  type DeadlineCalculation,
+} from './deadlines';
 export {
   validateFanOut,
   assignPositions,
+  offeredSubset,
   slotUnavailableError,
   type FanOutInput,
   type FanOutTarget,

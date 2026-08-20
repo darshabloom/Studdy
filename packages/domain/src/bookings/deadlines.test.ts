@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDeadlines, selectResponseTier } from './deadlines';
+import { acceptanceHoldExpiry, calculateDeadlines, selectResponseTier } from './deadlines';
 import { PROVISIONAL_REQUEST_RULES, type RequestRules } from './request-rules';
 
 const rules: RequestRules = PROVISIONAL_REQUEST_RULES;
@@ -66,5 +66,35 @@ describe('calculateDeadlines', () => {
     expect(calculateDeadlines(rules, hoursFromNow(100), now).appliedTier.minHoursUntilLesson).toBe(
       48,
     );
+  });
+});
+
+describe('acceptanceHoldExpiry', () => {
+  it('holds for the configured window when the lesson is far off', () => {
+    // Eight hours from acceptance, well before the lesson's own cutoff.
+    const lesson = hoursFromNow(200);
+    expect(acceptanceHoldExpiry(rules, now, lesson).toISOString()).toBe(
+      hoursFromNow(8).toISOString(),
+    );
+  });
+
+  it('ends before the lesson when that comes first', () => {
+    // A lesson four hours away: the cutoff (two hours before it) binds, not
+    // the eight-hour window.
+    const lesson = hoursFromNow(4);
+    expect(acceptanceHoldExpiry(rules, now, lesson).toISOString()).toBe(
+      hoursFromNow(2).toISOString(),
+    );
+  });
+
+  it('never outlives the point at which the lesson stops being bookable', () => {
+    // Minimum notice and the hold cutoff are the same figure, so a hold that
+    // survived past it would be protecting a slot nobody could book.
+    for (const hoursAway of [3, 6, 12, 48, 500]) {
+      const lesson = hoursFromNow(hoursAway);
+      const expiry = acceptanceHoldExpiry(rules, now, lesson);
+      const unbookableFrom = new Date(lesson.getTime() - rules.minimumNoticeHours * 60 * 60 * 1000);
+      expect(expiry.getTime()).toBeLessThanOrEqual(unbookableFrom.getTime());
+    }
   });
 });

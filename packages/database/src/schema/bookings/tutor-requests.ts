@@ -71,6 +71,23 @@ export const tutorRequests = bookingsSchema.table(
     closeReasonCode: text('close_reason_code'),
     /** Tutor-supplied decline reason, arriving with the response slice. */
     declineReasonCode: text('decline_reason_code'),
+    /**
+     * The claimed time, once this tutor has accepted one (design §4.6).
+     *
+     * Untyped as a foreign key here to avoid a circular table reference:
+     * `tutor_request_time_options` already points at this table. The
+     * constraint is added in reviewed SQL alongside the new tables.
+     */
+    acceptedTimeOptionId: uuid('accepted_time_option_id'),
+    /**
+     * Snapshot of `min(accepted_at + 8h, offered_start − 2h)` — D-8. The hold
+     * can never outlive the point at which the lesson stops being bookable
+     * anyway, since minimum notice is also 2h; a hold living longer would be
+     * protecting a slot nobody could still book.
+     */
+    acceptanceHoldExpiresAt: timestamp('acceptance_hold_expires_at', { withTimezone: true }),
+    /** The rule version that produced the hold expiry above. */
+    holdRuleVersion: integer('hold_rule_version'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, {
       onDelete: 'restrict',
     }),

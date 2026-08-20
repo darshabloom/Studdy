@@ -98,6 +98,51 @@ export const SYNTHETIC_USERS: readonly SyntheticUser[] = [
     email: 'parent.tutor@local.studdy.test',
     displayName: 'Synthetic Parent-Tutor',
     roleCodes: ['parent_guardian', 'tutor'],
-    deterministicAuthId: '00000000-0000-4000-9000-000000000011',
+    // Was …011, colliding with parent.requests@. See
+    // assertUniqueSyntheticUsers below for why that mattered.
+    deterministicAuthId: '00000000-0000-4000-9000-000000000013',
   },
 ] as const;
+
+/**
+ * Two synthetic users once shared a `deterministicAuthId`
+ * (`parent.requests@` and `parent.tutor@`, both `…011`).
+ *
+ * It never bit locally, which is exactly why it survived: when
+ * `SUPABASE_SERVICE_ROLE_KEY` is present Supabase Auth assigns real ids and
+ * this value goes unused. It is the fallback for the plain-Postgres path, where
+ * a collision would silently merge two accounts holding different roles — a
+ * multi-role account appearing where a single-role one was seeded, and
+ * workspace resolution behaving unlike every developer's machine.
+ *
+ * Called at module load so seeding fails loudly rather than producing quietly
+ * wrong data, and asserted again by unit test.
+ */
+export function assertUniqueSyntheticUsers(
+  users: readonly SyntheticUser[] = SYNTHETIC_USERS,
+): void {
+  const firstDuplicate = (field: 'email' | 'deterministicAuthId'): string | undefined => {
+    const seen = new Set<string>();
+    for (const user of users) {
+      if (seen.has(user[field])) return user[field];
+      seen.add(user[field]);
+    }
+    return undefined;
+  };
+
+  const duplicateId = firstDuplicate('deterministicAuthId');
+  if (duplicateId !== undefined) {
+    throw new Error(
+      `Duplicate deterministicAuthId in SYNTHETIC_USERS: ${duplicateId}. Every synthetic ` +
+        'user needs its own fallback id, or the plain-Postgres seed path merges two ' +
+        'accounts into one.',
+    );
+  }
+
+  const duplicateEmail = firstDuplicate('email');
+  if (duplicateEmail !== undefined) {
+    throw new Error(`Duplicate email in SYNTHETIC_USERS: ${duplicateEmail}.`);
+  }
+}
+
+assertUniqueSyntheticUsers();

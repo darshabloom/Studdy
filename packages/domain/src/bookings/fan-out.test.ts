@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { assignPositions, validateFanOut, type FanOutInput } from './fan-out';
+import { assignPositions, offeredSubset, validateFanOut, type FanOutInput } from './fan-out';
 import { PROVISIONAL_REQUEST_RULES, type RequestRules } from './request-rules';
 
 const now = new Date('2026-08-10T09:00:00.000Z');
 const start = new Date('2026-08-15T09:00:00.000Z');
-const end = new Date('2026-08-15T10:00:00.000Z');
+const laterStart = new Date('2026-08-16T09:00:00.000Z');
 
 function input(overrides: Partial<FanOutInput> = {}): FanOutInput {
   return {
@@ -12,8 +12,8 @@ function input(overrides: Partial<FanOutInput> = {}): FanOutInput {
       { tutorProfileId: 'tutor-a', serviceVersionId: 'sv-a' },
       { tutorProfileId: 'tutor-b', serviceVersionId: 'sv-b' },
     ],
-    proposedStartAt: start,
-    proposedEndAt: end,
+    proposedStarts: [start, laterStart],
+    durationMinutes: 60,
     formatCode: 'online',
     hasPaymentMethodOnFile: false,
     paymentExemptionCode: null,
@@ -63,25 +63,56 @@ describe('validateFanOut', () => {
 
   it('rejects a lesson in the past', () => {
     const past = new Date(now.getTime() - 60 * 60 * 1000);
-    const result = validateFanOut(rules, input({ proposedStartAt: past, proposedEndAt: now }), now);
-    expect(issuesOf(result)['proposedStartAt']).toMatch(/in the future/i);
+    const result = validateFanOut(rules, input({ proposedStarts: [past, laterStart] }), now);
+    expect(issuesOf(result)['times']).toMatch(/in the future/i);
   });
 
-  it('enforces minimum notice', () => {
+  it('enforces minimum notice on every offered time, not just the first', () => {
+    // A tutor may accept any of them, so a time that is already too close is
+    // not a lesser option — it is one they could be asked to honour.
     const soon = new Date(now.getTime() + 30 * 60 * 1000);
-    const soonEnd = new Date(soon.getTime() + 60 * 60 * 1000);
+    const result = validateFanOut(rules, input({ proposedStarts: [laterStart, soon] }), now);
+    expect(issuesOf(result)['times']).toMatch(/at least 2 hours/i);
+  });
+
+  it('requires at least two different times', () => {
+    expect(
+      issuesOf(validateFanOut(rules, input({ proposedStarts: [start] }), now))['times'],
+    ).toMatch(/at least 2 different times/i);
+  });
+
+  it('does not let the same time twice satisfy the minimum', () => {
+    // Two identical times are one choice. Counting them as two would let a
+    // family meet the bound while giving a tutor no alternative at all.
+    const twice = [start, new Date(start.getTime())];
+    expect(issuesOf(validateFanOut(rules, input({ proposedStarts: twice }), now))['times']).toMatch(
+      /at least 2 different times/i,
+    );
+  });
+
+  it('rejects more times than the cap', () => {
+    const six = Array.from(
+      { length: 6 },
+      (_unused, index) => new Date(start.getTime() + index * 86_400_000),
+    );
+    expect(issuesOf(validateFanOut(rules, input({ proposedStarts: six }), now))['times']).toMatch(
+      /no more than 5 times/i,
+    );
+  });
+
+  it('returns the offered times chronologically and de-duplicated', () => {
     const result = validateFanOut(
       rules,
-      input({ proposedStartAt: soon, proposedEndAt: soonEnd }),
+      input({ proposedStarts: [laterStart, start, new Date(start.getTime())] }),
       now,
     );
-    expect(issuesOf(result)['proposedStartAt']).toMatch(/at least 2 hours/i);
-  });
-
-  it('rejects an end time at or before the start', () => {
-    expect(
-      issuesOf(validateFanOut(rules, input({ proposedEndAt: start }), now))['proposedEndAt'],
-    ).toMatch(/end after it starts/i);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.proposedStarts.map((at) => at.toISOString())).toEqual([
+        start.toISOString(),
+        laterStart.toISOString(),
+      ]);
+    }
   });
 
   it('rejects an unknown format', () => {
@@ -115,6 +146,36 @@ describe('validateFanOut', () => {
       );
       expect(result.ok).toBe(true);
     });
+  });
+});
+
+describe('offeredSubset', () => {
+  const a = new Date('2026-08-15T09:00:00.000Z');
+  const b = new Date('2026-08-16T09:00:00.000Z');
+  const c = new Date('2026-08-17T09:00:00.000Z');
+
+  it('offers a tutor only the times they can actually do', () => {
+    expect(offeredSubset([a, b, c], [b, c]).map((at) => at.toISOString())).toEqual([
+      b.toISOString(),
+      c.toISOString(),
+    ]);
+  });
+
+  it('keeps the family order rather than the tutor calendar order', () => {
+    expect(offeredSubset([a, b], [b, a]).map((at) => at.toISOString())).toEqual([
+      a.toISOString(),
+      b.toISOString(),
+    ]);
+  });
+
+  it('is empty when the tutor can do none of them', () => {
+    // The caller must not send this tutor a request at all: an unanswerable
+    // request is worse than no request.
+    expect(offeredSubset([a, b], [c])).toEqual([]);
+  });
+
+  it('matches on the instant, not object identity', () => {
+    expect(offeredSubset([a], [new Date(a.getTime())])).toHaveLength(1);
   });
 });
 
