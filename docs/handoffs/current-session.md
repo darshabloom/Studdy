@@ -32,36 +32,32 @@ current; they are not duplicates.
 
 ## 2. Where the work is
 
-**Branch:** `feat/availability-and-multi-time-requests`
-**HEAD:** see `git log -1`. Step 2 is complete through the accessibility pass on the
-shared availability editor.
-**Open pull request:** [#17](https://github.com/darshabloom/Studdy/pull/17) — **DRAFT, open, unmerged.**
+**Branch:** `main`. **HEAD:** `5b948b4928b68238b3eff2c2a5e038b4d901e45a` (`5b948b4`) —
+_feat: tutor availability, multi-time requests and the calendar-first tutor workspace (PR5) (#17)_
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
-> **Do not merge PR #17 without the owner's explicit approval.** It is deliberately a draft.
-> The backend is complete and reviewed; the UX redesign below is what makes the slice
-> acceptable, and it is only one step in.
+> **PR [#17](https://github.com/darshabloom/Studdy/pull/17) IS MERGED** (squash, 2026-08-20).
+> There is no open pull request. UX redesign **steps 1 and 2 are complete and on `main`**;
+> steps 3–6 remain. Branch fresh from `main` for step 3 — do not reuse
+> `feat/availability-and-multi-time-requests`, which is now merged history.
 
-### Commits on this branch, oldest first
+### What PR #17 delivered
 
-| Commit    | What                                                                        |
-| --------- | --------------------------------------------------------------------------- |
-| `bf3ff05` | checkpoint 1 — availability schema, slot calculation, `/tutor/availability` |
-| `5a9e8ad` | checkpoint 2 — discovery availability signals, combined time grid           |
-| `3c1f465` | checkpoint 3 — multi-time requests, per-tutor option subsets                |
-| `e8371af` | checkpoint 4 — tutor accept and decline, hold at acceptance                 |
-| `9d1ea53` | checkpoint 5 — family selection close-out, `awaiting_payment`               |
-| `905cf9e` | close-out audit fidelity, family-visible lapse reasons                      |
-| `10bc283` | UX redesign step 1 — shared `WeekCalendar` primitive                        |
-| `bb2ecaf` | fresh-session checkpoint and handoff rewrite                                |
-| `793937a` | **UX redesign step 2 — calendar-first `/tutor/availability`**               |
-| `e37933b` | step 2 visual pass — a real week grid, and the CSS purge that hid it        |
-| `50d5dd9` | docs: styling is no longer deferred to step 6                               |
-| `a0d3507` | step 2 refinements — teaching-day window, shared editor, format scoping     |
-| _HEAD_    | **step 2 close-out — editor dialog accessibility**                          |
+The whole availability and multi-time-request foundation, squashed into `5b948b4`:
+the `availability` schema with recurring rules, one-off additions and blocked periods;
+derived bookable-slot calculation; the family-facing availability surface; multi-time
+requests with per-tutor offered subsets; tutor accept and decline with the hold taken at
+acceptance; family selection close-out landing on `awaiting_payment`; the shared
+`WeekCalendar` primitive (step 1); and the calendar-first `/tutor/availability` with its
+visual, refinement and accessibility passes (step 2).
 
-Branched from `b4464a8` (PR #14, intended lesson requests). Merged before that: PR1 bootstrap
-(`91931e5`), PR2 identity (`d3116ed`), PR3 family/students/discovery (`51c0135`).
+Merge convention on this repository is **squash**, one commit per PR with a `(#N)` suffix.
+`main` is linear; every commit has a single parent. Preceding it: `b4464a8` (PR4 intended
+lesson requests), `51c0135` (PR3), `d3116ed` (PR2), `91931e5` (PR1).
+
+`main` is not branch-protected, but CI runs on every pull request and all four jobs
+— typecheck/lint/unit/build, migrations+seeds+integration, Playwright end-to-end, secret
+scanning — were green on the merged commit, as were the Vercel checks.
 
 **Repository location: `S:\Studdy`.** Not `E:\ExternalStorage\Projects\Studdy` — that path
 is on an exFAT volume which cannot store symlinks, so pnpm workspaces cannot install there.
@@ -190,8 +186,8 @@ at its natural expiry.
 
 ### THE UX REDESIGN IS NOW AUTHORITATIVE
 
-**The owner reviewed the working slice and directed a user-journey and interaction redesign
-before PR #17 may merge.** Where this handoff, `docs/design/multi-time-availability-redesign.md`
+**The owner reviewed the working slice and directed a user-journey and interaction redesign,
+which gated PR #17 and is now partly delivered (steps 1-2).** Where this handoff, `docs/design/multi-time-availability-redesign.md`
 or any screen disagrees with the redesign below, **the redesign wins**. In particular the
 older shortlist-first presentation described in the design document's §3.1 is superseded.
 
@@ -427,8 +423,13 @@ them; do not silently drop them either.
 - **Cosmetic and audit nits** from the checkpoint 5 review: a loser's family time option
   stays labelled "taken" after the loser closes; the expiry sweep hard-codes the open-ILR
   status list in three places rather than referencing `OPEN_ILR_STATUSES`.
-- **CI has not run on this branch.** All verification reported here was run locally against a
-  real database. Check the Actions tab before relying on CI.
+- **CI runs on every pull request and was fully green on the merged commit.** Note the trap
+  it caught: `packages/database` has no vitest config of its own, so `pnpm test` sweeps the
+  integration suites into the unit run. Every integration file therefore needs the
+  `describe.skipIf(!available)` guard AND must keep its `beforeAll`/`afterAll` inside the
+  guarded `describe` — module-scope hooks run even when the suite is skipped, so a file that
+  guards only the describe still fails in the DB-less CI job. Copy an existing file when
+  adding one.
 
 ---
 
@@ -443,25 +444,27 @@ If S: is missing, run: Start-ScheduledTask -TaskName 'Mount StuddyDev Disk'
 Read docs/handoffs/current-session.md first, in full, before anything else.
 
 Then confirm against the actual repo and git state:
-- the branch is feat/availability-and-multi-time-requests
-- HEAD is 10bc2839ada0963d4e0b34ec1a71b6735111569d (10bc283)
+- you are on main, up to date with origin/main
+- HEAD is 5b948b4928b68238b3eff2c2a5e038b4d901e45a (5b948b4), the squashed PR #17
 - the working tree is clean
-- PR #17 exists, is a draft, and is unmerged
-- step 1 is present: packages/design-system/src/components/calendar/ contains geometry.ts,
-  geometry.test.ts and week-calendar.tsx, and WeekCalendar is exported from
-  @studdy/design-system
+- there is no open pull request; PR #17 is merged
+- UX steps 1 and 2 are present: packages/design-system/src/components/calendar/ holds
+  geometry.ts, geometry.test.ts and week-calendar.tsx, and apps/web/src/app/tutor/availability/
+  holds page.tsx, availability-calendar.tsx and availability-editor.tsx
 
-Then, in your own words and without copying the handoff's phrasing back to me, summarise:
-- the approved UX redesign and why it supersedes the older shortlist-first presentation
-- what WeekCalendar is, its geometry model, its three modes, what density="mini" and
-  fittedWindow do, and what familySafe/assertFamilySafe protects
-- why "Preview as family" must be fed derived bookable slots rather than raw tutor rules
+Then, in your own words rather than copying the handoff back to me, summarise:
+- the approved UX redesign, the normal parent booking journey, and why shortlisting is
+  optional
+- what WeekCalendar is, its wall-clock geometry model, its modes, and what
+  familySafe/assertFamilySafe protects
+- why "Preview as family" is a separate server render rather than a client toggle
+- how lesson format scopes availability, and why a blocked period is never format-scoped
 
-Then identify the next task and state what it involves, including any backend addition it
-needs.
+Then identify step 3 (discovery mini calendars and the large tutor-profile calendar) and
+state what it involves.
 
-Do NOT begin implementation. Stop after that summary and wait for me to confirm your
-recovered context is correct.
+Do NOT begin implementation. Branch fresh from main when we start. Stop after that summary
+and wait for me to confirm your recovered context is correct.
 ```
 
 ---
