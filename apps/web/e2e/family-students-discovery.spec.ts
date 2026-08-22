@@ -38,7 +38,7 @@ test.describe('family, students and tutor discovery', () => {
     // A suspended tutor must never surface publicly.
     await expect(page.getByText('Riley')).toHaveCount(0);
     // Anonymous visitors are invited to sign in rather than shown save controls.
-    await expect(page.getByRole('button', { name: 'Add to shortlist' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Save for later' })).toHaveCount(0);
   });
 
   test('parent journey: add student → add subject → shortlist three → save', async ({ page }) => {
@@ -68,7 +68,7 @@ test.describe('family, students and tutor discovery', () => {
 
     // Shortlist every tutor offered, up to the cap.
     for (let index = 0; index < 3; index += 1) {
-      const addButton = page.getByRole('button', { name: 'Add to shortlist' }).first();
+      const addButton = page.getByRole('button', { name: 'Save for later' }).first();
       if ((await addButton.count()) === 0) break;
       await addButton.click();
       await page.waitForURL(/\/tutors\?section=/, { timeout: 15_000 });
@@ -129,7 +129,7 @@ test.describe('family, students and tutor discovery', () => {
     await expect(page.getByLabel('Which student?')).toHaveCount(0);
     await addSubjectNeed(page, 'Mathematics', 'Year 13');
 
-    const addButton = page.getByRole('button', { name: 'Add to shortlist' }).first();
+    const addButton = page.getByRole('button', { name: 'Save for later' }).first();
     await addButton.click();
     await page.waitForURL(/\/tutors\?section=/, { timeout: 15_000 });
     await expect(page.getByText('1 of 3 shortlisted')).toBeVisible();
@@ -141,7 +141,7 @@ test.describe('family, students and tutor discovery', () => {
 
   test('a tutor profile page shows approved public fields', async ({ page }) => {
     await page.goto('/tutors');
-    await page.getByRole('link', { name: 'View profile' }).first().click();
+    await page.getByRole('link', { name: 'View availability' }).first().click();
     await expect(page).toHaveURL(/\/tutors\/TUTOR-/);
     await expect(page.getByText('Example profile')).toBeVisible();
     await expect(page.getByText('What a lesson is like')).toBeVisible();

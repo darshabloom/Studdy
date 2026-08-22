@@ -112,7 +112,16 @@ interface DraftBlock {
 
 /** Comfortable is a real hour row; mini is a glance, so the whole day is small. */
 const COMFORTABLE_HOUR_HEIGHT = 44;
-const MINI_BODY_HEIGHT = 96;
+/**
+ * Small, but not so small that an hour becomes a hairline.
+ *
+ * A discovery card shows a whole teaching day — around thirteen hours — inside
+ * this height, so every pixel is roughly five minutes. At 96 a one-hour lesson
+ * was seven pixels tall and read as a speck rather than as a lesson; at 132 the
+ * same block is a bar a parent can actually see the shape of. The card stays
+ * compact enough to browse several tutors, which is the only reason mini exists.
+ */
+const MINI_BODY_HEIGHT = 132;
 /** Below this the labels stop fitting and the block becomes a coloured bar. */
 const LABEL_MIN_HEIGHT = 28;
 
@@ -217,10 +226,23 @@ export function WeekCalendar({
             className="sticky top-0 z-10 grid border-b border-surface-border bg-surface-card-secondary"
             style={{ gridTemplateColumns: columnTemplate }}
           >
-            {mini ? null : <div aria-hidden />}
+            {/*
+             * The gutter track, ALWAYS rendered — including in mini, where it
+             * is zero pixels wide.
+             *
+             * The header and the body share one column template, and grid
+             * fills tracks in order. Skipping this cell moved every heading
+             * one track left, so Monday's name sat over Sunday's column and a
+             * card confidently mislabelled the days it was drawing. Nothing
+             * visible was missing; the calendar simply lied.
+             */}
+            <div aria-hidden />
             {labels.map((label, dayIndex) => (
               <div
                 key={label}
+                // Marks a heading so a test can prove it sits over its own
+                // column; the alignment bug it guards was invisible to text.
+                data-calendar-heading
                 className={clsx(
                   'min-w-0 truncate border-l border-surface-border text-center font-medium first:border-l-0',
                   mini ? 'py-1 text-[10px] text-text-muted' : 'py-2 text-xs text-text-secondary',
@@ -236,15 +258,29 @@ export function WeekCalendar({
             {/* Time axis. Hidden in mini: the shape carries the meaning there. */}
             {mini ? null : (
               <div className="relative border-r border-surface-border">
-                {marks.map((minute) => (
-                  <span
-                    key={minute}
-                    className="absolute right-2 -translate-y-1/2 whitespace-nowrap text-[11px] tabular-nums text-text-muted"
-                    style={{ top: `${String(topPercent(minute))}%` }}
-                  >
-                    {clockLabel(minute)}
-                  </span>
-                ))}
+                {marks.map((minute) => {
+                  // Centred on its own gridline, except at the two edges, where
+                  // half the label would sit outside the calendar and be cut in
+                  // two. There it tucks inside instead.
+                  const atTop = minute <= window.dayStartMinutes;
+                  const atBottom = minute >= window.dayEndMinutes;
+                  return (
+                    <span
+                      key={minute}
+                      className={clsx(
+                        'absolute right-2 whitespace-nowrap text-[11px] tabular-nums text-text-muted',
+                        atTop
+                          ? 'translate-y-0'
+                          : atBottom
+                            ? '-translate-y-full'
+                            : '-translate-y-1/2',
+                      )}
+                      style={{ top: `${String(topPercent(minute))}%` }}
+                    >
+                      {clockLabel(minute)}
+                    </span>
+                  );
+                })}
               </div>
             )}
 
@@ -274,7 +310,13 @@ export function WeekCalendar({
                   <div
                     key={minute}
                     aria-hidden
-                    className="absolute inset-x-0 border-t border-surface-border/70"
+                    className={clsx(
+                      'absolute inset-x-0 border-t',
+                      // At mini scale an hour rule is a quarter of a block's
+                      // height, so full-strength lines read as structure inside
+                      // the block rather than behind it.
+                      mini ? 'border-surface-border/40' : 'border-surface-border/70',
+                    )}
                     style={{ top: `${String(topPercent(minute))}%` }}
                   />
                 ))}

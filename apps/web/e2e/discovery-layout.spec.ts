@@ -11,7 +11,7 @@ test.describe('public discovery layout', () => {
     await expect(page.getByText('These are example profiles for development')).toBeVisible();
 
     // Cards render with their key facts.
-    await expect(page.getByRole('link', { name: 'View profile' }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'View availability' }).first()).toBeVisible();
     await expect(page.getByText('Example profile').first()).toBeVisible();
 
     // No horizontal overflow at this width.
@@ -23,7 +23,7 @@ test.describe('public discovery layout', () => {
 
   test('a tutor profile renders and stays within the viewport', async ({ page }) => {
     await page.goto('/tutors');
-    await page.getByRole('link', { name: 'View profile' }).first().click();
+    await page.getByRole('link', { name: 'View availability' }).first().click();
     await expect(page).toHaveURL(/\/tutors\/TUTOR-/);
     await expect(page.getByText('What a lesson is like')).toBeVisible();
 

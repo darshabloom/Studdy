@@ -35,3 +35,8 @@ Thumbs.db
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Local review artefacts — screenshots captured for a manual review point.
+# Generated, sometimes large, and only meaningful next to the code that made
+# them, so they stay out of history.
+.review/

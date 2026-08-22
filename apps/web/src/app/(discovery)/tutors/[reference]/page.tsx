@@ -15,14 +15,24 @@ import {
   verificationLabel,
   yearLevelRangeLabel,
 } from '@studdy/domain/discovery';
-import { TutorSlots } from '@/components/discovery/tutor-slots';
+import { TutorAvailabilityWeek } from '@/components/discovery/tutor-availability-week';
+import {
+  bookableSlotBlocks,
+  mergeContiguousBlocks,
+  profileCalendarWindow,
+} from '@/lib/availability/calendar-projection';
 import { addToShortlistAction } from '@/lib/discovery/actions';
 import { resolveDiscoveryContext } from '@/lib/discovery/context';
-import { availabilityWindow, PLATFORM_TIME_ZONE } from '@/lib/time';
+import {
+  availabilitySummary,
+  availabilityView,
+  type AvailabilityPrompt,
+} from '@/lib/discovery/availability-view';
+import { AVAILABILITY_WINDOW_DAYS, PLATFORM_TIME_ZONE } from '@/lib/time';
 
 interface PageProps {
   params: Promise<{ reference: string }>;
-  searchParams: Promise<{ section?: string }>;
+  searchParams: Promise<{ section?: string; week?: string }>;
 }
 
 export async function generateMetadata({ params }: PageProps) {
@@ -38,7 +48,7 @@ export async function generateMetadata({ params }: PageProps) {
  */
 export default async function TutorProfilePage({ params, searchParams }: PageProps) {
   const { reference } = await params;
-  const { section } = await searchParams;
+  const { section, week } = await searchParams;
   const rows = await findPublicTutorByReference(reference);
   const tutor = rows[0];
   if (tutor === undefined) notFound();
@@ -55,6 +65,12 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
   const shortlistFull = shortlist.length >= SHORTLIST_MAX_TUTORS;
   const rating = ratingLabel(tutor.ratingHundredths);
 
+  // The same seven days a discovery card showed, so arriving here reads as
+  // stepping closer rather than as a different week. `availabilityView` clamps
+  // the page into the published horizon, so a hand-edited `?week=` cannot walk
+  // off the end into days nobody has published.
+  const view = availabilityView(Number(week ?? '1'), new Date(), PLATFORM_TIME_ZONE);
+
   // This tutor's own bookable times, at the lesson length they publish for the
   // section's subject. Signed-out visitors get the coarse label only.
   const availability =
@@ -64,12 +80,54 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
           await bookableSlotsForSubjectSection({
             subjectSectionId: activeSection.subjectSectionId,
             tutorReferences: [reference],
-            ...availabilityWindow(),
+            from: view.from,
+            to: view.to,
           })
         )[0] ?? { slots: [], durationMinutes: tutor.startingPriceDurationMinutes });
 
+  // Undefined and empty mean different things and are kept apart all the way to
+  // the component: undefined is "not shown to this visitor", empty is "derived,
+  // and there is nothing in these seven days".
+  // Merged into runs while this view is read-only. Step 4 renders the
+  // individual slots instead, because that is when the difference between a
+  // 4:00 and a 4:30 start becomes the thing being chosen.
+  const availabilityBlocks =
+    availability === null
+      ? undefined
+      : mergeContiguousBlocks(
+          bookableSlotBlocks(availability.slots, view.days, PLATFORM_TIME_ZONE),
+        );
+
+  const availabilityPrompt: AvailabilityPrompt =
+    context === null
+      ? {
+          linkLabel: 'Sign in',
+          message: "to view this tutor's live availability.",
+          href: `/sign-in?next=${encodeURIComponent(`/tutors/${reference}`)}`,
+        }
+      : context.subjectSections.length === 0
+        ? {
+            linkLabel: 'Add a subject',
+            message: "to view this tutor's live availability.",
+            href: '/parent/subjects/new',
+          }
+        : {
+            linkLabel: 'Choose a subject',
+            message: "to view this tutor's live availability.",
+            href: '/tutors',
+          };
+
+  const weekHref = (page: number): string =>
+    activeSection === null
+      ? `/tutors/${reference}?week=${String(page)}`
+      : `/tutors/${reference}?section=${activeSection.subjectSectionId}&week=${String(page)}`;
+
   return (
-    <section className="mx-auto max-w-3xl px-4 py-10">
+    // Wide enough for a seven-column week to sit on screen whole. At the old
+    // width the last day fell off the right-hand edge behind a scrollbar, so
+    // the one column a parent most wants — the furthest away they can book —
+    // was the one they had to go looking for.
+    <section className="mx-auto max-w-5xl px-4 py-10">
       <Button variant="quiet" size="sm" asChild>
         <Link href={activeSection === null ? '/tutors' : `/tutors?section=${section ?? ''}`}>
           ← Back to tutors
@@ -110,23 +168,43 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
           <StatusBadge family="complete">{tutor.completedLessonCount} lessons</StatusBadge>
         </div>
 
-        {availability !== null ? (
-          <div className="border-t border-surface-border pt-4">
-            <h2 className="text-sm font-semibold text-text-primary">
-              Bookable times for {activeSection?.subjectDisplayName}
-            </h2>
-            <p className="mb-2 mt-1 text-xs text-text-muted">
-              {availability.durationMinutes} minute lessons, next two weeks. Times shown in New
-              Zealand time.
-            </p>
-            <TutorSlots
-              slots={availability.slots}
-              timeZone={PLATFORM_TIME_ZONE}
-              maxDays={14}
-              maxSlotsPerDay={8}
-            />
-          </div>
-        ) : null}
+        {/* The decision surface, so it sits above the prose rather than under
+            it: a parent has already read the headline by now and is asking
+            whether the week works. */}
+        <div className="border-t border-surface-border pt-5">
+          <TutorAvailabilityWeek
+            tutorName={tutor.firstName}
+            blocks={availabilityBlocks}
+            // Fitted to THIS tutor, unlike the shared window discovery uses:
+            // a profile shows one tutor a parent has already picked out, so
+            // hours nobody teaches cost legibility and buy no comparison.
+            window={profileCalendarWindow(availabilityBlocks ?? [])}
+            dayLabels={view.dayLabels}
+            rangeLabel={view.rangeLabel}
+            summary={availabilitySummary(view.days, availabilityBlocks ?? [])}
+            durationMinutes={availability?.durationMinutes}
+            timeZoneLabel="New Zealand time"
+            previousHref={view.hasPrevious ? weekHref(view.page - 1) : null}
+            nextHref={view.hasNext ? weekHref(view.page + 1) : null}
+            horizonDays={AVAILABILITY_WINDOW_DAYS}
+            prompt={availabilityPrompt}
+          />
+
+          {/*
+           * A note, not a button.
+           *
+           * A greyed-out primary still reads as an action — it says "you may
+           * do this, just not yet, and probably because of something you have
+           * not done". Nothing about the parent is incomplete here; the
+           * journey behind it simply does not exist yet. Saying that plainly
+           * is honest, and it stops the strongest-looking control on the page
+           * being the one thing that cannot be used.
+           */}
+          <Alert tone="information" title="Booking a lesson here opens shortly" className="mt-5">
+            Requesting a lesson straight from a tutor&rsquo;s profile is being built. For now you
+            can save {tutor.firstName} for later, or ask the tutors on your shortlist together.
+          </Alert>
+        </div>
 
         {tutor.teachingApproach !== null ? (
           <div>
@@ -170,7 +248,7 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
           {activeSection !== null ? (
             alreadyShortlisted ? (
               <div className="flex flex-wrap items-center gap-3">
-                <StatusBadge family="complete">On your shortlist</StatusBadge>
+                <StatusBadge family="complete">Saved for later</StatusBadge>
                 <Button variant="secondary" asChild>
                   <Link href={`/shortlist/${activeSection.subjectSectionId}`}>
                     Review shortlist
@@ -190,8 +268,10 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
                   name="returnTo"
                   value={`/tutors/${tutor.tutorReference}?section=${activeSection.subjectSectionId}`}
                 />
-                <Button type="submit" disabled={shortlistFull}>
-                  {shortlistFull ? 'Shortlist full' : 'Add to shortlist'}
+                {/* Secondary: booking is the primary action on this page and
+                    saving a tutor must not read as the way to get a lesson. */}
+                <Button variant="secondary" type="submit" disabled={shortlistFull}>
+                  {shortlistFull ? 'Shortlist full' : 'Save for later'}
                 </Button>
                 <span className="text-sm text-text-secondary">
                   {shortlist.length} of {SHORTLIST_MAX_TUTORS} shortlisted for{' '}
