@@ -326,13 +326,106 @@ Most relevant files:
 | `apps/web/src/lib/time.ts`                                           | `PLATFORM_TIME_ZONE`, `availabilityWindow`                                                                |
 | `packages/database/src/integration/availability.integration.test.ts` | privacy assertions that must keep passing                                                                 |
 
-### Step 3 — discovery mini calendars and the large tutor-profile calendar (NEXT)
+### Step 3 — discovery mini calendars and the tutor-profile calendar — **AWAITING REVIEW**
 
-Tutor cards get a compact real week view (`density="mini"`, `familySafe`) showing actual
-derived bookable time. The profile gets the same concept at full size with time labels and
-selectable availability. Replace the pill lists. Touches
-`apps/web/src/components/discovery/tutor-card.tsx`, `tutor-slots.tsx`,
-`apps/web/src/app/(discovery)/tutors/page.tsx` and `.../tutors/[reference]/page.tsx`.
+On `feat/discovery-and-profile-availability-calendars`, branched from `e37d9c5`. Complete and
+verified; **not merged, and not to be merged without the owner's approval.**
+
+Discovery cards carry a mini week calendar (`density="mini"`, `familySafe`) and the tutor
+profile a full-size read-only one with paged navigation. `tutor-slots.tsx` and its pill
+lists are gone. The primary action on a card is "See times & book" and on the profile
+"Request a lesson"; shortlisting is a quiet "Save for later" beside them.
+
+**Seven days from TODAY, not from Monday.** The tutor's own calendar stays Monday-anchored
+because a tutor arranges a repeating week. A family asks "when could we start?", and a
+Monday anchor opened on a Saturday spends five of seven columns on days already gone — which
+come back empty, because availability is only derived forwards. An empty column on a family
+calendar reads as time the tutor is not free. `availabilityView` in
+`apps/web/src/lib/discovery/availability-view.ts` decides the days once, so a card and the
+profile a parent clicks into always show the same seven.
+
+**Three different windows, on purpose.** The tutor's editor keeps a broad fixed day because a
+tutor is CREATING availability and needs somewhere new to draw. Discovery cards share ONE
+window across the page (`familyCalendarWindow`, 8am–9pm widened to cover every block on the
+page) because their whole job is comparison — fitted per card, the same height would mean 4pm
+on one and 7pm on the next. A profile is neither: `profileCalendarWindow` fits that one tutor's
+own hours, with ninety minutes of context either side and a six-hour minimum so it cannot hug
+the blocks. A parent on a profile has already chosen the tutor and is reading, not comparing or
+drawing, so empty morning hours cost legibility and buy nothing.
+
+**Do not give discovery the profile window.** The unit suite asserts the two differ; a
+per-tutor window on the cards silently destroys the comparison the cards exist for.
+
+**Read-only views merge contiguous slots.** Derived slots are start times, so an hour lesson
+offered every half hour reads as overlapping stripes. `mergeContiguousBlocks` joins runs that
+touch or overlap and labels each band "4 pm – 7 pm". A genuine gap survives; nothing is joined
+across days or across roles. **Step 4 must NOT merge** — once a family picks a time, the
+difference between a 4:00 and a 4:30 start is the thing being chosen.
+
+**Signed-out visitors get no derived availability, and no empty calendar either.** Cards keep
+the coarse label plus "Sign in to see available times"; the profile shows "Sign in to view this
+tutor's live availability" where the grid would be. Seven blank columns would be a claim about
+that tutor rather than about what the visitor may see. The access boundary was not weakened.
+There are three of these prompts, not one — signed out, signed in without a subject, and signed
+in with no subjects at all — because the reason differs and none of them is "this tutor is busy".
+
+**No control promises anything `/book` cannot yet deliver.** The card's primary action reads
+"View availability" and opens the profile — step 4 renames it once `/book` exists. The profile
+carries an informational callout, "Booking a lesson here opens shortly", and NO booking button
+at all. An earlier draft had a disabled primary there; a greyed-out primary still reads as an
+action withheld from this parent, as though something about them were incomplete, when in fact
+the journey simply does not exist yet. The e2e asserts no such control is present.
+
+**Navigation is bounded by the published horizon** (`?week=1|2`, clamped server-side). Walking
+past 14 days would render empty days that read as an absence of availability rather than of
+data.
+
+**Two bugs found and fixed on the way, both invisible to text assertions.**
+
+1. `WeekCalendar` skipped the time-gutter cell in its header when `density="mini"`. Header and
+   body share one column template and grid fills tracks in order, so every heading sat one
+   track left: Monday's name over Sunday's column. Nothing was missing from the page — the
+   calendar simply named the wrong days. Both discovery and tutor geometry specs now assert
+   that every column's left edge is also a heading's left edge.
+2. The `discovery_tutors` seed placed its blocked period at `now + 3 days`, which fell into
+   NEXT week whenever the seed ran on a Friday, Saturday or Sunday — so
+   `tutor-availability.spec.ts`'s "preview as family" test failed on three days in seven, for a
+   reason unrelated to privacy. It is now anchored to the Sunday of the current New Zealand
+   week (`endOfCurrentNewZealandWeek`). The weekday is read in the scheduling zone, not UTC,
+   because those disagree for half of every New Zealand day.
+
+**New and changed files**
+
+| File                                                               | What                                                                                                                                                |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/lib/discovery/availability-view.ts`                  | the seven days, labels, paging bounds and the screen-reader summary                                                                                 |
+| `apps/web/src/components/discovery/tutor-availability-mini.tsx`    | the card calendar and its three prompts                                                                                                             |
+| `apps/web/src/components/discovery/tutor-availability-week.tsx`    | the profile calendar, navigation and sign-in placeholder                                                                                            |
+| `apps/web/src/lib/availability/calendar-projection.ts`             | `familyPreviewBlocks` renamed `bookableSlotBlocks`; added `FAMILY_CALENDAR_WINDOW`, `familyCalendarWindow`, `mergeContiguousBlocks`                 |
+| `packages/design-system/src/components/calendar/week-calendar.tsx` | mini body height 96 → 132; header gutter cell always rendered; edge hour labels no longer clipped; quieter mini hour rules; `data-calendar-heading` |
+| `apps/web/src/components/discovery/tutor-card.tsx`                 | rebuilt around the calendar; booking primary, shortlist quiet                                                                                       |
+| `apps/web/src/app/(discovery)/tutors/page.tsx`                     | derives blocks once, shares one window                                                                                                              |
+| `apps/web/src/app/(discovery)/tutors/[reference]/page.tsx`         | calendar replaces the list; `max-w-3xl` → `max-w-5xl` so seven columns fit                                                                          |
+| `packages/database/src/seed/scenarios/discovery-tutors.ts`         | the seed date fix above                                                                                                                             |
+| `apps/web/scripts/step3-review-shots.mjs`                          | throwaway: writes the review screenshots into `.review/step3`                                                                                       |
+
+**No backend or query change was needed.** `bookableSlotsForSubjectSection` already accepts an
+arbitrary `from`/`to`, so paging is a page concern; `bookableSlotBlocks` was already the one
+projection that crosses the privacy boundary.
+
+**Verified:** typecheck, lint, format, `check:rls` (28 tables), `check:boundaries`, build,
+**333 unit and integration tests passing with 1 skipped** (up from 307), **86 end-to-end**
+(up from 80), all after `db:reset && db:migrate && db:seed`.
+
+**Reviewed by the owner on 2026-08-23 and corrected**: the profile window was fitted rather
+than fixed, the card action renamed from "See times & book" to "View availability", and the
+disabled booking primary replaced with a callout. The rolling seven-day view and the mobile
+horizontal scroll with its hint were both confirmed as wanted and left alone.
+
+**Screenshots** for the review point live in `.review/step3` (gitignored), regenerated by
+`node apps/web/scripts/step3-review-shots.mjs <baseURL> <outDir>`. Point it at a production
+server (`pnpm build` then `pnpm --filter @studdy/web start --port 3200`) rather than `pnpm dev`:
+the dev server on this machine wedges when a build runs against the same `.next` directory.
 
 ### Step 4 — the `/book` journey
 

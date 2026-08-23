@@ -65,6 +65,43 @@ interface TutorSeed {
   }>;
 }
 
+/**
+ * The Sunday of the NEW ZEALAND week containing `now`, at 06:00 UTC.
+ *
+ * PLACED BY WEEKDAY, NOT BY A DAY OFFSET. The tutor's calendar opens on the
+ * Monday-anchored week containing today, so a blocked period seeded at "three
+ * days from now" fell into NEXT week whenever the seed ran on a Friday,
+ * Saturday or Sunday — and the end-to-end test that proves a private reason is
+ * visible to its own tutor then failed for a reason that had nothing to do with
+ * privacy, on three days in seven. Anchoring to the week's last day puts it on
+ * screen whichever day the suite runs.
+ *
+ * The weekday is read in the SCHEDULING ZONE rather than in UTC, because those
+ * disagree for half of every New Zealand day: computing the week boundary in
+ * UTC would reintroduce the same off-by-one-week fault it is here to remove.
+ * 06:00 UTC is chosen because it is a Sunday evening in New Zealand under both
+ * standard time and daylight time, so the instant and the local date agree.
+ */
+function endOfCurrentNewZealandWeek(now: Date): Date {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SEED_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  }).formatToParts(now);
+  const value = (type: string): string => parts.find((part) => part.type === type)?.value ?? '';
+
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const daysUntilSunday = (7 - weekdays.indexOf(value('weekday'))) % 7;
+
+  const sunday = new Date(
+    Date.UTC(Number(value('year')), Number(value('month')) - 1, Number(value('day')), 6) +
+      daysUntilSunday * 24 * 60 * 60 * 1000,
+  );
+  return sunday;
+}
+
 const SEED_TIME_ZONE = 'Pacific/Auckland';
 const SEED_EFFECTIVE_FROM = '2026-01-01';
 
@@ -368,8 +405,7 @@ export async function seedDiscoveryTutors(): Promise<void> {
       // a removal rather than only ever adding. Its reason is server-only and
       // must never reach a family — it exists to prove that boundary is real.
       if (seed.email === 'tutor.b@local.studdy.test') {
-        const blockStart = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-        blockStart.setUTCMinutes(0, 0, 0);
+        const blockStart = endOfCurrentNewZealandWeek(new Date());
         const [existingBlock] = await db
           .select({ id: availabilityExceptions.id })
           .from(availabilityExceptions)

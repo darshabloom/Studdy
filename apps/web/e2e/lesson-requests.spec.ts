@@ -109,8 +109,8 @@ async function shortlistAndCompose(page: Page, dashboard: string): Promise<void>
   // elsewhere in this serial file — waited 15s for a control the application is
   // correct never to show twice, and failed with a misleading timeout.
   // Note count() does not auto-wait, so the combined locator must settle first.
-  const addToShortlist = page.getByRole('button', { name: 'Add to shortlist' });
-  const onShortlist = page.getByText('On your shortlist');
+  const addToShortlist = page.getByRole('button', { name: 'Save for later' });
+  const onShortlist = page.getByText('Saved for later');
   await expect(addToShortlist.or(onShortlist).first()).toBeVisible({ timeout: 15_000 });
 
   if ((await addToShortlist.count()) > 0) {

@@ -223,6 +223,14 @@ test.describe('tutor availability, as a calendar', () => {
         // Hour labels in the gutter, so compactness can be judged against the
         // hours actually on show rather than against a fixed pixel number.
         hoursShown: root.querySelectorAll('.tabular-nums').length,
+        // Headings and their columns share one grid template; a heading that
+        // does not start where its column starts is naming the wrong day.
+        columnLefts: columns
+          .map((column) => Math.round(column.getBoundingClientRect().left))
+          .sort((a, b) => a - b),
+        headingLefts: [...root.querySelectorAll('[data-calendar-heading]')]
+          .map((heading) => Math.round(heading.getBoundingClientRect().left))
+          .sort((a, b) => a - b),
       };
     });
 
@@ -233,6 +241,11 @@ test.describe('tutor availability, as a calendar', () => {
 
     // Blocks sit at their own time, which requires them to be positioned.
     expect(geometry.blocksAbsolute).toBe(true);
+
+    // Each day heading sits over the column it names.
+    for (const left of geometry.columnLefts) {
+      expect(geometry.headingLefts).toContain(left);
+    }
 
     // A block belongs to one day, so it can never span the width of the week.
     expect(geometry.widestBlock).toBeLessThan(geometry.calendarWidth / 3);

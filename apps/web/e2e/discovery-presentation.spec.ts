@@ -34,8 +34,8 @@ test.describe('tutor discovery presentation', () => {
     await expect(page.getByRole('link', { name: '← Back to dashboard' })).toHaveCount(0);
 
     // Public browsing still works, with the invitation to sign in to save.
-    await expect(page.getByRole('link', { name: 'View profile' }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Add to shortlist' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'View availability' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save for later' })).toHaveCount(0);
   });
 
   test.describe('signed in', () => {
@@ -56,7 +56,7 @@ test.describe('tutor discovery presentation', () => {
       await expect(page.getByRole('link', { name: 'Join Studdy' })).toHaveCount(0);
 
       // The same tutor results are still rendered.
-      await expect(page.getByRole('link', { name: 'View profile' }).first()).toBeVisible();
+      await expect(page.getByRole('link', { name: 'View availability' }).first()).toBeVisible();
 
       // Back to dashboard actually returns to the parent workspace.
       await page.getByRole('link', { name: '← Back to dashboard' }).click();
@@ -66,7 +66,7 @@ test.describe('tutor discovery presentation', () => {
     test('the tutor profile page carries the same authenticated chrome', async ({ page }) => {
       await signIn(page, 'parent.one@local.studdy.test');
       await page.goto('/tutors');
-      await page.getByRole('link', { name: 'View profile' }).first().click();
+      await page.getByRole('link', { name: 'View availability' }).first().click();
       await expect(page).toHaveURL(/\/tutors\/TUTOR-/);
       await expect(page.getByRole('navigation', { name: 'Workspaces' })).toBeVisible();
       await expect(page.getByRole('link', { name: 'Log in' })).toHaveCount(0);

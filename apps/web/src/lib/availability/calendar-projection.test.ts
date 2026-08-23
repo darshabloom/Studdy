@@ -5,7 +5,7 @@ import {
 } from '@studdy/design-system';
 import {
   DEFAULT_CALENDAR_WINDOW,
-  familyPreviewBlocks,
+  bookableSlotBlocks,
   teachingWindow,
   tutorWeekBlocks,
 } from './calendar-projection';
@@ -326,7 +326,7 @@ describe('tutorWeekBlocks', () => {
   });
 });
 
-describe('familyPreviewBlocks', () => {
+describe('bookableSlotBlocks', () => {
   const days = weekDays(PLAIN_WEEK, ZONE);
   const slots = [
     { startAt: new Date('2026-08-18T04:00:00Z'), endAt: new Date('2026-08-18T05:00:00Z') },
@@ -334,7 +334,7 @@ describe('familyPreviewBlocks', () => {
   ];
 
   it('turns derived slots into positioned available blocks', () => {
-    const blocks = familyPreviewBlocks(slots, days, ZONE);
+    const blocks = bookableSlotBlocks(slots, days, ZONE);
     expect(blocks).toHaveLength(2);
     expect(blocks[0]).toMatchObject({ dayIndex: 1, startMinutes: 960, role: 'available' });
     expect(blocks[1]).toMatchObject({ dayIndex: 2, startMinutes: 960, role: 'available' });
@@ -342,12 +342,12 @@ describe('familyPreviewBlocks', () => {
 
   it('passes the family-safe assertion, because there is nothing else in it', () => {
     expect(() => {
-      assertFamilySafe(familyPreviewBlocks(slots, days, ZONE));
+      assertFamilySafe(bookableSlotBlocks(slots, days, ZONE));
     }).not.toThrow();
   });
 
   it('drops slots outside the week being shown', () => {
-    const blocks = familyPreviewBlocks(
+    const blocks = bookableSlotBlocks(
       [{ startAt: new Date('2026-09-01T04:00:00Z'), endAt: new Date('2026-09-01T05:00:00Z') }],
       days,
       ZONE,

@@ -11,7 +11,7 @@ import { zonedClockTime } from '@studdy/domain/availability';
 import { resolveIdentity } from '@/lib/identity/resolve';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 import {
-  familyPreviewBlocks,
+  bookableSlotBlocks,
   teachingWindow,
   tutorWeekBlocks,
 } from '@/lib/availability/calendar-projection';
@@ -87,7 +87,7 @@ export default async function TutorAvailabilityPage({
   ]);
 
   const slots = slotsByTutor.get(profile.id) ?? [];
-  const familyBlocks = familyPreviewBlocks(slots, days, PLATFORM_TIME_ZONE);
+  const familyBlocks = bookableSlotBlocks(slots, days, PLATFORM_TIME_ZONE);
   const weekLabel = `${first.label} – ${last.label}`;
 
   const nav = (
