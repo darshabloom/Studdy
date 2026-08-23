@@ -1596,4 +1596,433 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       expect(result.offered).toEqual([free.getTime()]);
     });
   });
+  /**
+   * The booking journey's two new guarantees, tested where they actually live.
+   *
+   * Both are about a family being charged, or a child's profile being changed,
+   * by something other than what the family chose.
+   */
 });
+
+describe.skipIf(!available)(
+  'booking journey: chosen lengths and atomic sends (integration)',
+  () => {
+    /**
+     * A tutor who publishes TWO lengths for one subject.
+     *
+     * Nothing in the schema ever prevented this; everything else assumed it
+     * away. The dearer, longer version is second so "cheapest" and "first" are
+     * different rows and a test cannot pass by accident.
+     */
+    async function buildTwoLengthFixture(label: string): Promise<{
+      requesterUserId: string;
+      studentProfileId: string;
+      subjectId: string;
+      tutorProfileId: string;
+      shortVersionId: string;
+      longVersionId: string;
+      otherSubjectVersionId: string;
+      otherTutorVersionId: string;
+    }> {
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [requester] = await db
+          .insert(users)
+          .values({
+            displayName: `Requester ${label}`,
+            countryCode: 'NZ',
+            timeZone: 'Pacific/Auckland',
+            locale: 'en-NZ',
+          })
+          .returning({ id: users.id });
+        const [subject] = await db
+          .insert(subjects)
+          .values({ code: `subject-${label}`, displayName: `Subject ${label}` })
+          .returning({ id: subjects.id });
+        const [otherSubject] = await db
+          .insert(subjects)
+          .values({ code: `other-${label}`, displayName: `Other ${label}` })
+          .returning({ id: subjects.id });
+        const [student] = await db
+          .insert(studentProfiles)
+          .values({ preferredName: `Student ${label}`, independenceStatusCode: 'dependent' })
+          .returning({ id: studentProfiles.id });
+
+        const makeTutor = async (suffix: string): Promise<string> => {
+          const [tutorUser] = await db
+            .insert(users)
+            .values({
+              displayName: `Tutor ${label}-${suffix}`,
+              countryCode: 'NZ',
+              timeZone: 'Pacific/Auckland',
+              locale: 'en-NZ',
+            })
+            .returning({ id: users.id });
+          const [profile] = await db
+            .insert(tutorProfiles)
+            .values({
+              userId: tutorUser!.id,
+              publicFirstName: `T${suffix}`,
+              visibilityStateCode: 'unlisted',
+            })
+            .returning({ id: tutorProfiles.id });
+          await db.insert(availabilityExceptions).values({
+            tutorProfileId: profile!.id,
+            startsAt: new Date(Date.now() - 60 * 60 * 1000),
+            endsAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+            effectCode: 'adds',
+          });
+          return profile!.id;
+        };
+
+        const makeVersion = async (
+          tutorProfileId: string,
+          subjectId: string,
+          displayName: string,
+          durationMinutes: number,
+          priceAmountMinor: bigint,
+        ): Promise<string> => {
+          const [service] = await db
+            .insert(services)
+            .values({ tutorProfileId, subjectId, displayName })
+            .returning({ id: services.id });
+          const [version] = await db
+            .insert(serviceVersions)
+            .values({
+              serviceId: service!.id,
+              durationMinutes,
+              priceAmountMinor,
+              currencyCode: 'NZD',
+            })
+            .returning({ id: serviceVersions.id });
+          return version!.id;
+        };
+
+        const tutorProfileId = await makeTutor('a');
+        const otherTutorProfileId = await makeTutor('b');
+
+        return {
+          requesterUserId: requester!.id,
+          studentProfileId: student!.id,
+          subjectId: subject!.id,
+          tutorProfileId,
+          shortVersionId: await makeVersion(
+            tutorProfileId,
+            subject!.id,
+            `Short ${label}`,
+            60,
+            4000n,
+          ),
+          longVersionId: await makeVersion(tutorProfileId, subject!.id, `Long ${label}`, 90, 6000n),
+          otherSubjectVersionId: await makeVersion(
+            tutorProfileId,
+            otherSubject!.id,
+            `Other subject ${label}`,
+            60,
+            1000n,
+          ),
+          otherTutorVersionId: await makeVersion(
+            otherTutorProfileId,
+            subject!.id,
+            `Other tutor ${label}`,
+            60,
+            1000n,
+          ),
+        };
+      } finally {
+        await sql.end();
+      }
+    }
+
+    const draftFor = (fixture: { studentProfileId: string; subjectId: string }) => ({
+      studentProfileId: fixture.studentProfileId,
+      subjectId: fixture.subjectId,
+      schoolYearCode: 'Y9',
+      formatPreferenceCode: 'online',
+    });
+
+    async function countSections(studentProfileId: string): Promise<number> {
+      const { sql, db } = createDatabaseClient();
+      try {
+        const rows = await db
+          .select({ id: studentSubjectSections.id })
+          .from(studentSubjectSections)
+          .where(eq(studentSubjectSections.studentProfileId, studentProfileId));
+        return rows.length;
+      } finally {
+        await sql.end();
+      }
+    }
+
+    it('honours the chosen lesson length rather than whichever row came back last', async () => {
+      const fixture = await buildTwoLengthFixture(`len-${randomUUID().slice(0, 8)}`);
+      const start = future(100);
+
+      const created = await createIntendedLessonRequest({
+        subjectSectionDraft: draftFor(fixture),
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: [fixture.tutorProfileId],
+        serviceVersionIdByTutor: new Map([[fixture.tutorProfileId, fixture.longVersionId]]),
+        proposedStarts: [start],
+        formatCode: 'online',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [ilr] = await db
+          .select({ durationMinutes: intendedLessonRequests.durationMinutes })
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.id, created.intendedLessonRequestId));
+        expect(ilr?.durationMinutes).toBe(90);
+
+        // And the tutor's own row points at the version the family paid for.
+        const [request] = await db
+          .select({ serviceVersionId: tutorRequests.serviceVersionId })
+          .from(tutorRequests)
+          .where(eq(tutorRequests.intendedLessonRequestId, created.intendedLessonRequestId));
+        expect(request?.serviceVersionId).toBe(fixture.longVersionId);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('falls back to the cheapest version when no length is chosen', async () => {
+      const fixture = await buildTwoLengthFixture(`cheap-${randomUUID().slice(0, 8)}`);
+      const created = await createIntendedLessonRequest({
+        subjectSectionDraft: draftFor(fixture),
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: [fixture.tutorProfileId],
+        proposedStarts: [future(101)],
+        formatCode: 'online',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [request] = await db
+          .select({ serviceVersionId: tutorRequests.serviceVersionId })
+          .from(tutorRequests)
+          .where(eq(tutorRequests.intendedLessonRequestId, created.intendedLessonRequestId));
+        // An unstated choice is never the most expensive thing on offer.
+        expect(request?.serviceVersionId).toBe(fixture.shortVersionId);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /**
+     * A service version id is an amount of money. Accepting one because it
+     * exists, rather than because it is this tutor's, would let a crafted form
+     * buy a ninety-minute lesson at another tutor's ten-dollar price.
+     */
+    it('refuses a version belonging to another tutor', async () => {
+      const fixture = await buildTwoLengthFixture(`xtutor-${randomUUID().slice(0, 8)}`);
+      await expect(
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          serviceVersionIdByTutor: new Map([[fixture.tutorProfileId, fixture.otherTutorVersionId]]),
+          proposedStarts: [future(102)],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestValidationError);
+    });
+
+    it('refuses a version for another subject, even from the same tutor', async () => {
+      const fixture = await buildTwoLengthFixture(`xsubject-${randomUUID().slice(0, 8)}`);
+      await expect(
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          serviceVersionIdByTutor: new Map([
+            [fixture.tutorProfileId, fixture.otherSubjectVersionId],
+          ]),
+          proposedStarts: [future(103)],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestValidationError);
+    });
+
+    it('creates the subject section as part of a successful send', async () => {
+      const fixture = await buildTwoLengthFixture(`section-${randomUUID().slice(0, 8)}`);
+      expect(await countSections(fixture.studentProfileId)).toBe(0);
+
+      const created = await createIntendedLessonRequest({
+        subjectSectionDraft: draftFor(fixture),
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: [fixture.tutorProfileId],
+        proposedStarts: [future(104)],
+        formatCode: 'online',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      expect(created.subjectSectionCreated).toBe(true);
+      expect(await countSections(fixture.studentProfileId)).toBe(1);
+
+      // And the request really hangs from it, rather than from something else.
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [ilr] = await db
+          .select({ sectionId: intendedLessonRequests.studentSubjectSectionId })
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.id, created.intendedLessonRequestId));
+        expect(ilr?.sectionId).toBe(created.studentSubjectSectionId);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /**
+     * THE ORPHAN CASE, which is the whole reason the draft exists.
+     *
+     * A send that fails because no tutor can do any of the offered times must
+     * leave the child exactly as it found them. Creating the section first and
+     * the request second would put a subject on a child's profile that they
+     * never agreed to study, because of a request that was never sent.
+     */
+    it('leaves no orphan subject section when the send fails', async () => {
+      const fixture = await buildTwoLengthFixture(`orphan-${randomUUID().slice(0, 8)}`);
+      expect(await countSections(fixture.studentProfileId)).toBe(0);
+
+      // A time outside the tutor's open window: nothing to offer, nothing sent.
+      const outside = new Date(Date.now() + 120 * 24 * 60 * 60 * 1000);
+      outside.setSeconds(0, 0);
+
+      await expect(
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          proposedStarts: [outside],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(NoTutorAvailableError);
+
+      expect(await countSections(fixture.studentProfileId)).toBe(0);
+    });
+
+    it('leaves no orphan subject section when validation rejects the request', async () => {
+      const fixture = await buildTwoLengthFixture(`orphan2-${randomUUID().slice(0, 8)}`);
+
+      await expect(
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          // 'either' is not a lesson anyone can attend; validateFanOut refuses it.
+          proposedStarts: [future(105)],
+          formatCode: 'either',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestValidationError);
+
+      expect(await countSections(fixture.studentProfileId)).toBe(0);
+    });
+
+    it('reuses an existing section rather than creating a second', async () => {
+      const fixture = await buildTwoLengthFixture(`reuse-${randomUUID().slice(0, 8)}`);
+      const send = async (hours: number) =>
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          proposedStarts: [future(hours)],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        });
+
+      const first = await send(106);
+      const second = await send(130);
+
+      expect(first.subjectSectionCreated).toBe(true);
+      expect(second.subjectSectionCreated).toBe(false);
+      expect(second.studentSubjectSectionId).toBe(first.studentSubjectSectionId);
+      expect(await countSections(fixture.studentProfileId)).toBe(1);
+    });
+
+    /** One workable time is a real request (rule change: 1-5 times). */
+    it('accepts a request offering a single time', async () => {
+      const fixture = await buildTwoLengthFixture(`one-${randomUUID().slice(0, 8)}`);
+      const created = await createIntendedLessonRequest({
+        subjectSectionDraft: draftFor(fixture),
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: [fixture.tutorProfileId],
+        proposedStarts: [future(107)],
+        formatCode: 'online',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      expect(created.tutorRequestReferences).toHaveLength(1);
+    });
+
+    it('refuses a draft and a section id together, rather than guessing', async () => {
+      const fixture = await buildTwoLengthFixture(`both-${randomUUID().slice(0, 8)}`);
+      await expect(
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          studentSubjectSectionId: randomUUID(),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          proposedStarts: [future(108)],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestValidationError);
+    });
+  },
+);
