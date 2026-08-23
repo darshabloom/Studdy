@@ -78,6 +78,16 @@ export async function seedRequestRules(): Promise<void> {
     'Provisional: minimum notice before a requested lesson.',
   );
   await setRuleSetting(
+    'requests.min_time_options',
+    1,
+    'A parent may genuinely have one workable time. Studdy encourages flexibility in the copy rather than requiring it in the rule.',
+  );
+  await setRuleSetting(
+    'requests.max_time_options',
+    5,
+    'Past five a tutor is reading a timetable rather than answering a question, and each extra time is another hold to reason about.',
+  );
+  await setRuleSetting(
     'requests.require_payment_method_before_send',
     false,
     'Approved policy is TRUE, but DISABLED until the Stripe slice provides a real way to add and verify a payment method. Enabling it now would block every request with no way to satisfy it.',

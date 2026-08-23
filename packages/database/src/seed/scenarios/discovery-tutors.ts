@@ -131,6 +131,21 @@ const TUTOR_SEED: readonly TutorSeed[] = [
         priceAmountMinor: 3500,
         formatCode: 'online',
       },
+      /**
+       * A SECOND LENGTH FOR THE SAME SUBJECT, so the booking journey's lesson
+       * length step is a real choice rather than a screen with one option.
+       *
+       * Deliberately the dearer of the two: discovery advertises the cheapest
+       * current version as the "from" price, so a cheaper long lesson would
+       * silently restyle every card this tutor appears on.
+       */
+      {
+        subjectCode: 'mathematics',
+        displayName: 'Mathematics tutoring — extended session (Years 7–10)',
+        durationMinutes: 90,
+        priceAmountMinor: 5000,
+        formatCode: 'online',
+      },
     ],
     availability: [
       { dayOfWeek: 1, localStartTime: '16:00', localEndTime: '19:00' },
@@ -338,11 +353,20 @@ export async function seedDiscoveryTutors(): Promise<void> {
       for (const service of seed.services) {
         const subjectId = subjectIdByCode.get(service.subjectCode);
         if (subjectId === undefined) throw new Error(`unknown subject ${service.subjectCode}`);
+        // Keyed on the DISPLAY NAME as well as tutor and subject. Keyed on
+        // (tutor, subject) alone, a tutor could never be seeded with two
+        // lengths for one subject — the second entry found the first service,
+        // saw it already had a current version, and silently did nothing. The
+        // seed looked like it worked and the data quietly disagreed with it.
         const [existingService] = await db
           .select({ id: services.id })
           .from(services)
           .where(
-            and(eq(services.tutorProfileId, tutorProfileId), eq(services.subjectId, subjectId)),
+            and(
+              eq(services.tutorProfileId, tutorProfileId),
+              eq(services.subjectId, subjectId),
+              eq(services.displayName, service.displayName),
+            ),
           );
         let serviceId: string;
         if (existingService !== undefined) {

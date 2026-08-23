@@ -16,6 +16,7 @@ export {
 export {
   REQUEST_TIME_OPTIONS_MAX,
   REQUEST_TIME_OPTIONS_MIN,
+  TIME_OPTIONS_GUIDANCE,
   combineSlotsByStart,
   validateChosenTimes,
   type CombinedSlot,

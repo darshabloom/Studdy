@@ -75,19 +75,39 @@ describe('validateFanOut', () => {
     expect(issuesOf(result)['times']).toMatch(/at least 2 hours/i);
   });
 
-  it('requires at least two different times', () => {
-    expect(
-      issuesOf(validateFanOut(rules, input({ proposedStarts: [start] }), now))['times'],
-    ).toMatch(/at least 2 different times/i);
+  /**
+   * One time is a real request. A parent with a single workable slot has not
+   * made a defective request, and refusing it would teach them that Studdy
+   * wants flexibility they do not have. The copy recommends offering more; the
+   * bound permits one, which is the difference between encouraging and
+   * requiring.
+   */
+  it('accepts a single time', () => {
+    expect(validateFanOut(rules, input({ proposedStarts: [start] }), now).ok).toBe(true);
   });
 
-  it('does not let the same time twice satisfy the minimum', () => {
-    // Two identical times are one choice. Counting them as two would let a
-    // family meet the bound while giving a tutor no alternative at all.
-    const twice = [start, new Date(start.getTime())];
-    expect(issuesOf(validateFanOut(rules, input({ proposedStarts: twice }), now))['times']).toMatch(
-      /at least 2 different times/i,
+  it('rejects no times at all', () => {
+    expect(issuesOf(validateFanOut(rules, input({ proposedStarts: [] }), now))['times']).toMatch(
+      /at least one time/i,
     );
+  });
+
+  /**
+   * Duplicates still collapse. The bound counts DISTINCT times, so raising or
+   * lowering it never turns one choice sent twice into two.
+   */
+  it('counts the same time twice as one time', () => {
+    const twice = [start, new Date(start.getTime())];
+    const result = validateFanOut(rules, input({ proposedStarts: twice }), now);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.proposedStarts).toHaveLength(1);
+  });
+
+  it('still enforces a configured minimum above one', () => {
+    const stricter = { ...rules, minTimeOptions: 2 };
+    expect(
+      issuesOf(validateFanOut(stricter, input({ proposedStarts: [start] }), now))['times'],
+    ).toMatch(/at least 2 different times/i);
   });
 
   it('rejects more times than the cap', () => {
