@@ -32,14 +32,16 @@ current; they are not duplicates.
 
 ## 2. Where the work is
 
-**Branch:** `main`. **HEAD:** `5b948b4928b68238b3eff2c2a5e038b4d901e45a` (`5b948b4`) —
-_feat: tutor availability, multi-time requests and the calendar-first tutor workspace (PR5) (#17)_
+**Branch:** `main`. **HEAD:** `7ad49238debca151dce5525243861a73a70f57be` (`7ad4923`) —
+_feat: discovery and tutor-profile availability calendars (PR6) (#18)_
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
-> **PR [#17](https://github.com/darshabloom/Studdy/pull/17) IS MERGED** (squash, 2026-08-20).
-> There is no open pull request. UX redesign **steps 1 and 2 are complete and on `main`**;
-> steps 3–6 remain. Branch fresh from `main` for step 3 — do not reuse
-> `feat/availability-and-multi-time-requests`, which is now merged history.
+> **PR [#18](https://github.com/darshabloom/Studdy/pull/18) IS MERGED** (squash, 2026-08-23),
+> as is [#17](https://github.com/darshabloom/Studdy/pull/17) before it (squash, 2026-08-20).
+> No feature pull request is open; the only open PRs are Dependabot's. UX redesign **steps 1,
+> 2 and 3 are complete and on `main`**; **steps 4–6 remain**. Branch fresh from `main` for
+> step 4 — do not reuse `feat/discovery-and-profile-availability-calendars` or
+> `feat/availability-and-multi-time-requests`, both now merged history.
 
 ### What PR #17 delivered
 
@@ -274,7 +276,7 @@ click-to-create, snapping, window fitting and the family-safe refusal.
 
 ## 8. The exact next tasks, in order
 
-Step 1 is done. **Steps 2–6 remain, in this order.** Rewrite or update the end-to-end
+Steps 1, 2 and 3 are done. **Steps 4–6 remain, in this order.** Rewrite or update the end-to-end
 journey alongside each step rather than leaving all test changes to the end; use targeted
 tests while building and the full suite at major boundaries and before PR readiness.
 
@@ -326,10 +328,10 @@ Most relevant files:
 | `apps/web/src/lib/time.ts`                                           | `PLATFORM_TIME_ZONE`, `availabilityWindow`                                                                |
 | `packages/database/src/integration/availability.integration.test.ts` | privacy assertions that must keep passing                                                                 |
 
-### Step 3 — discovery mini calendars and the tutor-profile calendar — **AWAITING REVIEW**
+### Step 3 — discovery mini calendars and the tutor-profile calendar — **COMPLETE**
 
-On `feat/discovery-and-profile-availability-calendars`, branched from `e37d9c5`. Complete and
-verified; **not merged, and not to be merged without the owner's approval.**
+Approved by the owner and **merged as `7ad4923`** (PR #18, squash, 2026-08-23), branched from
+`e37d9c5`. All four CI jobs and the Vercel checks were green on the merged commit.
 
 Discovery cards carry a mini week calendar (`density="mini"`, `familySafe`) and the tutor
 profile a full-size read-only one with paged navigation. `tutor-slots.tsx` and its pill
@@ -427,7 +429,7 @@ horizontal scroll with its hint were both confirmed as wanted and left alone.
 server (`pnpm build` then `pnpm --filter @studdy/web start --port 3200`) rather than `pnpm dev`:
 the dev server on this machine wedges when a build runs against the same `.next` directory.
 
-### Step 4 — the `/book` journey
+### Step 4 — the `/book` journey (NEXT)
 
 Child → Subject → Tutor → Lesson length → Online/In person → Availability → Review → Send
 request. Entering from a tutor card or profile prefills the tutor and any known child and
@@ -435,6 +437,20 @@ subject context so those steps are skipped. Lesson length is chosen from that tu
 published service versions. The subject section is find-or-created **at send**. This is where
 the **1–5 time options** change lands: `PROVISIONAL_REQUEST_RULES.minTimeOptions`, the seeded
 `requests.min_time_options` value, and the copy in `validateChosenTimes`.
+
+**What step 3 leaves you, and what it forbids.** `availabilityView` decides the seven days on
+screen and is already shared by the card and the profile — use it rather than choosing days
+again. `bookableSlotBlocks` is still the only projection crossing the privacy boundary; go
+through it. **Do NOT call `mergeContiguousBlocks` in the booking journey**: it exists to tidy
+read-only bands, and once a family is picking a time the difference between a 4:00 and a 4:30
+start is precisely what is being chosen. Reuse `WeekCalendar` in `select` mode with
+`familySafe`, and do not give the discovery cards a per-tutor window — a unit test asserts the
+profile and discovery windows differ, because the cards exist to be read against each other.
+
+Step 3 left the card action reading "View availability" and the profile carrying an
+informational callout rather than a booking button, both on purpose. **Renaming the card action
+to "Book a lesson" and replacing that callout with a real entry point is part of step 4**, and
+only once `/book` actually answers.
 
 ### Step 5 — demote the shortlist
 
