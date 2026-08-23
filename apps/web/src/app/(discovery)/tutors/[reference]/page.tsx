@@ -191,19 +191,33 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
           />
 
           {/*
-           * A note, not a button.
+           * The real entry point, now that /book answers.
            *
-           * A greyed-out primary still reads as an action — it says "you may
-           * do this, just not yet, and probably because of something you have
-           * not done". Nothing about the parent is incomplete here; the
-           * journey behind it simply does not exist yet. Saying that plainly
-           * is honest, and it stops the strongest-looking control on the page
-           * being the one thing that cannot be used.
+           * Only offered to a family already acting on a student and subject:
+           * the journey needs both, and a signed-out visitor is offered
+           * sign-in above rather than a button leading somewhere they cannot
+           * yet go.
            */}
-          <Alert tone="information" title="Booking a lesson here opens shortly" className="mt-5">
-            Requesting a lesson straight from a tutor&rsquo;s profile is being built. For now you
-            can save {tutor.firstName} for later, or ask the tutors on your shortlist together.
-          </Alert>
+          {activeSection === null ? (
+            <Alert tone="information" title="Sign in to book a lesson" className="mt-5">
+              A lesson request is always for a particular student and subject, so you will need to
+              sign in and tell us who the lesson is for.
+            </Alert>
+          ) : (
+            <div className="mt-5 flex flex-wrap items-center gap-3 rounded-[var(--radius-medium)] border border-brand-purple/20 bg-brand-lavender/40 px-4 py-4">
+              <Button size="lg" asChild>
+                <Link
+                  href={`/book?child=${activeSection.studentProfileId}&subject=${activeSection.subjectId}&tutor=${tutor.tutorReference}`}
+                >
+                  Book a lesson
+                </Link>
+              </Button>
+              <p className="text-sm text-text-secondary">
+                {tutor.firstName} still has to accept &mdash; you are sending a request, not
+                confirming a booking.
+              </p>
+            </div>
+          )}
         </div>
 
         {tutor.teachingApproach !== null ? (

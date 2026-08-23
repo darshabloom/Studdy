@@ -42,6 +42,11 @@ export interface TutorCardProps {
   availabilityTodayIndex: number;
   /** Shown where the calendar would be, when this visitor gets no derived times. */
   availabilityPrompt: AvailabilityPrompt;
+  /**
+   * Where "Book a lesson" goes, with whatever context is already known.
+   * Undefined for a visitor who cannot book yet, who is offered the profile.
+   */
+  bookHref?: string | undefined;
 }
 
 /**
@@ -69,6 +74,7 @@ export function TutorCard({
   availabilitySummary,
   availabilityTodayIndex,
   availabilityPrompt,
+  bookHref,
 }: TutorCardProps): ReactNode {
   const rating = ratingLabel(tutor.ratingHundredths);
   const profileHref =
@@ -147,15 +153,24 @@ export function TutorCard({
       </div>
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
-        {/* Primary, and it leads to the profile, where the full calendar is.
-            It promises only what the click delivers: booking does not exist
-            yet, and a button that says "book" would be writing a cheque the
-            next screen cannot cash. Step 4 renames this once /book is real.
-            Carrying the subject through keeps the times a family came to
-            compare. */}
-        <Button size="sm" asChild>
-          <Link href={profileHref}>View availability</Link>
-        </Button>
+        {/* Primary once there is a journey behind it. The link carries the
+            tutor, and the child and subject when the family is browsing in a
+            subject context, so /book opens on the first question still
+            genuinely open rather than back at the beginning. */}
+        {bookHref === undefined ? (
+          <Button size="sm" asChild>
+            <Link href={profileHref}>View availability</Link>
+          </Button>
+        ) : (
+          <>
+            <Button size="sm" asChild>
+              <Link href={bookHref}>Book a lesson</Link>
+            </Button>
+            <Button variant="quiet" size="sm" asChild>
+              <Link href={profileHref}>View profile</Link>
+            </Button>
+          </>
+        )}
         {subjectSectionId !== undefined ? (
           alreadyShortlisted ? (
             <span className="text-xs text-text-muted">Saved for later</span>

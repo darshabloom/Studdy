@@ -79,6 +79,15 @@ export interface WeekCalendarProps {
   mode?: WeekCalendarMode;
   /** Mini drops labels and shrinks rows; it still shows real geometry. */
   density?: 'mini' | 'comfortable';
+  /**
+   * Pixels per hour, overriding the comfortable default.
+   *
+   * Exists for the booking grid, where a block is one half-hour START rather
+   * than a whole lesson: at the default scale those are 22px tall, too short to
+   * carry their own time and a poor target for a thumb. Raising the scale is
+   * the honest fix — the geometry stays real, there is just more of it.
+   */
+  hourHeight?: number;
   stepMinutes?: number;
   /** Column headings, e.g. ['Mon 1', 'Tue 2', …]. Defaults to weekday names. */
   dayLabels?: readonly string[];
@@ -130,6 +139,7 @@ export function WeekCalendar({
   window,
   mode = 'read',
   density = 'comfortable',
+  hourHeight,
   stepMinutes = 30,
   dayLabels,
   selectedIds = [],
@@ -155,7 +165,7 @@ export function WeekCalendar({
   const spanMinutes = Math.max(window.dayEndMinutes - window.dayStartMinutes, 1);
   const bodyHeight = mini
     ? MINI_BODY_HEIGHT
-    : Math.round((spanMinutes / 60) * COMFORTABLE_HOUR_HEIGHT);
+    : Math.round((spanMinutes / 60) * (hourHeight ?? COMFORTABLE_HOUR_HEIGHT));
   const editable = mode === 'edit';
 
   // One template for both grids, so a heading always sits above its own column.

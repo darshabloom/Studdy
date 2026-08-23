@@ -327,6 +327,11 @@ export default async function TutorsPage({
                 )}
                 availabilityTodayIndex={view.todayIndex}
                 availabilityPrompt={availabilityPrompt}
+                bookHref={
+                  activeSection === null
+                    ? undefined
+                    : `/book?child=${activeSection.studentProfileId}&subject=${activeSection.subjectId}&tutor=${tutor.tutorReference}`
+                }
               />
             ))}
           </div>
