@@ -736,12 +736,20 @@ Read docs/handoffs/current-session.md first, in full, before anything else.
 
 Then confirm against the actual repo and git state:
 - the branch is feat/parent-booking-journey
-- HEAD is 0042d114462e378ee2f3b1b666abf514abd43cb2 (0042d11)
-- the branch is 15 commits ahead of origin/main and 0 behind
-- origin/main is 49df4cffa147f00fbe5076915385676972138eea
 - the working tree is clean
-- the branch has NOT been pushed, there is NO pull request, and nothing is merged
-- UX steps 1, 2 and 3 are merged to main; step 5 has not started
+- origin/main is 49df4cffa147f00fbe5076915385676972138eea, the merged step 3 baseline
+- the branch is AHEAD of origin/main and 0 behind
+- the branch has NOT been pushed (no remote ref for it)
+- there is NO pull request for it
+- nothing from step 4 is merged
+- UX steps 1, 2 and 3 ARE merged to main
+- step 4 is implemented and awaiting my manual UX approval
+- step 5 has not started
+
+Read the current HEAD and the exact ahead count out of git and REPORT them to me. Do not
+compare them against a number written in this prompt: a document cannot name the commit
+that contains it, so any hash or count stored here is stale the moment it is written. The
+facts above are the ones that stay true.
 
 Then confirm step 4 is implemented, by checking the code rather than trusting this list:
 - apps/web/src/app/book/ holds the entry redirect and one route per step
