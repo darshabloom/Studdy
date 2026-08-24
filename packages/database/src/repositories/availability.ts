@@ -1,5 +1,6 @@
 import { and, asc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
 import {
+  DEFAULT_MINIMUM_GAP_MINUTES,
   bookableSlots,
   type AvailabilityException as DomainException,
   type Interval,
@@ -551,6 +552,20 @@ export async function bookableSlotsForTutors(
     // Active reservations of every kind: confirmed bookings and request holds
     // alike. Both make time unbookable, and the difference is not the family's
     // business.
+    /**
+     * Each tutor's CURRENT minimum gap.
+     *
+     * The live value, not the one snapshotted on any reservation: this decides
+     * what may be taken next, and a tutor who widens their gap should see the
+     * effect on what they are offered immediately. The snapshots exist so the
+     * change does not reach backwards into holds already given out.
+     */
+    const gapRows = await db
+      .select({ id: tutorProfiles.id, minimumGapMinutes: tutorProfiles.minimumGapMinutes })
+      .from(tutorProfiles)
+      .where(inArray(tutorProfiles.id, ids));
+    const gapByTutor = new Map(gapRows.map((row) => [row.id, row.minimumGapMinutes]));
+
     const reservationRows = await db
       .select({
         tutorProfileId: tutorTimeReservations.tutorProfileId,
@@ -604,6 +619,10 @@ export async function bookableSlotsForTutors(
         defaultMinimumNoticeMinutes: query.defaultMinimumNoticeMinutes ?? 120,
         defaultMaximumAdvanceBookingDays: query.defaultMaximumAdvanceBookingDays ?? 60,
         now,
+        // The tutor's own gap, so nothing is offered that could not then be
+        // accepted: derivation and the exclusion constraint have to agree, or
+        // a family is shown a time the database will refuse.
+        minimumGapMinutes: gapByTutor.get(tutorProfileId) ?? DEFAULT_MINIMUM_GAP_MINUTES,
         ...(query.stepMinutes === undefined ? {} : { stepMinutes: query.stepMinutes }),
         ...(query.formatCode === undefined ? {} : { formatCode: query.formatCode }),
       });
@@ -751,5 +770,44 @@ export async function bookableSlotsForSubjectSection(
     return results;
   } finally {
     await client.end();
+  }
+}
+
+/** The tutor's configured minimum gap between lessons, in minutes. */
+export async function tutorMinimumGapMinutes(tutorProfileId: string): Promise<number> {
+  const { sql, db } = createDatabaseClient();
+  try {
+    const [row] = await db
+      .select({ minimumGapMinutes: tutorProfiles.minimumGapMinutes })
+      .from(tutorProfiles)
+      .where(eq(tutorProfiles.id, tutorProfileId));
+    return row?.minimumGapMinutes ?? DEFAULT_MINIMUM_GAP_MINUTES;
+  } finally {
+    await sql.end();
+  }
+}
+
+/**
+ * Change the tutor's minimum gap.
+ *
+ * Governs what may be taken NEXT and nothing else. Every existing reservation
+ * carries its own snapshot, so widening the gap does not reach backwards and
+ * invalidate a hold a family already has, nor move the line under a lesson
+ * already agreed. Narrowing it does not retroactively free time either.
+ */
+export async function setTutorMinimumGapMinutes(input: {
+  readonly tutorProfileId: string;
+  readonly minimumGapMinutes: number;
+}): Promise<void> {
+  const { sql, db } = createDatabaseClient();
+  try {
+    await db
+      .update(tutorProfiles)
+      // `tutor_profiles` carries no updated-by column; the actor is recorded
+      // by the caller's audit path rather than invented here.
+      .set({ minimumGapMinutes: input.minimumGapMinutes })
+      .where(eq(tutorProfiles.id, input.tutorProfileId));
+  } finally {
+    await sql.end();
   }
 }

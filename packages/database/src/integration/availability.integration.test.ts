@@ -150,6 +150,11 @@ describe.skipIf(!available)('availability repository', () => {
         tutorProfileId: tutorAId,
         startAt: target.startAt,
         endAt: target.endAt,
+        // A fixture standing in for an accepted request, which snapshots the
+        // tutor's gap. Zero here so this test keeps asking only about the slot
+        // itself; the gap has its own tests.
+        gapMinutes: 0,
+        effectiveEndAt: target.endAt,
         statusCode: 'active',
         reservationTypeCode: 'request_hold',
       })

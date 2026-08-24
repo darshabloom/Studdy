@@ -5,10 +5,12 @@ import {
   listAvailabilityRules,
   listTutorReservations,
   tutorProfileForUser,
+  tutorMinimumGapMinutes,
 } from '@studdy/database';
 import { Alert, Button, RestrictedState, WeekCalendar } from '@studdy/design-system';
 import { zonedClockTime } from '@studdy/domain/availability';
 import { resolveIdentity } from '@/lib/identity/resolve';
+import { MinimumGapForm } from './minimum-gap-form';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 import {
   bookableSlotBlocks,
@@ -72,18 +74,21 @@ export default async function TutorAvailabilityPage({
     return <RestrictedState title="That week could not be shown" />;
   }
 
-  const [rules, slotsByTutor] = await Promise.all([
-    listAvailabilityRules(profile.id),
-    bookableSlotsForTutors({
-      tutorProfileIds: [profile.id],
-      from: first.startAt,
-      to: last.endAt,
-      // An hour is the common lesson length and keeps the preview legible. The
-      // real journey derives slots against the tutor's published service
-      // duration; this previews the shape of the week, it is not an offer.
-      durationMinutes: 60,
-      now,
-    }),
+  const [minimumGapMinutes, [rules, slotsByTutor]] = await Promise.all([
+    tutorMinimumGapMinutes(profile.id),
+    Promise.all([
+      listAvailabilityRules(profile.id),
+      bookableSlotsForTutors({
+        tutorProfileIds: [profile.id],
+        from: first.startAt,
+        to: last.endAt,
+        // An hour is the common lesson length and keeps the preview legible. The
+        // real journey derives slots against the tutor's published service
+        // duration; this previews the shape of the week, it is not an offer.
+        durationMinutes: 60,
+        now,
+      }),
+    ]),
   ]);
 
   const slots = slotsByTutor.get(profile.id) ?? [];
@@ -217,6 +222,12 @@ export default async function TutorAvailabilityPage({
         </dl>
       </div>
       {noAvailabilityAlert}
+
+      {/* Beside the calendar because it is part of the calendar: it decides
+          what a family can be offered, exactly as the drawn hours do. */}
+      <div className="mt-4 rounded-[var(--radius-medium)] border border-surface-border bg-surface-card p-4">
+        <MinimumGapForm minutes={minimumGapMinutes} />
+      </div>
 
       <div className="mt-6">{nav}</div>
 

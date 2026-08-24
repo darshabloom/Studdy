@@ -1,5 +1,9 @@
 import 'server-only';
 import { bookableSlotsForTutors, type BookableSlot } from '@studdy/database';
+// Imported rather than restated: a marker is exactly as tall as the distance to
+// the next possible start, so a local copy that drifted would draw options
+// overlapping or with false gaps between them.
+import { SLOT_STEP_MINUTES } from '@studdy/domain/availability';
 import { clockLabel, type CalendarBlock } from '@studdy/design-system';
 import { bookableSlotBlocks, profileCalendarWindow } from '../availability/calendar-projection';
 import { availabilitySummary, availabilityView } from '../discovery/availability-view';
@@ -21,12 +25,6 @@ import type { ResolvedBooking } from './resolve';
  * family cannot widen their own availability by asking for a longer lesson than
  * the tutor sells, or a format the tutor does not deliver.
  */
-
-/**
- * The grid family-facing slots are derived on. Matches the derivation default,
- * so a marker is exactly as wide as the gap to the next possible start.
- */
-const SLOT_STEP_MINUTES = 30;
 
 /**
  * One block per bookable start, each a single step tall.

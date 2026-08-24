@@ -1,4 +1,6 @@
 export {
+  DEFAULT_MINIMUM_GAP_MINUTES,
+  SLOT_STEP_MINUTES,
   bookableSlots,
   formatMatches,
   mergeIntervals,

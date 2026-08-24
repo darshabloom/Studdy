@@ -85,6 +85,8 @@ export {
   archiveAvailabilityRule,
   bookableSlotsForSubjectSection,
   bookableSlotsForTutors,
+  tutorMinimumGapMinutes,
+  setTutorMinimumGapMinutes,
   createAvailabilityException,
   createAvailabilityRule,
   listAvailabilityExceptions,

@@ -10,7 +10,11 @@ import {
   type IlrStatus,
   type RequestRules,
 } from '@studdy/domain/bookings';
-import { zonedClockTime, zonedDateOnly } from '@studdy/domain/availability';
+import {
+  DEFAULT_MINIMUM_GAP_MINUTES,
+  zonedClockTime,
+  zonedDateOnly,
+} from '@studdy/domain/availability';
 import { createDatabaseClient } from '../client';
 import {
   auditEvents,
@@ -1330,14 +1334,33 @@ export async function acceptTutorRequestTime(
         .returning({ id: tutorRequests.id });
       if (moved === undefined) throw new RequestNotOpenError();
 
-      // 3. Take the ONE reservation. Overlap raises 23P01 and rolls back the
-      //    whole transaction, so the tutor is told the time is gone rather
-      //    than ending up double-booked.
+      /**
+       * 3. Take the ONE reservation.
+       *
+       * The gap is read INSIDE the transaction and snapshotted onto the row,
+       * with `effective_end_at` computed from it. Two things follow. The
+       * exclusion constraint can compare a plain two-column range without
+       * reaching the profile table — and a tutor who widens their gap later
+       * does not retroactively invalidate this hold, or any lesson already
+       * agreed under the old figure.
+       *
+       * Overlap of the EFFECTIVE ranges raises 23P01 and rolls back the whole
+       * transaction, so the tutor is told the time is gone rather than ending
+       * up with two lessons too close to honour.
+       */
+      const [gapRow] = await tx
+        .select({ minimumGapMinutes: tutorProfiles.minimumGapMinutes })
+        .from(tutorProfiles)
+        .where(eq(tutorProfiles.id, request.tutorProfileId));
+      const gapMinutes = gapRow?.minimumGapMinutes ?? DEFAULT_MINIMUM_GAP_MINUTES;
+
       await tx.insert(tutorTimeReservations).values({
         tutorProfileId: request.tutorProfileId,
         tutorRequestId: request.id,
         startAt: claimed.startAt,
         endAt: claimed.endAt,
+        gapMinutes,
+        effectiveEndAt: new Date(claimed.endAt.getTime() + gapMinutes * 60_000),
         statusCode: 'active',
         reservationTypeCode: 'request_hold',
         expiresAt: holdExpiresAt,

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, index, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { check, index, integer, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { standardColumns } from '../shared/columns';
 import { availabilitySchema } from '../shared/schemas';
 import { tutorProfiles } from '../tutors/tutor-profiles';
@@ -36,8 +36,34 @@ export const tutorTimeReservations = availabilitySchema.table(
     tutorRequestId: uuid('tutor_request_id').references(() => tutorRequests.id, {
       onDelete: 'restrict',
     }),
+    /** The lesson itself. Exactly what was offered, and never padded. */
     startAt: timestamp('start_at', { withTimezone: true }).notNull(),
     endAt: timestamp('end_at', { withTimezone: true }).notNull(),
+    /**
+     * The tutor's minimum gap AS IT WAS when this reservation was taken.
+     *
+     * Snapshotted, like the deadline rule version on a request: a tutor who
+     * widens their gap tomorrow must not retroactively invalidate a hold a
+     * family already has, nor silently move the line under a lesson that was
+     * agreed. The live value on the profile governs what can be taken NEXT.
+     */
+    gapMinutes: integer('gap_minutes').notNull().default(0),
+    /**
+     * `end_at + gap_minutes` — the interval this reservation actually blocks.
+     *
+     * The exclusion constraint compares THIS rather than the lesson, because
+     * `tstzrange(start_at, end_at)` catches only true overlap: 5:00–6:00 and
+     * 6:05–7:05 do not overlap and would both be accepted however large the
+     * gap. It is stored rather than computed in the constraint because an
+     * exclusion expression cannot reach the profile table, and because padding
+     * `end_at` itself would corrupt the time the tutor and the family read.
+     *
+     * PADDED ON ONE SIDE ONLY. Both rows carry their own padding, so one gap
+     * between them is enforced once; padding both sides of both rows would
+     * demand two gaps. A new lesson placed too close BEFORE an existing one is
+     * caught by its own padding running into that lesson's start.
+     */
+    effectiveEndAt: timestamp('effective_end_at', { withTimezone: true }).notNull(),
     /** active | released */
     statusCode: text('status_code').notNull().default('active'),
     /** request_hold | booking_confirmed (the latter arrives with selection). */
@@ -54,6 +80,10 @@ export const tutorTimeReservations = availabilitySchema.table(
       sql`${table.reservationTypeCode} in ('request_hold', 'booking_confirmed')`,
     ),
     check('reservation_time_order_check', sql`${table.endAt} > ${table.startAt}`),
+    check('reservation_gap_minutes_check', sql`${table.gapMinutes} >= 0`),
+    // The effective end may equal the lesson end (a zero gap) but never precede
+    // it: a reservation that blocked less than its own lesson would be a lie.
+    check('reservation_effective_end_check', sql`${table.effectiveEndAt} >= ${table.endAt}`),
     index('reservation_tutor_active_idx')
       .on(table.tutorProfileId)
       .where(sql`${table.statusCode} = 'active'`),

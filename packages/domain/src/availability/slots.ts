@@ -8,7 +8,7 @@
  * - blocked time
  * - confirmed bookings
  * - active holds
- * - travel buffers          (not in this checkpoint — see NOT YET SUBTRACTED)
+ * - the tutor's minimum gap between lessons
  * - holidays and breaks
  * - capacity restrictions   (not in this checkpoint — see NOT YET SUBTRACTED)
  * - minimum notice
@@ -18,11 +18,14 @@
  * This module is pure: no database, no clock of its own, no Next.js. `now` is
  * always passed in, so every case is testable without freezing time globally.
  *
- * NOT YET SUBTRACTED, and declared rather than left to be discovered:
- * travel buffers (§8.8) and capacity rules (§8.9). Both are modelled in doc 07
- * but out of scope for this checkpoint. A tutor may therefore be offered more
- * requests than a capacity rule would allow, and back-to-back in-person lessons
- * are not spaced. Both must land before in-person booking is real.
+ * NOT YET SUBTRACTED, and declared rather than left to be discovered: capacity
+ * rules (§8.9), modelled in doc 07 but out of scope. A tutor may therefore be
+ * offered more requests than a capacity rule would allow.
+ *
+ * The minimum gap is ONE tutor-level number, not yet split by format. A
+ * per-format travel buffer (§8.8) is a different, larger idea — an in-person
+ * lesson across town needs more than a reset between two video calls — and
+ * inventing half of it here would be worse than one honest figure.
  */
 
 /** A half-open interval [startAt, endAt). Instants, always UTC-based. */
@@ -89,6 +92,14 @@ export interface BookableSlotsInput {
   readonly exceptions: readonly AvailabilityException[];
   /** Active reservations: confirmed bookings AND request holds alike. */
   readonly reservations: readonly Interval[];
+  /**
+   * The least time that must separate one lesson from the next, in minutes.
+   *
+   * Applied to RESERVATIONS ONLY — bookings and holds, which are lessons. A
+   * blocked period is the tutor's own time off, not a lesson needing
+   * turnaround, so it is subtracted exactly as it stands.
+   */
+  readonly minimumGapMinutes?: number;
   /** The window the caller wants slots for. */
   readonly window: Interval;
   readonly durationMinutes: number;
@@ -102,9 +113,12 @@ export interface BookableSlotsInput {
   readonly defaultMaximumAdvanceBookingDays: number;
   readonly now: Date;
   /**
-   * Slot start granularity in minutes. 30 means slots begin on the hour and
-   * half-hour, which is how people actually think about lesson times — an
-   * arbitrary 09:07 start would be technically bookable and practically absurd.
+   * Slot start granularity in minutes.
+   *
+   * Fifteen: quarter past and quarter to are times people say out loud, and a
+   * school day does not divide neatly into halves — a lesson after a 3:45
+   * pick-up is a real lesson. An arbitrary 09:07 start would be technically
+   * bookable and practically absurd, which is what the grid exists to prevent.
    */
   readonly stepMinutes?: number;
 }
@@ -113,6 +127,18 @@ const MS_PER_MINUTE = 60_000;
 const MS_PER_DAY = 86_400_000;
 /** A recurring rule cannot be projected further than this in one query. */
 const MAX_WINDOW_DAYS = 62;
+
+/**
+ * The grid family-selectable lesson starts sit on.
+ *
+ * Exported because the booking calendar draws one block per possible start and
+ * has to size them to the same figure; a display that disagreed with the
+ * derivation would show gaps between adjacent options, or overlap them.
+ */
+export const SLOT_STEP_MINUTES = 15;
+
+/** Used when a tutor has no configured gap. Mirrors the column default. */
+export const DEFAULT_MINIMUM_GAP_MINUTES = 15;
 
 /**
  * The UTC instant of a local wall-clock time in an IANA zone.
@@ -302,7 +328,8 @@ export function bookableSlots(input: BookableSlotsInput): Interval[] {
     defaultMinimumNoticeMinutes,
     defaultMaximumAdvanceBookingDays,
     now,
-    stepMinutes = 30,
+    stepMinutes = SLOT_STEP_MINUTES,
+    minimumGapMinutes = DEFAULT_MINIMUM_GAP_MINUTES,
     formatCode,
   } = input;
 
@@ -360,8 +387,27 @@ export function bookableSlots(input: BookableSlotsInput): Interval[] {
     .filter((exception) => exception.effectCode === 'removes')
     .map((exception) => ({ startAt: exception.startAt, endAt: exception.endAt }));
 
-  // - confirmed bookings and active holds (one table, both kinds)
-  const cuts = [...removals, ...reservations];
+  /**
+   * - confirmed bookings and active holds (one table, both kinds), each widened
+   *   by the tutor's minimum gap ON BOTH SIDES.
+   *
+   * Both sides, because this asks "may a NEW lesson sit here" with only the
+   * existing lesson in hand: a candidate must neither begin too soon after it
+   * nor end too soon before it, and there is no second row's padding to lean
+   * on. The database constraint pads one side instead, because there both rows
+   * carry their own padding and padding both would demand two gaps. The two
+   * express the same minimum separation from opposite ends.
+   *
+   * REMOVALS ARE NOT WIDENED. A blocked period is the tutor's own time off,
+   * not a lesson they need to reset after — widening it would quietly take
+   * half an hour of bookable time either side of every holiday.
+   */
+  const gapMs = Math.max(0, minimumGapMinutes) * MS_PER_MINUTE;
+  const spacedReservations = reservations.map((reservation) => ({
+    startAt: new Date(reservation.startAt.getTime() - gapMs),
+    endAt: new Date(reservation.endAt.getTime() + gapMs),
+  }));
+  const cuts = [...removals, ...spacedReservations];
 
   const openPeriods = subtractIntervals(available, cuts)
     // Clip to the effective window so notice and advance limits bind.
