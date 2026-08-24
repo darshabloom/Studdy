@@ -584,6 +584,18 @@ whether a start time showed the time depended on how the body height rounded. Th
 booking grid uses 128. Any future change to `SLOT_STEP_MINUTES` or `hourHeight`
 should check the product stays clear of `LABEL_MIN_HEIGHT`.
 
+**A swallowed click is not a slow one, and no timeout fixes it.** Several
+`tutor-availability` navigations failed roughly one run in four: the first
+interaction after a page load can land before React has hydrated, and a click on
+a not-yet-live `<Link>` disappears with no navigation and no error.
+`e2e/helpers/navigation.ts` settles the page, clicks, and waits for the URL to
+CHANGE — not to match a pattern, because a swallowed click leaves the URL exactly
+as it was and any pattern describing the current page is satisfied by it. It also
+treats a vanished link as success, since some links remove themselves once used.
+Reach for it where a link is clicked soon after a load or another navigation;
+most clicks in the suite follow a visibility assertion or a form submission and
+need nothing.
+
 **Screenshots** for the review point are in `.review/step4` (gitignored), from
 `step4-review-shots.mjs` plus `step4-review-extras.mjs` for the two screens the main walk
 cannot reach: the discovery entry point, which needs a subject context, and the format step,
