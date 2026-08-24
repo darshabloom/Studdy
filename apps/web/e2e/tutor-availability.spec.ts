@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
  * The tutor's calendar-first availability screen (UX redesign step 2).
@@ -35,6 +35,41 @@ async function signIn(page: Page, email: string): Promise<void> {
   await page.getByLabel('Password').fill(SEEDED_PASSWORD);
   await page.getByRole('button', { name: 'Log in' }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 15_000 });
+}
+
+/**
+ * Click a link and insist the navigation actually happened.
+ *
+ * The first interaction after a page load can land before React has hydrated,
+ * and a click on a not-yet-live `<Link>` is simply swallowed — no navigation, no
+ * error, nothing to see. It failed about one run in four, and a longer timeout
+ * did not help because nothing was on its way: the click never took.
+ *
+ * WAITS FOR THE URL TO CHANGE rather than to match a pattern. A swallowed click
+ * leaves the URL exactly as it was, which any pattern describing the current
+ * page would happily satisfy — the helper would return believing it had
+ * navigated. The caller asserts the shape of the new URL afterwards.
+ *
+ * Retrying is safe because the target is a navigation: a duplicate click either
+ * does nothing or arrives at the same place. A link that has vanished means the
+ * navigation already happened, so that is a success rather than something to
+ * wait out.
+ */
+async function clickUntilNavigated(page: Page, link: Locator): Promise<void> {
+  await page.waitForLoadState('networkidle').catch(() => {});
+  await link.waitFor({ timeout: 15_000 });
+  const before = page.url();
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if ((await link.count()) === 0) return;
+    await link.click({ timeout: 5_000 }).catch(() => {});
+    try {
+      await page.waitForURL((url) => url.toString() !== before, { timeout: 8_000 });
+      return;
+    } catch {
+      if (attempt === 2) throw new Error(`the click never navigated away from ${before}`);
+    }
+  }
 }
 
 test.describe('tutor availability, as a calendar', () => {
@@ -278,16 +313,20 @@ test.describe('tutor availability, as a calendar', () => {
       timeout: 15_000,
     });
 
-    await page.getByRole('link', { name: 'Next week' }).click();
-    await expect(page).toHaveURL(/\/tutor\/availability\?week=\d{4}-\d{2}-\d{2}/);
+    await clickUntilNavigated(page, page.getByRole('link', { name: 'Next week' }));
+    await expect(page).toHaveURL(/\/tutor\/availability\?week=\d{4}-\d{2}-\d{2}/, {
+      timeout: 15_000,
+    });
 
     // The way back only offers itself once the tutor has left this week; on the
     // current week the same spot is a plain "This week" marker instead.
     const backToThisWeek = page.getByRole('link', { name: 'Back to this week' });
-    await expect(backToThisWeek).toBeVisible();
-    await backToThisWeek.click();
-    await expect(backToThisWeek).toHaveCount(0);
-    await expect(page.getByText('This week', { exact: true })).toBeVisible();
+    await expect(backToThisWeek).toBeVisible({ timeout: 15_000 });
+    // The same treatment: this click follows a navigation, so it lands during
+    // the next page's hydration and is swallowed just as readily as the first.
+    await clickUntilNavigated(page, backToThisWeek);
+    await expect(backToThisWeek).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByText('This week', { exact: true })).toBeVisible({ timeout: 15_000 });
   });
 
   test('preview as family shows bookable time and never a reason for a gap', async ({ page }) => {

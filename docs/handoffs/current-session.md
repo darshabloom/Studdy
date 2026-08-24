@@ -519,6 +519,71 @@ fixed during step 3 — fixing only half is what left the grids disagreeing. Bot
 now assert seven day columns each with real width; the old assertions compared block-bearing
 columns against headings, which a zero-width column satisfies perfectly well.
 
+### Step 4 refinements, approved after the first review
+
+**Quarter-hour starts.** Family-selectable lesson starts moved from a
+half-hour to a fifteen-minute grid. `SLOT_STEP_MINUTES` lives in
+`packages/domain/src/availability/slots.ts` and the booking calendar imports it,
+so the drawn markers cannot drift from what is actually derivable. The send path
+still passes `stepMinutes: 1` deliberately — that asks "is this exact interval
+inside open time", not "does it sit on our display grid".
+
+**A tutor minimum gap between lessons**, default 15 minutes, on
+`tutors.tutor_profiles.minimum_gap_minutes`, set from `/tutor/availability`. One
+tutor-level figure; NOT split by format. A per-format travel buffer (§8.8) is a
+larger idea and half of one would be worse than one honest number.
+
+**THE ASYMMETRY IS DELIBERATE, AND BOTH HALVES ARE LOAD-BEARING.**
+
+`bookableSlots` widens every reservation on BOTH sides before subtracting,
+because it asks "may a new lesson sit here" holding only the existing lesson — a
+candidate must neither begin too soon after it nor end too soon before it, and
+there is no second row's padding to lean on. Blocked periods are NOT widened: a
+holiday is time off, not a lesson needing turnaround, and widening it would
+quietly cost bookable time either side of every break.
+
+The database pads ONE side. Reservations carry `gap_minutes` and
+`effective_end_at = end_at + gap`, and `constraints/0006` excludes on
+`tstzrange(start_at, effective_end_at)`. Every row carries its own padding, so
+exactly one gap is required between any two; padding both sides of both rows
+would silently demand two. A lesson placed too close BEFORE an existing one is
+still caught, by its own padding running into that lesson's start.
+
+The old constraint compared the bare lesson interval, which catches only true
+overlap — 5:00–6:00 and 6:05–7:05 do not overlap and were both accepted however
+long the tutor needed between them.
+
+**The gap is snapshotted at acceptance.** A tutor who widens it tomorrow must
+not retroactively invalidate a hold a family already has, nor move the line under
+a lesson already agreed. The live profile value governs only what may be taken
+next. Eight integration tests pin the whole rule, including both insertion
+orders, hold versus confirmed lesson, two tutors' gaps not leaking into each
+other, and the snapshot surviving a setting change.
+
+**The booking journey keeps its answers on screen.** Desktop shows the current
+question beside a persistent summary; mobile shows the same rows as an accordion,
+answered above and waiting below. ONE DOM, TWO SHAPES: only the summary markup is
+duplicated, each copy hidden by `display: none` at the other width, so neither is
+read twice — the question is rendered once, because duplicating it would
+double-mount its form. There is NO client-side draft; the rows come from the same
+`resolveBooking` the screens are guarded by. A step never asked still appears,
+marked "(only option)". The review screen is the finished state of that same
+summary rather than a presentation invented for the last screen.
+
+**Two traps re-encountered, both already documented and both walked into again.**
+Exporting `MINIMUM_GAP_CHOICES` from a `'use server'` module passed typecheck and
+broke only `pnpm build`; the array now lives in the domain, where it is policy
+anyway. And Drizzle emits a bare `ADD COLUMN ... NOT NULL` for `effective_end_at`,
+which would fail outright on a populated table — the generated migration was
+hand-completed to add it with a temporary default, backfill from `end_at`, then
+tighten, before it had been applied anywhere.
+
+**A threshold worth knowing about.** At 112 pixels an hour a fifteen-minute
+calendar block is exactly 28 pixels, which is the label threshold itself, so
+whether a start time showed the time depended on how the body height rounded. The
+booking grid uses 128. Any future change to `SLOT_STEP_MINUTES` or `hourHeight`
+should check the product stays clear of `LABEL_MIN_HEIGHT`.
+
 **Screenshots** for the review point are in `.review/step4` (gitignored), from
 `step4-review-shots.mjs` plus `step4-review-extras.mjs` for the two screens the main walk
 cannot reach: the discovery entry point, which needs a subject context, and the format step,
