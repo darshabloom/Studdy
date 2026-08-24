@@ -278,6 +278,52 @@ prefix.
 
 ---
 
+## PD-019 — Families choose start times on a fifteen-minute grid
+
+**Approved 2026-08-24.** Family-selectable lesson starts sit on quarter hours: 4:00, 4:15,
+4:30, 4:45. Quarter past and quarter to are times people say out loud, and a school day does
+not divide neatly into halves — a lesson after a 3:45 pick-up is a real lesson that a
+half-hour grid cannot express.
+
+**Server-authoritative.** `SLOT_STEP_MINUTES` lives in the domain and governs derivation;
+the booking calendar imports it so the drawn options cannot drift from what is bookable.
+This is not UI filtering over a coarser truth.
+
+The send path deliberately derives with `stepMinutes: 1`. That asks "is this exact interval
+inside the tutor's open time", which is a different question from "does it sit on the grid a
+family was shown".
+
+---
+
+## PD-020 — Every tutor has a minimum gap between lessons, default fifteen minutes
+
+**Approved 2026-08-24.** `tutors.tutor_profiles.minimum_gap_minutes` is the least time that
+must pass between one lesson ending and the next beginning: preparing, resetting, or
+travelling. The tutor sets it from `/tutor/availability`.
+
+**One tutor-level figure. NOT split by online and in person.** A per-format travel buffer is
+a separate, larger concept (Database spec §8.8); inventing half of one now would be worse
+than one honest number.
+
+**Enforced in the database, not only in derivation.** Each reservation snapshots the gap in
+force when it was taken and stores `effective_end_at = end_at + gap_minutes`; the GiST
+exclusion constraint compares that interval. `tstzrange(start_at, end_at)` catches only true
+overlap — 5:00–6:00 and 6:05–7:05 do not overlap and would both be accepted however long the
+tutor needed between them.
+
+**The snapshot is the point.** A tutor who widens their gap tomorrow must not retroactively
+invalidate a hold a family already has, nor move the line under a lesson already agreed. The
+live value governs only what may be taken next. This follows PD-012's discipline for
+deadlines and holds.
+
+**Real `start_at` and `end_at` are never padded.** The tutor's calendar, the request records
+and the family's confirmation all read them.
+
+**Blocked availability periods are not widened.** A holiday is time off, not a lesson needing
+turnaround; widening it would quietly cost bookable time either side of every break.
+
+---
+
 ## Still open — decisions this project needs
 
 | Question                                                            | Why it matters                                                                      | Current state                                                      |

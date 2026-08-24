@@ -32,16 +32,32 @@ current; they are not duplicates.
 
 ## 2. Where the work is
 
-**Branch:** `main`. **HEAD:** `7ad49238debca151dce5525243861a73a70f57be` (`7ad4923`) —
-_feat: discovery and tutor-profile availability calendars (PR6) (#18)_
+**Branch:** `feat/parent-booking-journey`.
+**HEAD:** `99cb74a373702a97ebf22080a5052b904d39a557` (`99cb74a`) —
+_docs: record the swallowed-click failure mode and its helper_
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
-> **PR [#18](https://github.com/darshabloom/Studdy/pull/18) IS MERGED** (squash, 2026-08-23),
-> as is [#17](https://github.com/darshabloom/Studdy/pull/17) before it (squash, 2026-08-20).
-> No feature pull request is open; the only open PRs are Dependabot's. UX redesign **steps 1,
-> 2 and 3 are complete and on `main`**; **steps 4–6 remain**. Branch fresh from `main` for
-> step 4 — do not reuse `feat/discovery-and-profile-availability-calendars` or
-> `feat/availability-and-multi-time-requests`, both now merged history.
+> ### Checkpoint state, verified against git
+>
+> | Fact         | Value                                                       |
+> | ------------ | ----------------------------------------------------------- |
+> | Branch       | `feat/parent-booking-journey`                               |
+> | HEAD         | `99cb74a373702a97ebf22080a5052b904d39a557`                  |
+> | Base         | `origin/main` at `49df4cffa147f00fbe5076915385676972138eea` |
+> | Divergence   | **14 ahead, 0 behind** `origin/main`                        |
+> | Working tree | clean                                                       |
+> | Pushed       | **NO** — the branch exists only locally                     |
+> | Pull request | **NONE** open for it                                        |
+> | Merged       | **NO**                                                      |
+>
+> **Step 4 is implemented, fully tested, and AWAITING THE OWNER'S MANUAL UX APPROVAL.**
+> Steps 1, 2 and 3 are merged to `main` (PRs #17 and #18). **Step 5 has not started.**
+>
+> Do not push, open a pull request, merge, or begin step 5 until the owner confirms.
+>
+> `main` itself carries steps 1–3 only. Do not reuse the merged branches
+> `feat/discovery-and-profile-availability-calendars` or
+> `feat/availability-and-multi-time-requests`.
 
 ### What PR #17 delivered
 
@@ -106,10 +122,11 @@ cd S:\Studdy; pnpm exec turbo run lint --concurrency=2
 Supabase runs on 14321 (API), 14322 (database), 14323 (Studio), 14324 (Mailpit inbox).
 The analytics container is disabled locally.
 
-**Expected state after a clean run:** 28 tables classified by `check:rls`; **307 unit and
-integration tests passing with 1 skipped** (4 configuration, 50 design-system, 123 domain,
-34 web, 96 database including its integration suite); **80 end-to-end**. `typecheck`,
-`lint`, `format`, `check:rls` and `check:boundaries` all green.
+**Expected state after a clean run, at `99cb74a`:** 28 tables classified by `check:rls`;
+**361 unit and integration tests passing with 1 skipped** (4 configuration, 50
+design-system, 131 domain, 60 web, 116 database including its integration suite);
+**95 end-to-end**. `typecheck`, `lint`, `format`, `check:rls`, `check:boundaries` and
+`build` all green.
 
 **Re-seed before every end-to-end run.** The e2e suite is not idempotent against a used
 database — it creates students and leaves holds — so a second run without a reset fails in
@@ -276,7 +293,7 @@ click-to-create, snapping, window fitting and the family-safe refusal.
 
 ## 8. The exact next tasks, in order
 
-Steps 1 to 3 are merged; step 4 is built and awaiting review. **Steps 5 and 6 remain.** Rewrite or update the end-to-end
+Steps 1 to 3 are merged. Step 4 is implemented on its own branch and awaiting the owner's manual UX approval. **Steps 5 and 6 remain.** Rewrite or update the end-to-end
 journey alongside each step rather than leaving all test changes to the end; use targeted
 tests while building and the full suite at major boundaries and before PR readiness.
 
@@ -429,178 +446,193 @@ horizontal scroll with its hint were both confirmed as wanted and left alone.
 server (`pnpm build` then `pnpm --filter @studdy/web start --port 3200`) rather than `pnpm dev`:
 the dev server on this machine wedges when a build runs against the same `.next` directory.
 
-### Step 4 — the `/book` journey — **AWAITING REVIEW**
+### Step 4 — the parent `/book` journey — **IMPLEMENTED, AWAITING MANUAL UX APPROVAL**
 
-On `feat/parent-booking-journey`, branched from `49df4cf`. Complete and verified;
-**not merged, and not to be merged without the owner's approval.**
+On `feat/parent-booking-journey`, 14 commits off `main` at `49df4cf`. Complete, fully
+tested, **not pushed, no pull request, not merged.** The owner has approved every decision
+below; what remains is their manual review of the progressive-summary and mobile-accordion
+screens, which changed after the last screenshots they saw.
 
-Child → Subject → Tutor → Lesson length → Online/In person → Times → Review → Send request.
-One route per step under `/book`, server-rendered, with the answers held in the URL.
+**Do not push, open a PR, merge or start step 5 until the owner confirms.**
 
-**Nothing is persisted while a family browses.** No draft row, no session blob, no half-made
-subject section — opening the wizard cannot change a child's record. The corollary is that
-every parameter is attacker-controlled, so `resolveBooking` re-checks all of them on every
-request: the child against who the user may act for, the tutor through the bookable
-allow-list, the version against that tutor's own rows for that subject. An answer that no
-longer resolves is dropped along with everything downstream and the family lands on the first
-open question. **Price and duration are never read from the URL** — only a version id.
+#### The journey
 
-**The send is atomic.** `createIntendedLessonRequest` now accepts a `subjectSectionDraft`
-instead of a section id, and the find-or-create runs inside the transaction that already
-writes the request, its time options, the tutor request and the hold. Either all of it commits
-or none does, so a send that loses a race for a slot leaves the child unchanged rather than
-carrying a subject they never agreed to study. Everything before the transaction stays
-read-only, and the availability check and GiST exclusion constraint are untouched.
-`student_subject_sections_live_unique_idx` already existed, so the find-or-create is
-concurrency-safe with no lock and no migration.
+Child → Subject → Tutor → Lesson length → Online/in person _(only where it is a real
+question)_ → Times → Review → **Send request**.
 
-**Slots are drawn as START MARKERS, one step tall — and this matters.** Drawn at their full
-lesson length, slots derived every half hour OVERLAP, and absolutely positioned overlapping
-blocks cover one another: every start but the last was physically unclickable. Marking the
-start is also what is actually being chosen. They are still not merged — 4:00 and 4:30 are
-the choice. **Step 5 and anything else touching this grid must keep both properties.**
+- One route per step under `/book`, server-rendered. `/book` itself redirects to the first
+  question still genuinely open.
+- **Single-tutor is the normal journey.** The shortlist stays optional and is never a
+  prerequisite; the multi-tutor fan-out remains reachable only from the shortlist.
+- **Direct entry prefills.** A tutor card or profile links to
+  `/book?child=…&subject=…&tutor=…`, and any answer that still validates is skipped.
+- **Multiple lesson durations are supported.** A tutor may publish several priced versions
+  for one subject; the family chooses among them.
+- **The service version is server-authoritative.** Only a version id travels in the URL —
+  never a price or a duration — and it is validated as belonging to that tutor and that
+  subject, published and current, before anything is priced from it.
+- **A single-option step is settled, not asked.** Where a version can be delivered one way,
+  the format answer is carried forward and the screen never appears.
+- **1–5 acceptable times.** Copy recommends more without requiring it:
+  `TIME_OPTIONS_GUIDANCE` — "Choose one or more times that work for you. Choosing a few
+  gives the tutor more options." The bound is a single configured rule shared with the
+  fan-out journey, so the two cannot drift apart.
+- **Selectable starts every 15 minutes**, and **exact starts stay distinct** — the booking
+  calendar must never call `mergeContiguousBlocks`, because 4:00 and 4:30 are the choice.
+- **Optional tutor note at Review** (`notesForTutors`), not a wizard step of its own.
+- **The final action says "Send request to <tutor>"**, never Book or Confirm. A tutor still
+  has to accept.
+- **No Stripe or payment work.** `hasPaymentMethodOnFile` is false and the gate is disabled.
 
-**The format step appears only when it is a question.** Where a version can be delivered one
-way, the answer is settled at the length step and the rail never promises a screen that is not
-coming.
+#### Nothing is persisted while browsing
 
-**Two latent bugs surfaced and were fixed.**
+There is no draft row, no session blob and no half-made `student_subject_section`: opening
+the wizard cannot change a child's record. The answers live in the URL, which means every
+parameter is attacker-controlled, so `resolveBooking` re-checks all of them on every request
+— the child against who this user may act for, the tutor through the bookable allow-list,
+the version against that tutor's own rows. An answer that no longer resolves is dropped
+along with everything downstream.
 
-1. `createIntendedLessonRequest` keyed service versions by tutor id alone, so a tutor with two
-   lengths silently kept whichever row came back last: a family choosing ninety minutes could
-   be charged for sixty. The chosen id is now looked up among that tutor's rows for that
-   subject only, so a version belonging to another tutor or subject is refused.
-2. `bookableSlotsForSubjectSection` returned one entry per version, so once a tutor published
-   two lengths a discovery card derived them twice and rendered whichever arrived last. It now
-   returns one entry per tutor at the CHEAPEST length, which is the one the card's "from"
-   price already quotes.
+**The subject section is created atomically with a successful send.**
+`createIntendedLessonRequest` takes a `subjectSectionDraft` instead of an id, and the
+find-or-create runs inside the transaction that already writes the request, its time
+options, the tutor request and the hold. Either all of it commits or none does, so a send
+that loses a race for a slot leaves the child unchanged rather than carrying a subject they
+never agreed to study. All validation before the transaction is read-only.
+`student_subject_sections_live_unique_idx` already existed, so it is concurrency-safe with
+no lock and no migration.
 
-**Time options are 1–5 everywhere**, including the shortlist fan-out, with shared copy in
-`TIME_OPTIONS_GUIDANCE`.
+#### The progressive summary
 
-**Test isolation worth knowing about.** `booking-journey.spec.ts` sends real requests, which
-take real calendar holds. It books **Mei / English**, whom no other spec touches — booking a
-maths tutor made the lesson-request and discovery journeys fail on times this spec had quietly
-taken. It is also excluded from the mobile project, like the other journey specs, because both
-projects would otherwise race the same account. This is the same class of collision the
-dedicated accounts already prevent, one level down: **a spec that sends a request needs its own
-tutor, not just its own family.**
+- **Desktop:** the current question beside a persistent `Your request so far` panel.
+- **Answered rows carry a `Change` action**, which drops the answers that depended on them
+  exactly as `paramsUpTo` already did.
+- **Mobile:** the same rows as an accordion — completed above, waiting below, only the
+  current route visually expanded. Tapping a completed section reopens it.
+- **Completed and skipped single-option choices stay visible as settled context**, the
+  latter marked `(only option)` so the parent is not credited with a decision they were
+  never offered.
+- **The same server-authoritative URL/resolution model underneath.** No separate
+  client-side booking draft exists.
+- **Review is the completed version of that same summary**, not a second presentation. The
+  shell suppresses the panel on Review so the six answers never appear twice at once.
 
-**New and changed files**
+ONE DOM, TWO SHAPES: only the static summary markup is duplicated, each copy hidden by
+`display: none` at the other width so neither is read twice. **The question is rendered
+once** — duplicating it would double-mount its form.
 
-| File                                                    | What                                                         |
-| ------------------------------------------------------- | ------------------------------------------------------------ |
-| `apps/web/src/app/book/**`                              | entry redirect plus seven step routes                        |
-| `apps/web/src/lib/booking/draft.ts`                     | URL parsing, href building, dropping answers below a step    |
-| `apps/web/src/lib/booking/resolve.ts`                   | re-authorises every parameter; decides the next open step    |
-| `apps/web/src/lib/booking/availability.ts`              | derivation without a section; start markers; `stillBookable` |
-| `apps/web/src/lib/booking/actions.ts`                   | the send, re-resolving everything server-side                |
-| `apps/web/src/components/booking/**`                    | shell and rail, choice list, time picker, review form        |
-| `packages/database/src/repositories/services.ts`        | `listBookableServices`, `formatsForVersion`                  |
-| `packages/database/src/repositories/lesson-requests.ts` | chosen version, section draft, atomic send                   |
-| `packages/database/src/repositories/availability.ts`    | one entry per tutor at the cheapest length                   |
-| `packages/domain/src/availability/combine.ts`           | 1–5 bound and `TIME_OPTIONS_GUIDANCE`                        |
-| `packages/design-system/.../week-calendar.tsx`          | optional `hourHeight` for the selection grid                 |
-| `apps/web/src/middleware.ts`                            | `/book` is protected                                         |
+#### Timing and the minimum gap between lessons
 
-**No migration, no schema change, no RLS change.**
+- **`tutors.tutor_profiles.minimum_gap_minutes`, default 15.** One tutor-level figure; NOT
+  split by online/in-person. A per-format travel buffer (§8.8) is a larger idea and half of
+  one would be worse than one honest number.
+- **The tutor configures it from `/tutor/availability`**, beside the calendar, because it
+  decides what families can be offered exactly as the drawn hours do.
+- **15-minute granularity is server-authoritative.** `SLOT_STEP_MINUTES` lives in
+  `packages/domain/src/availability/slots.ts`; the booking calendar imports it so drawn
+  markers cannot drift from what is derivable. The send path still passes `stepMinutes: 1`
+  deliberately — that asks "is this exact interval inside open time", not "does it sit on
+  our display grid".
+- **Each reservation snapshots the gap** in force when it was taken (`gap_minutes`).
+- **Real `start_at` and `end_at` are never padded** — the tutor's calendar, the request
+  records and the family's confirmation all read them.
+- **A persisted effective interval enforces the snapshotted gap:**
+  `effective_end_at = end_at + gap_minutes`.
+- **The GiST exclusion constraint uses the effective interval**
+  (`constraints/0006_reservation_gap_exclusion.sql`), not the bare lesson interval.
+- **Later changes to the tutor's setting never alter existing reservations.** The live value
+  governs only what may be taken next.
 
-**Verified:** typecheck, lint, format, `check:rls` (28 tables), `check:boundaries`, build,
-**347 unit and integration tests with 1 skipped** (up from 333) and **93 end-to-end** (up from
-86), all after `db:reset && db:migrate && db:seed`.
+**THE ASYMMETRY IS DELIBERATE AND BOTH HALVES ARE LOAD-BEARING.** `bookableSlots` widens
+each existing reservation on **both** sides, because it evaluates ONE candidate against
+existing reservations holding only those reservations — the candidate must neither begin too
+soon after one nor end too soon before one, and there is no second row's padding to lean on.
+The database pads **one** side per reservation, because there every row carries its own
+padding, so exactly one gap is counted between any two; padding both sides of both rows
+would demand two. A lesson placed too close _before_ an existing one is still caught, by its
+own padding running into that lesson's start.
 
-**A third bug, found by the tests and the most serious of them.** In `mini` density the
-calendar BODY skipped the gutter cell while the header rendered it, so the two grids disagreed
-about which track each day occupied: the first day landed in the zero-width gutter track and
-the seventh was pushed off the end. Discovery cards were showing six days and a sliver. It
-survived the whole of step 3 because the lost column was whichever day came first in the
-rolling week, and no seeded tutor taught on it until a Monday. The header half of this was
-fixed during step 3 — fixing only half is what left the grids disagreeing. Both calendar specs
-now assert seven day columns each with real width; the old assertions compared block-bearing
-columns against headings, which a zero-width column satisfies perfectly well.
+**Blocked availability periods are NOT widened.** A holiday is time off, not a lesson
+needing turnaround; widening it would quietly cost bookable time either side of every break.
 
-### Step 4 refinements, approved after the first review
+#### Fixes, traps and debts found during step 4
 
-**Quarter-hour starts.** Family-selectable lesson starts moved from a
-half-hour to a fifteen-minute grid. `SLOT_STEP_MINUTES` lives in
-`packages/domain/src/availability/slots.ts` and the booking calendar imports it,
-so the drawn markers cannot drift from what is actually derivable. The send path
-still passes `stepMinutes: 1` deliberately — that asks "is this exact interval
-inside open time", not "does it sit on our display grid".
+1. **Chosen service version was last-wins.** `createIntendedLessonRequest` keyed versions by
+   tutor id alone, so a tutor with two lengths kept whichever row returned last — a family
+   choosing 90 minutes could be charged for 60, with nothing recording it. Now looked up
+   among that tutor's rows for that subject only.
+2. **Multi-version tutors duplicated in discovery.** `bookableSlotsForSubjectSection`
+   returned one entry per version, so a card derived the same tutor twice and rendered an
+   arbitrary length. Now one entry per tutor at the cheapest published length — the one the
+   card's "from" price already quotes.
+3. **The mini calendar silently lost a day.** In `mini` density the body skipped the gutter
+   cell while the header rendered it, so the first day fell into the zero-width gutter track
+   and the seventh was pushed off the end. Both grids now always render the cell; both
+   calendar specs assert seven day columns each with real width.
+4. **Overlapping booking slots were unclickable.** Drawn at full lesson length, half-hourly
+   slots overlap, and an absolutely positioned block covers the one beneath it — every start
+   but the last was unreachable. Slots are now **start markers** one step tall, which is
+   also what is being chosen; the length is stated once in the heading.
+5. **The generated migration would have failed on a populated table.** Drizzle emits a bare
+   `ADD COLUMN effective_end_at ... NOT NULL`. Hand-completed to add with a temporary
+   default, backfill from `end_at`, then tighten — **before the file had been applied
+   anywhere.** The immutability rule protects migrations that have already run.
+6. **New reviewed SQL replaces the exclusion constraint** rather than mutating the applied
+   `constraints/0005_reservation_exclusion.sql`.
+7. **A `'use server'` file may only export async server actions.** Exporting
+   `MINIMUM_GAP_CHOICES` from one passed typecheck and broke only `pnpm build`. Constants
+   belong elsewhere; it lives in the domain, where it is policy anyway.
+8. **Playwright swallowed clicks before hydration.** The first interaction after a load can
+   land before React hydrates and vanish — no navigation, no error. No timeout fixes it, and
+   waiting for a URL _pattern_ succeeds spuriously because a swallowed click leaves the URL
+   unchanged. `e2e/helpers/navigation.ts` waits for the URL to **change**, and treats a
+   vanished link as success. Reach for it where a link is clicked soon after a load or
+   another navigation.
+9. **State-mutating E2E needs its own account AND its own tutor.** `booking-journey` sends
+   real requests, taking real calendar holds. It uses `parent.booking@` and books
+   **Mei / English** exclusively; sharing either broke other specs in ways that read as
+   product bugs. It is also excluded from the mobile project, as the other journey specs are.
 
-**A tutor minimum gap between lessons**, default 15 minutes, on
-`tutors.tutor_profiles.minimum_gap_minutes`, set from `/tutor/availability`. One
-tutor-level figure; NOT split by format. A per-format travel buffer (§8.8) is a
-larger idea and half of one would be worse than one honest number.
+#### Verified gate state at `99cb74a`
 
-**THE ASYMMETRY IS DELIBERATE, AND BOTH HALVES ARE LOAD-BEARING.**
+| Gate                                       | Result                       |
+| ------------------------------------------ | ---------------------------- |
+| `pnpm typecheck`                           | green                        |
+| `pnpm exec turbo run lint --concurrency=2` | green                        |
+| `pnpm format`                              | green                        |
+| `pnpm check:rls`                           | green — 28 tables classified |
+| `pnpm check:boundaries`                    | green                        |
+| `pnpm build`                               | green                        |
+| Unit + integration                         | **361 passing, 1 skipped**   |
+| End-to-end                                 | **95 passing**               |
 
-`bookableSlots` widens every reservation on BOTH sides before subtracting,
-because it asks "may a new lesson sit here" holding only the existing lesson — a
-candidate must neither begin too soon after it nor end too soon before it, and
-there is no second row's padding to lean on. Blocked periods are NOT widened: a
-holiday is time off, not a lesson needing turnaround, and widening it would
-quietly cost bookable time either side of every break.
+All after `pnpm db:reset && pnpm db:migrate && pnpm db:seed`.
 
-The database pads ONE side. Reservations carry `gap_minutes` and
-`effective_end_at = end_at + gap`, and `constraints/0006` excludes on
-`tstzrange(start_at, effective_end_at)`. Every row carries its own padding, so
-exactly one gap is required between any two; padding both sides of both rows
-would silently demand two. A lesson placed too close BEFORE an existing one is
-still caught, by its own padding running into that lesson's start.
+#### Review screenshots
 
-The old constraint compared the bare lesson interval, which catches only true
-overlap — 5:00–6:00 and 6:05–7:05 do not overlap and were both accepted however
-long the tutor needed between them.
+`S:\Studdy\.review\step4\` (gitignored). Eighteen images: `desktop-0-discovery-entry`
+through `desktop-8-tutor-minimum-gap`, and `mobile-0` through `mobile-7`.
 
-**The gap is snapshotted at acceptance.** A tutor who widens it tomorrow must
-not retroactively invalidate a hold a family already has, nor move the line under
-a lesson already agreed. The live profile value governs only what may be taken
-next. Eight integration tests pin the whole rule, including both insertion
-orders, hold versus confirmed lesson, two tutors' gaps not leaking into each
-other, and the snapshot surviving a setting change.
+Regenerate against a PRODUCTION server, never `pnpm dev`:
 
-**The booking journey keeps its answers on screen.** Desktop shows the current
-question beside a persistent summary; mobile shows the same rows as an accordion,
-answered above and waiting below. ONE DOM, TWO SHAPES: only the summary markup is
-duplicated, each copy hidden by `display: none` at the other width, so neither is
-read twice — the question is rendered once, because duplicating it would
-double-mount its form. There is NO client-side draft; the rows come from the same
-`resolveBooking` the screens are guarded by. A step never asked still appears,
-marked "(only option)". The review screen is the finished state of that same
-summary rather than a presentation invented for the last screen.
+```bash
+pnpm build && pnpm --filter @studdy/web start --port 3200
+```
 
-**Two traps re-encountered, both already documented and both walked into again.**
-Exporting `MINIMUM_GAP_CHOICES` from a `'use server'` module passed typecheck and
-broke only `pnpm build`; the array now lives in the domain, where it is policy
-anyway. And Drizzle emits a bare `ADD COLUMN ... NOT NULL` for `effective_end_at`,
-which would fail outright on a populated table — the generated migration was
-hand-completed to add it with a temporary default, backfill from `end_at`, then
-tighten, before it had been applied anywhere.
+```bash
+node apps/web/scripts/step4-review-shots.mjs http://localhost:3200 S:/Studdy/.review/step4
+```
 
-**A threshold worth knowing about.** At 112 pixels an hour a fifteen-minute
-calendar block is exactly 28 pixels, which is the label threshold itself, so
-whether a start time showed the time depended on how the body height rounded. The
-booking grid uses 128. Any future change to `SLOT_STEP_MINUTES` or `hourHeight`
-should check the product stays clear of `LABEL_MIN_HEIGHT`.
+```bash
+node apps/web/scripts/step4-review-extras.mjs http://localhost:3200 S:/Studdy/.review/step4
+```
 
-**A swallowed click is not a slow one, and no timeout fixes it.** Several
-`tutor-availability` navigations failed roughly one run in four: the first
-interaction after a page load can land before React has hydrated, and a click on
-a not-yet-live `<Link>` disappears with no navigation and no error.
-`e2e/helpers/navigation.ts` settles the page, clicks, and waits for the URL to
-CHANGE — not to match a pattern, because a swallowed click leaves the URL exactly
-as it was and any pattern describing the current page is satisfied by it. It also
-treats a vanished link as success, since some links remove themselves once used.
-Reach for it where a link is clicked soon after a load or another navigation;
-most clicks in the suite follow a visibility assertion or a form submission and
-need nothing.
+The extras script covers the three screens the main walk cannot reach: the discovery entry
+point (needs a subject context), the format step (needs a tutor teaching both ways — James's
+Calculus at Years 10–13, so a senior student), and the tutor's minimum-gap control.
 
-**Screenshots** for the review point are in `.review/step4` (gitignored), from
-`step4-review-shots.mjs` plus `step4-review-extras.mjs` for the two screens the main walk
-cannot reach: the discovery entry point, which needs a subject context, and the format step,
-which needs a tutor teaching both ways — James's Calculus, at Years 10–13, so a senior student.
-Point both at a production server, never `pnpm dev`.
+> **THE FINAL PROGRESSIVE-SUMMARY AND MOBILE-ACCORDION SCREENSHOTS STILL NEED THE OWNER'S
+> REVIEW BEFORE ANY PR OR MERGE.** They changed after the last set the owner approved.
 
 ### Step 5 — demote the shortlist
 
@@ -703,27 +735,44 @@ If S: is missing, run: Start-ScheduledTask -TaskName 'Mount StuddyDev Disk'
 Read docs/handoffs/current-session.md first, in full, before anything else.
 
 Then confirm against the actual repo and git state:
-- you are on main, up to date with origin/main
-- HEAD is 5b948b4928b68238b3eff2c2a5e038b4d901e45a (5b948b4), the squashed PR #17
+- the branch is feat/parent-booking-journey
+- HEAD is 99cb74a373702a97ebf22080a5052b904d39a557 (99cb74a)
+- the branch is 14 commits ahead of origin/main and 0 behind
+- origin/main is 49df4cffa147f00fbe5076915385676972138eea
 - the working tree is clean
-- there is no open pull request; PR #17 is merged
-- UX steps 1 and 2 are present: packages/design-system/src/components/calendar/ holds
-  geometry.ts, geometry.test.ts and week-calendar.tsx, and apps/web/src/app/tutor/availability/
-  holds page.tsx, availability-calendar.tsx and availability-editor.tsx
+- the branch has NOT been pushed, there is NO pull request, and nothing is merged
+- UX steps 1, 2 and 3 are merged to main; step 5 has not started
+
+Then confirm step 4 is implemented, by checking the code rather than trusting this list:
+- apps/web/src/app/book/ holds the entry redirect and one route per step
+- apps/web/src/lib/booking/ holds draft.ts, resolve.ts, availability.ts, summary.ts, actions.ts
+- apps/web/src/components/booking/ holds booking-shell.tsx, booking-summary.tsx,
+  choice-list.tsx, time-picker.tsx, review-form.tsx
+- tutors.tutor_profiles has minimum_gap_minutes, and tutor_time_reservations has
+  gap_minutes and effective_end_at
+- packages/database/migrations/reviewed-sql/constraints/0006_reservation_gap_exclusion.sql
+  exists and excludes on the effective interval
+
+Then verify the gates yourself, after pnpm db:reset && pnpm db:migrate && pnpm db:seed.
+Expect 361 unit and integration tests passing with 1 skipped, and 95 end-to-end passing,
+with typecheck, lint, format, check:rls (28 tables), check:boundaries and build all green.
 
 Then, in your own words rather than copying the handoff back to me, summarise:
-- the approved UX redesign, the normal parent booking journey, and why shortlisting is
-  optional
-- what WeekCalendar is, its wall-clock geometry model, its modes, and what
-  familySafe/assertFamilySafe protects
-- why "Preview as family" is a separate server render rather than a client toggle
-- how lesson format scopes availability, and why a blocked period is never format-scoped
+- the parent /book journey, why the shortlist stays optional, and why the subject section
+  is created only as part of a successful send
+- the progressive summary: what desktop shows, what mobile shows, why there is no separate
+  client-side booking draft, and how Review relates to it
+- the minimum-gap model: where the setting lives, what a reservation snapshots, what the
+  exclusion constraint compares, and WHY derivation widens both sides while the persisted
+  constraint pads one — they are the same rule seen from opposite ends
+- why exact start times must stay distinct rather than being merged
 
-Then identify step 3 (discovery mini calendars and the large tutor-profile calendar) and
-state what it involves.
+Then state plainly that step 4 is awaiting my manual UX approval, and that the final
+progressive-summary and mobile-accordion screenshots in S:\Studdy\.review\step4\ still
+need my review.
 
-Do NOT begin implementation. Branch fresh from main when we start. Stop after that summary
-and wait for me to confirm your recovered context is correct.
+Do NOT implement anything, push, open a pull request, merge, or start step 5 until I have
+confirmed your recovered context is correct. Stop after the summary and wait for me.
 ```
 
 ---
