@@ -736,8 +736,8 @@ Read docs/handoffs/current-session.md first, in full, before anything else.
 
 Then confirm against the actual repo and git state:
 - the branch is feat/parent-booking-journey
-- HEAD is 99cb74a373702a97ebf22080a5052b904d39a557 (99cb74a)
-- the branch is 14 commits ahead of origin/main and 0 behind
+- HEAD is 0042d114462e378ee2f3b1b666abf514abd43cb2 (0042d11)
+- the branch is 15 commits ahead of origin/main and 0 behind
 - origin/main is 49df4cffa147f00fbe5076915385676972138eea
 - the working tree is clean
 - the branch has NOT been pushed, there is NO pull request, and nothing is merged
