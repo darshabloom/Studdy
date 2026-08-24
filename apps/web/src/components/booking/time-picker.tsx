@@ -151,10 +151,17 @@ export function TimePicker({
            * Tall enough that a QUARTER-hour start carries its own time and is
            * a comfortable target on a phone. At the default scale a fifteen
            * minute marker is eleven pixels — too short for its own label and
-           * an unkind thing to ask a thumb to hit. The window is fitted to this
-           * tutor, so the extra height buys legibility rather than empty hours.
+           * an unkind thing to ask a thumb to hit.
+           *
+           * 128 rather than 112 because a marker must clear the label
+           * threshold with room to spare. At 112 a quarter-hour block is
+           * exactly twenty-eight pixels, the threshold itself, so whether a
+           * start showed its own time came down to how the body height
+           * rounded — some windows labelled, some did not, for no reason a
+           * reader could see. The window is fitted to this tutor, so the extra
+           * height buys legibility rather than empty hours.
            */
-          hourHeight={112}
+          hourHeight={128}
           dayLabels={dayLabels}
           selectedIds={selectedIds}
           familySafe
