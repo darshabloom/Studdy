@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { clickUntilNavigated } from './helpers/navigation';
 
 /**
  * The tutor's calendar-first availability screen (UX redesign step 2).
@@ -35,41 +36,6 @@ async function signIn(page: Page, email: string): Promise<void> {
   await page.getByLabel('Password').fill(SEEDED_PASSWORD);
   await page.getByRole('button', { name: 'Log in' }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 15_000 });
-}
-
-/**
- * Click a link and insist the navigation actually happened.
- *
- * The first interaction after a page load can land before React has hydrated,
- * and a click on a not-yet-live `<Link>` is simply swallowed — no navigation, no
- * error, nothing to see. It failed about one run in four, and a longer timeout
- * did not help because nothing was on its way: the click never took.
- *
- * WAITS FOR THE URL TO CHANGE rather than to match a pattern. A swallowed click
- * leaves the URL exactly as it was, which any pattern describing the current
- * page would happily satisfy — the helper would return believing it had
- * navigated. The caller asserts the shape of the new URL afterwards.
- *
- * Retrying is safe because the target is a navigation: a duplicate click either
- * does nothing or arrives at the same place. A link that has vanished means the
- * navigation already happened, so that is a success rather than something to
- * wait out.
- */
-async function clickUntilNavigated(page: Page, link: Locator): Promise<void> {
-  await page.waitForLoadState('networkidle').catch(() => {});
-  await link.waitFor({ timeout: 15_000 });
-  const before = page.url();
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    if ((await link.count()) === 0) return;
-    await link.click({ timeout: 5_000 }).catch(() => {});
-    try {
-      await page.waitForURL((url) => url.toString() !== before, { timeout: 8_000 });
-      return;
-    } catch {
-      if (attempt === 2) throw new Error(`the click never navigated away from ${before}`);
-    }
-  }
 }
 
 test.describe('tutor availability, as a calendar', () => {
@@ -342,8 +308,8 @@ test.describe('tutor availability, as a calendar', () => {
 
     // A link, not a toggle: the preview is its own server render, so entering it
     // is a navigation and the private rows are never queried for that request.
-    await page.getByRole('link', { name: 'Preview as family' }).click();
-    await expect(page).toHaveURL(/preview=1/);
+    await clickUntilNavigated(page, page.getByRole('link', { name: 'Preview as family' }));
+    await expect(page).toHaveURL(/preview=1/, { timeout: 15_000 });
 
     const preview = page.getByRole('group', { name: /Bookable times a family can see/ });
     await expect(preview).toBeVisible();
@@ -373,8 +339,12 @@ test.describe('tutor availability, as a calendar', () => {
     }
 
     // And going back restores the tutor's own view, private note and all.
-    await page.getByRole('link', { name: 'Back to editing' }).click();
-    await expect(page.getByRole('group', { name: /Your availability, week of/ })).toBeVisible();
-    await expect(page.getByText(/Private note:/).first()).toBeVisible();
+    // Same treatment as every other navigation here: a click that lands during
+    // hydration is swallowed, and the failure looks like a broken page.
+    await clickUntilNavigated(page, page.getByRole('link', { name: 'Back to editing' }));
+    await expect(page.getByRole('group', { name: /Your availability, week of/ })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText(/Private note:/).first()).toBeVisible({ timeout: 15_000 });
   });
 });
