@@ -231,6 +231,9 @@ test.describe('tutor availability, as a calendar', () => {
         headingLefts: [...root.querySelectorAll('[data-calendar-heading]')]
           .map((heading) => Math.round(heading.getBoundingClientRect().left))
           .sort((a, b) => a - b),
+        dayColumnWidths: [...root.querySelectorAll('[data-calendar-day]')].map((day) =>
+          Math.round(day.getBoundingClientRect().width),
+        ),
       };
     });
 
@@ -246,6 +249,10 @@ test.describe('tutor availability, as a calendar', () => {
     for (const left of geometry.columnLefts) {
       expect(geometry.headingLefts).toContain(left);
     }
+
+    // And all seven days are on screen with real width, not six and a sliver.
+    expect(geometry.dayColumnWidths).toHaveLength(7);
+    for (const width of geometry.dayColumnWidths) expect(width).toBeGreaterThan(0);
 
     // A block belongs to one day, so it can never span the width of the week.
     expect(geometry.widestBlock).toBeLessThan(geometry.calendarWidth / 3);

@@ -116,6 +116,18 @@ async function calendarGeometry(calendar: Locator) {
       columnLefts: columns
         .map((column) => Math.round(column.getBoundingClientRect().left))
         .sort((a, b) => a - b),
+      /**
+       * Every DAY column, not only the ones carrying blocks.
+       *
+       * A zero-width column is a day nobody can see. Mini has a zero-width
+       * gutter TRACK, and a body that skipped its cell pushed the first day
+       * into that track and the seventh off the end — the week quietly lost a
+       * column, and only a tutor who happened to teach on that day made it
+       * visible at all.
+       */
+      dayColumnWidths: [...root.querySelectorAll('[data-calendar-day]')].map((day) =>
+        Math.round(day.getBoundingClientRect().width),
+      ),
       headingLefts: [...root.querySelectorAll('[data-calendar-heading]')]
         .map((heading) => Math.round(heading.getBoundingClientRect().left))
         .sort((a, b) => a - b),
@@ -192,6 +204,10 @@ test.describe('availability in discovery', () => {
       for (const left of geometry.columnLefts) {
         expect(geometry.headingLefts).toContain(left);
       }
+
+      // All seven days are present, and every one of them is really there.
+      expect(geometry.dayColumnWidths).toHaveLength(7);
+      for (const width of geometry.dayColumnWidths) expect(width).toBeGreaterThan(0);
 
       /**
        * Compact enough to browse several tutors. Mini is a fixed body height by
