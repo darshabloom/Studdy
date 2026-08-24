@@ -16,7 +16,9 @@ import { chromium } from '@playwright/test';
 const BASE = process.argv[2] ?? 'http://localhost:3200';
 const OUT = process.argv[3] ?? 'S:/Studdy/.review/step4';
 const PASSWORD = 'Studdy-local-only-1';
-const FAMILY = 'parent.two@local.studdy.test';
+// The booking journey's own family, so the review reflects the same account
+// the spec exercises rather than one another spec is mutating.
+const FAMILY = 'parent.booking@local.studdy.test';
 const STUDENT = 'Booker';
 
 async function signIn(page) {

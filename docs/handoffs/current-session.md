@@ -506,7 +506,24 @@ tutor, not just its own family.**
 **No migration, no schema change, no RLS change.**
 
 **Verified:** typecheck, lint, format, `check:rls` (28 tables), `check:boundaries`, build,
-**347 unit and integration tests with 1 skipped** (up from 333), and the full Playwright suite.
+**347 unit and integration tests with 1 skipped** (up from 333) and **93 end-to-end** (up from
+86), all after `db:reset && db:migrate && db:seed`.
+
+**A third bug, found by the tests and the most serious of them.** In `mini` density the
+calendar BODY skipped the gutter cell while the header rendered it, so the two grids disagreed
+about which track each day occupied: the first day landed in the zero-width gutter track and
+the seventh was pushed off the end. Discovery cards were showing six days and a sliver. It
+survived the whole of step 3 because the lost column was whichever day came first in the
+rolling week, and no seeded tutor taught on it until a Monday. The header half of this was
+fixed during step 3 — fixing only half is what left the grids disagreeing. Both calendar specs
+now assert seven day columns each with real width; the old assertions compared block-bearing
+columns against headings, which a zero-width column satisfies perfectly well.
+
+**Screenshots** for the review point are in `.review/step4` (gitignored), from
+`step4-review-shots.mjs` plus `step4-review-extras.mjs` for the two screens the main walk
+cannot reach: the discovery entry point, which needs a subject context, and the format step,
+which needs a tutor teaching both ways — James's Calculus, at Years 10–13, so a senior student.
+Point both at a production server, never `pnpm dev`.
 
 ### Step 5 — demote the shortlist
 
