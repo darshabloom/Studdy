@@ -106,5 +106,20 @@ for (const [prefix, viewport] of [
   await context.close();
 }
 
+// ---- The tutor-facing minimum gap control -------------------------------
+{
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await page.goto(`${BASE}/sign-in`);
+  await page.getByLabel('Email address').fill('tutor.a@local.studdy.test');
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 });
+  await page.goto(`${BASE}/tutor/availability`);
+  await page.getByRole('heading', { name: 'Your availability' }).waitFor({ timeout: 30_000 });
+  await shoot(page, 'desktop-8-tutor-minimum-gap');
+  await context.close();
+}
+
 await browser.close();
 console.log('done');

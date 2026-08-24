@@ -48,10 +48,17 @@ export function BookingShell({
 }: BookingShellProps): ReactNode {
   const visible = rows.filter((row) => !skipped.includes(row.step) || row.value !== null);
   const currentIndex = visible.findIndex((row) => row.step === step);
-  // Review has no row of its own: it is the whole summary, so everything is
-  // "before" it.
-  const before = currentIndex === -1 ? visible : visible.slice(0, currentIndex + 1);
-  const after = currentIndex === -1 ? [] : visible.slice(currentIndex + 1);
+
+  /**
+   * The review screen renders the summary itself, as its whole content.
+   *
+   * Showing the panel there too would put the same six answers on screen twice,
+   * side by side — which reads less like a reminder than like two things that
+   * might disagree, at exactly the moment a parent is checking they agree.
+   */
+  const ownsItsSummary = currentIndex === -1;
+  const before = ownsItsSummary ? [] : visible.slice(0, currentIndex + 1);
+  const after = ownsItsSummary ? [] : visible.slice(currentIndex + 1);
 
   const backHref = previousHref(step, params, skipped);
 
@@ -69,7 +76,11 @@ export function BookingShell({
         ) : null}
       </header>
 
-      <div className="md:grid md:grid-cols-[minmax(0,1fr)_18rem] md:items-start md:gap-8">
+      <div
+        className={
+          ownsItsSummary ? '' : 'md:grid md:grid-cols-[minmax(0,1fr)_18rem] md:items-start md:gap-8'
+        }
+      >
         {/* Mobile: the sections already answered, collapsed above the question. */}
         {before.length > 0 ? (
           <div className="mb-4 md:hidden">
@@ -87,9 +98,11 @@ export function BookingShell({
         ) : null}
 
         {/* Desktop: the whole request, always in view. */}
-        <div className="hidden md:sticky md:top-6 md:block">
-          <BookingSummary rows={visible} current={step} params={params} />
-        </div>
+        {ownsItsSummary ? null : (
+          <div className="hidden md:sticky md:top-6 md:block">
+            <BookingSummary rows={visible} current={step} params={params} />
+          </div>
+        )}
       </div>
 
       {backHref !== null ? (
