@@ -18,12 +18,16 @@ const supabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL !== undefined;
 const SEEDED_PASSWORD = 'Studdy-local-only-1';
 
 /**
- * Dedicated to this spec. Playwright runs spec FILES in parallel, and this
- * journey creates a student, sends real requests and takes real calendar holds
- * — sharing an account with another spec would race it and fail for reasons
- * that have nothing to do with booking.
+ * Dedicated to this spec, at BOTH levels.
+ *
+ * Playwright runs spec FILES in parallel, and this journey creates a student,
+ * sends real requests and takes real calendar holds. Its own family, because
+ * `parent.one@` is signed in and out by `discovery-presentation` and
+ * `family-students-discovery` and the session dropped mid-journey. Its own
+ * tutor, because holds on a shared tutor made the lesson-request and discovery
+ * journeys fail on times this spec had quietly taken.
  */
-const FAMILY = 'parent.one@local.studdy.test';
+const FAMILY = 'parent.booking@local.studdy.test';
 const STUDENT = 'Booker';
 
 /**

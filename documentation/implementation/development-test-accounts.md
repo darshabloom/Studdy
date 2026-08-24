@@ -13,18 +13,35 @@ in the local inbox at http://127.0.0.1:14324.
 Shared local-only password: `Studdy-local-only-1` (synthetic; local environment only;
 defined in `packages/database/src/seed/synthetic-users.ts`).
 
-| Email                                 | Roles                        |
-| ------------------------------------- | ---------------------------- |
-| owner@local.studdy.test               | Platform Owner               |
-| manager@local.studdy.test             | Platform Manager             |
-| parent.one@local.studdy.test          | Parent or guardian           |
-| parent.two@local.studdy.test          | Parent or guardian           |
-| student.independent@local.studdy.test | Independent student          |
-| student.dependent@local.studdy.test   | Dependent student            |
-| tutor.a@local.studdy.test             | Tutor                        |
-| tutor.b@local.studdy.test             | Tutor                        |
-| tutor.c@local.studdy.test             | Tutor                        |
-| restricted.tutor@local.studdy.test    | Tutor (restricted scenarios) |
+| Email                                 | Roles                         |
+| ------------------------------------- | ----------------------------- |
+| owner@local.studdy.test               | Platform Owner                |
+| manager@local.studdy.test             | Platform Manager              |
+| parent.one@local.studdy.test          | Parent or guardian            |
+| parent.two@local.studdy.test          | Parent or guardian            |
+| student.independent@local.studdy.test | Independent student           |
+| student.dependent@local.studdy.test   | Dependent student             |
+| tutor.a@local.studdy.test             | Tutor                         |
+| tutor.b@local.studdy.test             | Tutor                         |
+| tutor.c@local.studdy.test             | Tutor                         |
+| restricted.tutor@local.studdy.test    | Tutor (restricted scenarios)  |
+| parent.tutor@local.studdy.test        | Parent and tutor              |
+| parent.requests@local.studdy.test     | Parent — lesson-request spec  |
+| student.requests@local.studdy.test    | Independent student — same    |
+| parent.booking@local.studdy.test      | Parent — booking-journey spec |
+
+### Accounts owned by one end-to-end spec
+
+`parent.requests@`, `student.requests@` and `parent.booking@` belong to a single
+spec each and must not be borrowed. Playwright runs spec FILES in parallel, so a
+spec that signs one of these in and out drops the owning journey's session
+mid-flight, and the failure looks like a broken feature rather than a shared
+fixture. `booking-journey` also books **Mei / English** exclusively: it sends
+real requests, which take real calendar holds, and holds on a tutor another spec
+is exercising make that spec fail on times it never chose.
+
+The rule in both cases is the same — a spec that MUTATES shared state needs its
+own copy of that state, whether the state is an account or a tutor's calendar.
 
 ## Seed scenarios
 
