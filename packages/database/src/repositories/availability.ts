@@ -674,6 +674,7 @@ export async function bookableSlotsForSubjectSection(
         tutorProfileId: tutorProfiles.id,
         tutorReference: tutorProfiles.reference,
         durationMinutes: serviceVersions.durationMinutes,
+        priceAmountMinor: serviceVersions.priceAmountMinor,
       })
       .from(serviceVersions)
       .innerJoin(services, eq(serviceVersions.serviceId, services.id))
@@ -694,10 +695,36 @@ export async function bookableSlotsForSubjectSection(
       );
     if (offerings.length === 0) return [];
 
+    /**
+     * ONE ENTRY PER TUTOR, at the length discovery advertises.
+     *
+     * A tutor may publish several lengths for one subject, which arrive here as
+     * several rows. Left alone they became several entries with the same tutor
+     * reference, so a discovery card derived that tutor twice and rendered
+     * whichever arrived last — an arbitrary lesson length, silently.
+     *
+     * The cheapest wins, because that is the version the card's "from" price
+     * and its "per N min" line already name: the calendar a family compares
+     * against must be the calendar for the lesson they were quoted. Choosing
+     * among the rest is the booking journey's job, not discovery's.
+     */
+    const cheapestByTutor = new Map<string, (typeof offerings)[number]>();
+    for (const offering of offerings) {
+      const existing = cheapestByTutor.get(offering.tutorProfileId);
+      if (
+        existing === undefined ||
+        offering.priceAmountMinor < existing.priceAmountMinor ||
+        (offering.priceAmountMinor === existing.priceAmountMinor &&
+          offering.durationMinutes < existing.durationMinutes)
+      ) {
+        cheapestByTutor.set(offering.tutorProfileId, offering);
+      }
+    }
+
     // One derivation per distinct lesson length rather than one per tutor:
     // tutors overwhelmingly share the standard durations.
-    const byDuration = new Map<number, typeof offerings>();
-    for (const offering of offerings) {
+    const byDuration = new Map<number, (typeof offerings)[number][]>();
+    for (const offering of cheapestByTutor.values()) {
       const existing = byDuration.get(offering.durationMinutes);
       if (existing === undefined) byDuration.set(offering.durationMinutes, [offering]);
       else existing.push(offering);

@@ -121,6 +121,37 @@ describe.skipIf(!available)('bookable slots for a subject section', () => {
     }
   });
 
+  /**
+   * A tutor may publish several lengths for one subject. Returning one entry
+   * per version made a discovery card derive that tutor twice and render
+   * whichever arrived last — an arbitrary lesson length, chosen by nothing.
+   *
+   * The seeded maths tutor now offers 60 and 90 minutes, so this is real data
+   * rather than a constructed fixture.
+   */
+  it('returns one entry per tutor even when they publish several lengths', async () => {
+    const results = await bookableSlotsForSubjectSection({
+      subjectSectionId: mathsSectionId,
+      ...window(),
+    });
+    const references = results.map((entry) => entry.tutorReference);
+    expect(new Set(references).size).toBe(references.length);
+  });
+
+  /**
+   * And it is the length the card advertises. A family compares a "from $35 per
+   * 60 min" card against a calendar; deriving the 90-minute version instead
+   * would quietly show them a different lesson's availability.
+   */
+  it('derives at the cheapest published length, which is the one discovery quotes', async () => {
+    const results = await bookableSlotsForSubjectSection({
+      subjectSectionId: mathsSectionId,
+      ...window(),
+    });
+    const withTwoLengths = results.find((entry) => entry.tutorReference === 'TUTOR-10000014');
+    if (withTwoLengths !== undefined) expect(withTwoLengths.durationMinutes).toBe(60);
+  });
+
   it('restricts to the named tutors when asked', async () => {
     const all = await bookableSlotsForSubjectSection({
       subjectSectionId: mathsSectionId,

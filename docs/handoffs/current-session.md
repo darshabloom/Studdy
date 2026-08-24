@@ -276,7 +276,7 @@ click-to-create, snapping, window fitting and the family-safe refusal.
 
 ## 8. The exact next tasks, in order
 
-Steps 1, 2 and 3 are done. **Steps 4–6 remain, in this order.** Rewrite or update the end-to-end
+Steps 1 to 3 are merged; step 4 is built and awaiting review. **Steps 5 and 6 remain.** Rewrite or update the end-to-end
 journey alongside each step rather than leaving all test changes to the end; use targeted
 tests while building and the full suite at major boundaries and before PR readiness.
 
@@ -429,28 +429,84 @@ horizontal scroll with its hint were both confirmed as wanted and left alone.
 server (`pnpm build` then `pnpm --filter @studdy/web start --port 3200`) rather than `pnpm dev`:
 the dev server on this machine wedges when a build runs against the same `.next` directory.
 
-### Step 4 — the `/book` journey (NEXT)
+### Step 4 — the `/book` journey — **AWAITING REVIEW**
 
-Child → Subject → Tutor → Lesson length → Online/In person → Availability → Review → Send
-request. Entering from a tutor card or profile prefills the tutor and any known child and
-subject context so those steps are skipped. Lesson length is chosen from that tutor's
-published service versions. The subject section is find-or-created **at send**. This is where
-the **1–5 time options** change lands: `PROVISIONAL_REQUEST_RULES.minTimeOptions`, the seeded
-`requests.min_time_options` value, and the copy in `validateChosenTimes`.
+On `feat/parent-booking-journey`, branched from `49df4cf`. Complete and verified;
+**not merged, and not to be merged without the owner's approval.**
 
-**What step 3 leaves you, and what it forbids.** `availabilityView` decides the seven days on
-screen and is already shared by the card and the profile — use it rather than choosing days
-again. `bookableSlotBlocks` is still the only projection crossing the privacy boundary; go
-through it. **Do NOT call `mergeContiguousBlocks` in the booking journey**: it exists to tidy
-read-only bands, and once a family is picking a time the difference between a 4:00 and a 4:30
-start is precisely what is being chosen. Reuse `WeekCalendar` in `select` mode with
-`familySafe`, and do not give the discovery cards a per-tutor window — a unit test asserts the
-profile and discovery windows differ, because the cards exist to be read against each other.
+Child → Subject → Tutor → Lesson length → Online/In person → Times → Review → Send request.
+One route per step under `/book`, server-rendered, with the answers held in the URL.
 
-Step 3 left the card action reading "View availability" and the profile carrying an
-informational callout rather than a booking button, both on purpose. **Renaming the card action
-to "Book a lesson" and replacing that callout with a real entry point is part of step 4**, and
-only once `/book` actually answers.
+**Nothing is persisted while a family browses.** No draft row, no session blob, no half-made
+subject section — opening the wizard cannot change a child's record. The corollary is that
+every parameter is attacker-controlled, so `resolveBooking` re-checks all of them on every
+request: the child against who the user may act for, the tutor through the bookable
+allow-list, the version against that tutor's own rows for that subject. An answer that no
+longer resolves is dropped along with everything downstream and the family lands on the first
+open question. **Price and duration are never read from the URL** — only a version id.
+
+**The send is atomic.** `createIntendedLessonRequest` now accepts a `subjectSectionDraft`
+instead of a section id, and the find-or-create runs inside the transaction that already
+writes the request, its time options, the tutor request and the hold. Either all of it commits
+or none does, so a send that loses a race for a slot leaves the child unchanged rather than
+carrying a subject they never agreed to study. Everything before the transaction stays
+read-only, and the availability check and GiST exclusion constraint are untouched.
+`student_subject_sections_live_unique_idx` already existed, so the find-or-create is
+concurrency-safe with no lock and no migration.
+
+**Slots are drawn as START MARKERS, one step tall — and this matters.** Drawn at their full
+lesson length, slots derived every half hour OVERLAP, and absolutely positioned overlapping
+blocks cover one another: every start but the last was physically unclickable. Marking the
+start is also what is actually being chosen. They are still not merged — 4:00 and 4:30 are
+the choice. **Step 5 and anything else touching this grid must keep both properties.**
+
+**The format step appears only when it is a question.** Where a version can be delivered one
+way, the answer is settled at the length step and the rail never promises a screen that is not
+coming.
+
+**Two latent bugs surfaced and were fixed.**
+
+1. `createIntendedLessonRequest` keyed service versions by tutor id alone, so a tutor with two
+   lengths silently kept whichever row came back last: a family choosing ninety minutes could
+   be charged for sixty. The chosen id is now looked up among that tutor's rows for that
+   subject only, so a version belonging to another tutor or subject is refused.
+2. `bookableSlotsForSubjectSection` returned one entry per version, so once a tutor published
+   two lengths a discovery card derived them twice and rendered whichever arrived last. It now
+   returns one entry per tutor at the CHEAPEST length, which is the one the card's "from"
+   price already quotes.
+
+**Time options are 1–5 everywhere**, including the shortlist fan-out, with shared copy in
+`TIME_OPTIONS_GUIDANCE`.
+
+**Test isolation worth knowing about.** `booking-journey.spec.ts` sends real requests, which
+take real calendar holds. It books **Mei / English**, whom no other spec touches — booking a
+maths tutor made the lesson-request and discovery journeys fail on times this spec had quietly
+taken. It is also excluded from the mobile project, like the other journey specs, because both
+projects would otherwise race the same account. This is the same class of collision the
+dedicated accounts already prevent, one level down: **a spec that sends a request needs its own
+tutor, not just its own family.**
+
+**New and changed files**
+
+| File                                                    | What                                                         |
+| ------------------------------------------------------- | ------------------------------------------------------------ |
+| `apps/web/src/app/book/**`                              | entry redirect plus seven step routes                        |
+| `apps/web/src/lib/booking/draft.ts`                     | URL parsing, href building, dropping answers below a step    |
+| `apps/web/src/lib/booking/resolve.ts`                   | re-authorises every parameter; decides the next open step    |
+| `apps/web/src/lib/booking/availability.ts`              | derivation without a section; start markers; `stillBookable` |
+| `apps/web/src/lib/booking/actions.ts`                   | the send, re-resolving everything server-side                |
+| `apps/web/src/components/booking/**`                    | shell and rail, choice list, time picker, review form        |
+| `packages/database/src/repositories/services.ts`        | `listBookableServices`, `formatsForVersion`                  |
+| `packages/database/src/repositories/lesson-requests.ts` | chosen version, section draft, atomic send                   |
+| `packages/database/src/repositories/availability.ts`    | one entry per tutor at the cheapest length                   |
+| `packages/domain/src/availability/combine.ts`           | 1–5 bound and `TIME_OPTIONS_GUIDANCE`                        |
+| `packages/design-system/.../week-calendar.tsx`          | optional `hourHeight` for the selection grid                 |
+| `apps/web/src/middleware.ts`                            | `/book` is protected                                         |
+
+**No migration, no schema change, no RLS change.**
+
+**Verified:** typecheck, lint, format, `check:rls` (28 tables), `check:boundaries`, build,
+**347 unit and integration tests with 1 skipped** (up from 333), and the full Playwright suite.
 
 ### Step 5 — demote the shortlist
 

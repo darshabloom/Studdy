@@ -56,10 +56,21 @@ async function walk(page, prefix) {
   await signIn(page);
   await ensureStudent(page);
 
-  // Discovery, to show the new "Book a lesson" entry point in context.
+  // Discovery, to show the new "Book a lesson" entry point in context. It only
+  // appears for a family acting on a subject, so make sure one exists first.
   await page.goto(`${BASE}/parent`);
   const findTutors = page.getByRole('link', { name: 'Find tutors' }).first();
-  if ((await findTutors.count()) > 0) {
+  if ((await findTutors.count()) === 0) {
+    const addSubject = page.getByRole('link', { name: /Add a subject/ }).first();
+    if ((await addSubject.count()) > 0) {
+      await addSubject.click();
+      await page.getByLabel('Subject', { exact: true }).selectOption({ label: 'Mathematics' });
+      await page.getByLabel('School year for this subject').selectOption({ label: 'Year 9' });
+      await page.getByRole('button', { name: 'Save and find tutors' }).click();
+      await page.waitForURL(/\/tutors\?section=/, { timeout: 30_000 });
+      await shoot(page, prefix, '0-discovery-entry');
+    }
+  } else {
     await findTutors.click();
     await page.waitForURL(/\/tutors/, { timeout: 30_000 });
     await shoot(page, prefix, '0-discovery-entry');

@@ -223,6 +223,22 @@ const TUTOR_SEED: readonly TutorSeed[] = [
         priceAmountMinor: 4000,
         formatCode: 'online',
       },
+      /**
+       * A second length here too, and for a second reason.
+       *
+       * The end-to-end booking journey sends real requests, which take real
+       * calendar holds — so it books THIS tutor, whom no other spec touches,
+       * rather than a maths tutor the request and discovery journeys are also
+       * exercising. Holds on a shared tutor made those specs fail in ways that
+       * had nothing to do with the code they were testing.
+       */
+      {
+        subjectCode: 'english',
+        displayName: 'English tutoring — extended session (Years 7–12)',
+        durationMinutes: 90,
+        priceAmountMinor: 5500,
+        formatCode: 'online',
+      },
     ],
     availability: [
       { dayOfWeek: 1, localStartTime: '15:00', localEndTime: '18:00' },

@@ -26,6 +26,18 @@ const SEEDED_PASSWORD = 'Studdy-local-only-1';
 const FAMILY = 'parent.one@local.studdy.test';
 const STUDENT = 'Booker';
 
+/**
+ * English and Mei, not maths.
+ *
+ * Sending a request takes a real calendar hold, and the maths tutors are also
+ * being exercised by the lesson-request and discovery journeys. Booking one of
+ * them made those specs fail on times this one had quietly taken — the same
+ * class of collision the dedicated ACCOUNTS already exist to prevent, one level
+ * down. Mei publishes two lengths, so the length step is still a real choice.
+ */
+const SUBJECT = 'English';
+const TUTOR = 'Mei';
+
 async function signIn(page: Page, email: string): Promise<void> {
   await page.goto('/sign-in');
   await page.getByLabel('Email address').fill(email);
@@ -71,8 +83,11 @@ async function walkToTimes(page: Page, length: RegExp): Promise<void> {
     .getByRole('link', { name: new RegExp(STUDENT) })
     .first()
     .click();
-  await page.getByRole('link', { name: 'Mathematics', exact: false }).first().click();
-  await page.getByRole('link', { name: /Aroha/ }).first().click();
+  await page.getByRole('link', { name: SUBJECT, exact: false }).first().click();
+  await page
+    .getByRole('link', { name: new RegExp(TUTOR) })
+    .first()
+    .click();
   await page.getByRole('link', { name: length }).first().click();
   await expect(page.getByRole('heading', { name: /When would suit/ })).toBeVisible({
     timeout: 15_000,
@@ -106,11 +121,14 @@ test.describe('the parent booking journey', () => {
       .getByRole('link', { name: new RegExp(STUDENT) })
       .first()
       .click();
-    await page.getByRole('link', { name: 'Mathematics', exact: false }).first().click();
-    await page.getByRole('link', { name: /Aroha/ }).first().click();
+    await page.getByRole('link', { name: SUBJECT, exact: false }).first().click();
+    await page
+      .getByRole('link', { name: new RegExp(TUTOR) })
+      .first()
+      .click();
 
-    // The seeded tutor publishes two lengths, so this is a real choice rather
-    // than a screen with one option.
+    // This tutor publishes two lengths, so it is a real choice rather than a
+    // screen with one option clicked through.
     await expect(page.getByRole('heading', { name: /How long should the lesson/ })).toBeVisible();
     const lengths = page.getByRole('list', { name: 'Lesson lengths' }).getByRole('listitem');
     await expect(lengths).toHaveCount(2);
@@ -121,7 +139,7 @@ test.describe('the parent booking journey', () => {
       .first()
       .click();
 
-    // Aroha teaches online only, so the format question never had to be asked.
+    // Mei teaches online only, so the format question never had to be asked.
     await expect(page.getByRole('heading', { name: /When would suit/ })).toBeVisible({
       timeout: 15_000,
     });
@@ -146,25 +164,46 @@ test.describe('the parent booking journey', () => {
      */
     const geometry = await calendar.evaluate((root) => {
       const blocks = [...root.querySelectorAll('[data-calendar-block]')];
-      const byColumn = new Map<Element, number[]>();
+      const byColumn = new Map<Element, { top: number; bottom: number }[]>();
       for (const block of blocks) {
         const column = block.parentElement;
         if (column === null) continue;
-        const tops = byColumn.get(column) ?? [];
-        tops.push(Math.round(block.getBoundingClientRect().top));
-        byColumn.set(column, tops);
+        const box = block.getBoundingClientRect();
+        const boxes = byColumn.get(column) ?? [];
+        boxes.push({ top: Math.round(box.top), bottom: Math.round(box.bottom) });
+        byColumn.set(column, boxes);
       }
-      const perColumn = [...byColumn.values()].map((tops) => new Set(tops).size);
+
+      let overlapping = 0;
+      for (const boxes of byColumn.values()) {
+        const sorted = [...boxes].sort((a, b) => a.top - b.top);
+        for (let index = 1; index < sorted.length; index += 1) {
+          // A single pixel of tolerance: adjoining markers share an edge.
+          if (sorted[index]!.top < sorted[index - 1]!.bottom - 1) overlapping += 1;
+        }
+      }
+
       return {
         blockCount: blocks.length,
-        mostInOneColumn: Math.max(0, ...perColumn),
+        overlapping,
         selectable: blocks.every((block) => block.tagName === 'BUTTON'),
       };
     });
 
     expect(geometry.blockCount).toBeGreaterThan(1);
-    // More than one distinct start on a single day: not merged into a band.
-    expect(geometry.mostInOneColumn).toBeGreaterThan(1);
+
+    /**
+     * NO TWO BLOCKS IN A COLUMN OVERLAP.
+     *
+     * This is the real invariant, and it is why the assertion is about geometry
+     * rather than about how many starts happen to be free. Drawn at their full
+     * lesson length, slots derived every half hour overlap — and an absolutely
+     * positioned block that overlaps another COVERS it, so every start but the
+     * last became unclickable. Counting free slots instead would have made this
+     * test depend on what other specs had booked.
+     */
+    expect(geometry.overlapping).toBe(0);
+
     // And each one is genuinely choosable.
     expect(geometry.selectable).toBe(true);
   });
@@ -195,6 +234,12 @@ test.describe('the parent booking journey', () => {
   test('reaches review having written nothing to the student', async ({ page }) => {
     await signIn(page, FAMILY);
     await ensureStudent(page);
+
+    // Read the state BEFORE walking, so the assertion below is about what the
+    // wizard did rather than about which tests happened to run first.
+    await page.goto('/parent');
+    const alreadyStudying = (await page.getByText(SUBJECT).count()) > 0;
+
     await walkToTimes(page, /60 minutes/);
 
     const slots = page.getByRole('group', { name: /Bookable times for/ }).getByRole('button');
@@ -211,12 +256,18 @@ test.describe('the parent booking journey', () => {
     await expect(page.getByText(/Nothing is booked yet/)).toBeVisible();
 
     /**
-     * THE POINT OF THIS TEST. The whole wizard has been walked to its last
-     * screen, and the review itself promises the subject will be added *when
-     * you send* — which is only an honest thing to say if it has not been
-     * added already.
+     * THE POINT OF THIS TEST, and asserted in BOTH directions because this file
+     * runs serially and a later test really does send a request.
+     *
+     * Where the child has no such subject yet, the review must promise to add
+     * it on send — a promise that is only honest because the wizard has not
+     * added it already. Where they do have it, the review must NOT claim to be
+     * adding a subject they already study. An assertion that only covered the
+     * first case passed or failed according to what earlier tests had done.
      */
-    await expect(page.getByText(/will be added to .* subjects when you send/)).toBeVisible();
+    const notice = page.getByText(/will be added to .* subjects when you send/);
+    if (alreadyStudying) await expect(notice).toHaveCount(0);
+    else await expect(notice).toBeVisible();
   });
 
   test('sends a request, says so honestly, and only then adds the subject', async ({ page }) => {
@@ -247,6 +298,6 @@ test.describe('the parent booking journey', () => {
 
     // And the subject is on the child now — because a request was sent.
     await page.goto('/parent');
-    await expect(page.getByText('Mathematics').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(SUBJECT).first()).toBeVisible({ timeout: 15_000 });
   });
 });

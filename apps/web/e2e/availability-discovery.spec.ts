@@ -170,6 +170,11 @@ test.describe('availability in discovery', () => {
       await expect(calendar).toBeVisible({ timeout: 15_000 });
       await expect(calendar.locator('[data-calendar-block]').first()).toBeVisible();
 
+      // Step 4 gave the card a real entry point; the profile is still one
+      // click away, quietly, for a parent who wants to look before booking.
+      await expect(page.getByRole('link', { name: 'Book a lesson' }).first()).toBeVisible();
+      await expect(page.getByRole('link', { name: 'View profile' }).first()).toBeVisible();
+
       const geometry = await calendarGeometry(calendar);
 
       // A week laid out as columns, not seven stacked lists.
@@ -228,7 +233,7 @@ test.describe('availability in discovery', () => {
       await signIn(page, FAMILY);
       await scopedDiscovery(page);
 
-      await page.getByRole('link', { name: 'View availability' }).first().click();
+      await page.getByRole('link', { name: 'View profile' }).first().click();
       await expect(page).toHaveURL(/\/tutors\/TUTOR-/);
 
       await expect(page.getByRole('heading', { name: 'Availability' })).toBeVisible();
@@ -252,17 +257,17 @@ test.describe('availability in discovery', () => {
       expect(geometry.height).toBeGreaterThan(300);
 
       /**
-       * Booking is ANNOUNCED, not offered.
+       * Booking is now OFFERED, and honestly labelled.
        *
-       * The earlier draft put a disabled primary button here, which still reads
-       * as an action withheld from this parent rather than as a journey that
-       * does not exist yet. There must be no such control until /book is real.
+       * Through step 3 this was a callout saying booking opened shortly, since
+       * a disabled primary reads as an action withheld from this parent rather
+       * than as a journey that did not exist yet. Step 4 built the journey, so
+       * the entry point is real — and it still must not claim that pressing it
+       * confirms anything.
        */
-      await expect(
-        page.getByText('Booking a lesson here opens shortly', { exact: false }),
-      ).toBeVisible();
-      await expect(page.getByRole('button', { name: /Request a lesson/ })).toHaveCount(0);
-      await expect(page.getByRole('link', { name: /Request a lesson/ })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Book a lesson' })).toBeVisible();
+      await expect(page.getByText(/still has to accept/)).toBeVisible();
+      await expect(page.getByRole('button', { name: /Confirm|Book now/ })).toHaveCount(0);
 
       // The reason for a gap stays absent at full size too.
       const body = (await page.locator('body').innerText()).toLowerCase();
@@ -280,7 +285,7 @@ test.describe('availability in discovery', () => {
     test('the profile calendar navigates within the published horizon', async ({ page }) => {
       await signIn(page, FAMILY);
       await scopedDiscovery(page);
-      await page.getByRole('link', { name: 'View availability' }).first().click();
+      await page.getByRole('link', { name: 'View profile' }).first().click();
       await expect(page).toHaveURL(/\/tutors\/TUTOR-/);
 
       const later = page.getByRole('link', { name: 'Show the later seven days' });
@@ -320,7 +325,13 @@ test.describe('availability in discovery', () => {
       });
     });
 
-    test('the grid holds the family to between two and five times', async ({ page }) => {
+    /**
+     * The bound is now ONE to five, here as well as in the single-tutor
+     * journey. It is a single configured rule, deliberately, so the two paths
+     * cannot drift apart — and a parent with one workable time has made a real
+     * request even when they are asking several tutors at once.
+     */
+    test('the grid holds the family to between one and five times', async ({ page }) => {
       await signIn(page, FAMILY);
       await scopedDiscovery(page);
       const sectionId = new URL(page.url()).searchParams.get('section') ?? '';
@@ -330,13 +341,12 @@ test.describe('availability in discovery', () => {
       const options = page.getByRole('checkbox');
       await expect(options.first()).toBeVisible({ timeout: 15_000 });
 
-      // One is not enough to send: tutors must be given a choice.
-      await options.nth(0).check();
-      await expect(page.getByText(/Choose at least 2 times/)).toBeVisible();
+      // Nothing chosen is still nothing to ask about.
+      await expect(page.getByRole('link', { name: 'Review request' })).toHaveCount(0);
 
-      // Two is.
-      await options.nth(1).check();
-      await expect(page.getByText(/Choose at least 2 times/)).toHaveCount(0);
+      // One is enough. The copy recommends more; the rule does not demand it.
+      await options.nth(0).check();
+      await expect(page.getByText(/Choose at least/)).toHaveCount(0);
       await expect(page.getByRole('link', { name: 'Review request' })).toBeVisible();
     });
   });
