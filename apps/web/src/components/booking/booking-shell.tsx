@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { BookingSummary, type SummaryRow } from './booking-summary';
 import {
   BOOKING_STEPS,
   bookingHref,
@@ -8,22 +9,12 @@ import {
   type BookingStep,
 } from '@/lib/booking/draft';
 
-const STEP_LABELS: Record<BookingStep, string> = {
-  child: 'Who for',
-  subject: 'Subject',
-  tutor: 'Tutor',
-  length: 'Lesson length',
-  format: 'Online or in person',
-  times: 'Times',
-  review: 'Review',
-};
-
 export interface BookingShellProps {
   readonly step: BookingStep;
-  /** The furthest step answered so far, for what may be jumped back to. */
-  readonly nextStep: BookingStep;
   readonly params: BookingParams;
-  /** Steps not on screen for this journey, e.g. format with one option. */
+  /** The request so far, from `summaryRows`. */
+  readonly rows: readonly SummaryRow[];
+  /** Steps this journey never asks, e.g. format with one possible answer. */
   readonly skipped?: readonly BookingStep[];
   readonly title: string;
   readonly description?: string;
@@ -31,106 +22,101 @@ export interface BookingShellProps {
 }
 
 /**
- * The frame every booking step sits in.
+ * The frame every booking step sits in, and the reason the answers stay on
+ * screen.
  *
- * The progress rail is made of LINKS BACK, not decoration. A parent halfway
- * through is still deciding, and the commonest thing they want is to change
- * their mind about the tutor or the length — so every answered step is a way
- * back to it, and going back drops the answers that depended on it rather than
- * carrying a stale price forward.
+ * ONE DOM, TWO SHAPES. On a wide screen the current question sits beside a
+ * persistent panel holding everything decided so far. On a narrow one the same
+ * rows become an accordion: answered sections collapsed above, the open
+ * question in place, the rest waiting below. Only the summary markup is
+ * duplicated across the two — static rows, each hidden by `display: none` at
+ * the other width, so neither is read twice. THE QUESTION IS RENDERED ONCE;
+ * duplicating it would double-mount its form.
  *
- * Steps ahead are inert text: they are the shape of what is coming, which is
- * worth showing, but they cannot be reached before they can be answered.
+ * The accordion needs no client state. Each route already IS one section
+ * expanded, so "tap a completed section to reopen it" is an ordinary link, and
+ * refresh, the back button and deep links keep working exactly as before.
  */
 export function BookingShell({
   step,
-  nextStep,
   params,
+  rows,
   skipped = [],
   title,
   description,
   children,
 }: BookingShellProps): ReactNode {
-  const visible = BOOKING_STEPS.filter((candidate) => !skipped.includes(candidate));
-  const currentIndex = BOOKING_STEPS.indexOf(step);
-  const frontier = BOOKING_STEPS.indexOf(nextStep);
+  const visible = rows.filter((row) => !skipped.includes(row.step) || row.value !== null);
+  const currentIndex = visible.findIndex((row) => row.step === step);
+  // Review has no row of its own: it is the whole summary, so everything is
+  // "before" it.
+  const before = currentIndex === -1 ? visible : visible.slice(0, currentIndex + 1);
+  const after = currentIndex === -1 ? [] : visible.slice(currentIndex + 1);
+
+  const backHref = previousHref(step, params, skipped);
 
   return (
-    <section className="mx-auto max-w-3xl px-4 py-8 md:py-10">
-      <nav aria-label="Booking steps" className="mb-6">
-        <ol className="flex flex-wrap items-center gap-x-1 gap-y-1.5 text-xs">
-          {visible.map((candidate, index) => {
-            const candidateIndex = BOOKING_STEPS.indexOf(candidate);
-            const isCurrent = candidate === step;
-            const answered = candidateIndex < frontier;
-            const label = STEP_LABELS[candidate];
-            return (
-              <li key={candidate} className="flex items-center gap-1">
-                {index > 0 ? (
-                  <span aria-hidden className="px-0.5 text-text-muted">
-                    ›
-                  </span>
-                ) : null}
-                {answered && !isCurrent ? (
-                  <Link
-                    href={bookingHref(candidate, paramsUpTo(candidate, params))}
-                    className="rounded-[var(--radius-gentle)] px-1.5 py-0.5 font-medium text-brand-purple underline underline-offset-2 hover:bg-brand-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-purple"
-                  >
-                    {label}
-                  </Link>
-                ) : (
-                  <span
-                    aria-current={isCurrent ? 'step' : undefined}
-                    className={
-                      isCurrent
-                        ? 'rounded-[var(--radius-gentle)] bg-brand-purple px-1.5 py-0.5 font-semibold text-white'
-                        : 'px-1.5 py-0.5 text-text-muted'
-                    }
-                  >
-                    {label}
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
-
+    // Wide enough that the summary panel does not squeeze the question. The
+    // times step draws a seven-column week with a real minimum width; at the
+    // narrower container the last day fell off the edge behind a scrollbar.
+    <section className="mx-auto max-w-6xl px-4 py-8 md:py-10">
       <header className="mb-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-          Step {visible.indexOf(step) + 1} of {visible.length}
-        </p>
-        <h1 className="mt-1 font-display text-2xl font-semibold text-brand-purple-deep md:text-3xl">
+        <h1 className="font-display text-2xl font-semibold text-brand-purple-deep md:text-3xl">
           {title}
         </h1>
         {description !== undefined ? (
-          <p className="mt-2 text-text-secondary">{description}</p>
+          <p className="mt-2 max-w-2xl text-text-secondary">{description}</p>
         ) : null}
       </header>
 
-      {children}
+      <div className="md:grid md:grid-cols-[minmax(0,1fr)_18rem] md:items-start md:gap-8">
+        {/* Mobile: the sections already answered, collapsed above the question. */}
+        {before.length > 0 ? (
+          <div className="mb-4 md:hidden">
+            <BookingSummary rows={before} current={step} params={params} bare />
+          </div>
+        ) : null}
 
-      {currentIndex > 0 ? (
+        <main className="min-w-0">{children}</main>
+
+        {/* Mobile: the questions still to come, waiting below. */}
+        {after.length > 0 ? (
+          <div className="mt-5 md:hidden">
+            <BookingSummary rows={after} current={step} params={params} bare />
+          </div>
+        ) : null}
+
+        {/* Desktop: the whole request, always in view. */}
+        <div className="hidden md:sticky md:top-6 md:block">
+          <BookingSummary rows={visible} current={step} params={params} />
+        </div>
+      </div>
+
+      {backHref !== null ? (
         <div className="mt-6 border-t border-surface-border pt-4">
-          <Link
-            href={bookingHref(
-              BOOKING_STEPS[
-                // Skip back over any step this journey never showed, so "Back"
-                // lands where the parent actually came from.
-                (() => {
-                  let index = currentIndex - 1;
-                  while (index > 0 && skipped.includes(BOOKING_STEPS[index]!)) index -= 1;
-                  return index;
-                })()
-              ]!,
-              paramsUpTo(BOOKING_STEPS[currentIndex - 1]!, params),
-            )}
-            className="text-sm text-brand-purple hover:underline"
-          >
+          <Link href={backHref} className="text-sm text-brand-purple hover:underline">
             ← Back
           </Link>
         </div>
       ) : null}
     </section>
   );
+}
+
+/**
+ * The previous question, skipping any this journey never asked.
+ *
+ * Back has to land where the parent actually came from, not on a screen they
+ * were routed past because it had only one possible answer.
+ */
+function previousHref(
+  step: BookingStep,
+  params: BookingParams,
+  skipped: readonly BookingStep[],
+): string | null {
+  let index = BOOKING_STEPS.indexOf(step) - 1;
+  while (index > 0 && skipped.includes(BOOKING_STEPS[index]!)) index -= 1;
+  if (index < 0) return null;
+  const target = BOOKING_STEPS[index]!;
+  return bookingHref(target, paramsUpTo(target, params));
 }

@@ -7,6 +7,7 @@ import { schoolYearNumber } from '@studdy/domain/students';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
 import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
+import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
 
 export const metadata = { title: 'Which tutor?' };
@@ -38,8 +39,8 @@ export default async function BookTutorPage({
   return (
     <BookingShell
       step="tutor"
-      nextStep={booking.nextStep}
       params={params}
+      rows={summaryRows(booking)}
       title={`Who should teach ${subject.displayName}?`}
       description={`Tutors who teach ${subject.displayName} at ${student.preferredName}'s level.`}
     >

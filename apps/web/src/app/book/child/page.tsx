@@ -5,6 +5,7 @@ import { schoolYearLabel } from '@studdy/domain/students';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
 import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
+import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking } from '@/lib/booking/resolve';
 
 export const metadata = { title: 'Who is the lesson for?' };
@@ -23,8 +24,8 @@ export default async function BookChildPage({
   return (
     <BookingShell
       step="child"
-      nextStep={booking.nextStep}
       params={params}
+      rows={summaryRows(booking)}
       title="Who is this lesson for?"
       description="Choose the student. Nothing is added to their profile until you send the request."
     >

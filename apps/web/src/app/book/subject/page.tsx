@@ -4,6 +4,7 @@ import { Alert } from '@studdy/design-system';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
 import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
+import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
 
 export const metadata = { title: 'Which subject?' };
@@ -31,8 +32,8 @@ export default async function BookSubjectPage({
   return (
     <BookingShell
       step="subject"
-      nextStep={booking.nextStep}
       params={params}
+      rows={summaryRows(booking)}
       title={`What does ${student.preferredName} need help with?`}
       description="Pick a subject. If it is new, we will add it to their profile when you send the request — not before."
     >

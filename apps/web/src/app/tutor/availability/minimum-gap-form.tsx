@@ -1,6 +1,7 @@
 import { Label } from '@studdy/design-system';
 import type { ReactNode } from 'react';
-import { MINIMUM_GAP_CHOICES, setMinimumGapAction } from '@/lib/availability/actions';
+import { MINIMUM_GAP_CHOICES } from '@studdy/domain/availability';
+import { setMinimumGapAction } from '@/lib/availability/actions';
 
 export interface MinimumGapFormProps {
   readonly minutes: number;

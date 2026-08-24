@@ -4,6 +4,7 @@ import { BookingShell } from '@/components/booking/booking-shell';
 import { TimePicker } from '@/components/booking/time-picker';
 import { bookingAvailability } from '@/lib/booking/availability';
 import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
+import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
 import { AVAILABILITY_WINDOW_DAYS, PLATFORM_TIME_ZONE } from '@/lib/time';
 
@@ -45,8 +46,8 @@ export default async function BookTimesPage({
     return (
       <BookingShell
         step="times"
-        nextStep={booking.nextStep}
         params={params}
+        rows={summaryRows(booking)}
         skipped={formats.length === 1 ? ['format'] : []}
         title="When would suit?"
       >
@@ -72,8 +73,8 @@ export default async function BookTimesPage({
   return (
     <BookingShell
       step="times"
-      nextStep={booking.nextStep}
       params={params}
+      rows={summaryRows(booking)}
       skipped={formats.length === 1 ? ['format'] : []}
       title={`When would suit for ${String(version.durationMinutes)} minutes with ${tutor.firstName}?`}
       description={`${format === 'online' ? 'Online' : 'In person'}, shown in New Zealand time. ${tutor.firstName} still has to accept — this is a request, not a booking.`}

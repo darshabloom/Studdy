@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { SLOT_STEP_MINUTES } from '@studdy/domain/availability';
 import { createDatabaseClient } from '../client';
 import {
   authIdentityLinks,
@@ -440,11 +441,21 @@ describe.skipIf(!available)('availability repository', () => {
     // previous day in UTC, and filtering on a UTC date silently drops exactly
     // the slots under test.
     //
-    // Every seeded rule is unscoped, so the difference between the two is
-    // precisely this rule: three hours on a 30-minute grid, each an hour long,
-    // is five starts (09:00 through 11:00).
+    /**
+     * Every seeded rule is unscoped, so the difference between the two is
+     * precisely this rule: a three-hour window, hour-long lessons, so the last
+     * start is two hours in — one start per step of the grid, plus the last.
+     *
+     * Derived from `SLOT_STEP_MINUTES` rather than written out, because the
+     * grid is a product decision that has already moved once: at thirty
+     * minutes this was five, at fifteen it is nine, and a hard-coded number
+     * fails later for a reason that looks nothing like the change that caused
+     * it.
+     */
+    const lastStartMinutes = 2 * 60;
+    const expectedStarts = lastStartMinutes / SLOT_STEP_MINUTES + 1;
     expect(inPerson.length).toBeGreaterThan(0);
-    expect(online.length - inPerson.length).toBe(5);
+    expect(online.length - inPerson.length).toBe(expectedStarts);
 
     // Asking without a format must behave exactly as it always did: everything
     // contributes, including the scoped rule.

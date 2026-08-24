@@ -1,5 +1,7 @@
 export {
   DEFAULT_MINIMUM_GAP_MINUTES,
+  MINIMUM_GAP_CHOICES,
+  isMinimumGapChoice,
   SLOT_STEP_MINUTES,
   bookableSlots,
   formatMatches,

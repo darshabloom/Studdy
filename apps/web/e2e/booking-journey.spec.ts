@@ -212,6 +212,60 @@ test.describe('the parent booking journey', () => {
     expect(geometry.selectable).toBe(true);
   });
 
+  /**
+   * The answers stay on screen, and stay changeable.
+   *
+   * A wizard that takes each answer away as it moves on asks a parent to hold
+   * six decisions in their head and trust the seventh screen knows them. The
+   * summary is built from the same resolved booking the screens are guarded by,
+   * so what it claims and what the server would accept cannot drift.
+   */
+  test('accumulates the answers, and offers each one back', async ({ page }) => {
+    await signIn(page, FAMILY);
+    await ensureStudent(page);
+    await walkToTimes(page, /60 minutes/);
+
+    const summary = page.getByRole('complementary', { name: 'Your request so far' });
+    await expect(summary).toBeVisible();
+    for (const answered of [STUDENT, SUBJECT, TUTOR, '60 minutes']) {
+      await expect(summary.getByText(answered, { exact: false })).toBeVisible();
+    }
+
+    /**
+     * A step never asked still appears, marked as settled. Mei teaches online
+     * only, so the parent never chose it — and a summary that credited them
+     * with the decision would be putting words in their mouth.
+     */
+    await expect(summary.getByText('(only option)')).toBeVisible();
+
+    // And an earlier answer is one click from being changed, not a restart.
+    await summary.getByRole('link', { name: /Change.*Lesson length/ }).click();
+    await expect(page.getByRole('heading', { name: /How long should the lesson/ })).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
+  /**
+   * Quarter-hour starts, asserted on what a parent can actually click.
+   *
+   * Server-authoritative: the grid comes from the derivation, so a 4:15 option
+   * exists here only because a 4:15 lesson is genuinely bookable.
+   */
+  test('offers quarter-hour start times', async ({ page }) => {
+    await signIn(page, FAMILY);
+    await ensureStudent(page);
+    await walkToTimes(page, /60 minutes/);
+
+    const calendar = page.getByRole('group', { name: /Bookable times for/ });
+    await expect(calendar.getByRole('button').first()).toBeVisible({ timeout: 15_000 });
+
+    const labels = await calendar.getByRole('button').allInnerTexts();
+    const quarters = labels.filter((label) => /:15|:45/.test(label));
+    expect(quarters.length, 'a quarter-past or quarter-to start should be offered').toBeGreaterThan(
+      0,
+    );
+  });
+
   test('never explains why a time is unavailable', async ({ page }) => {
     await signIn(page, FAMILY);
     await ensureStudent(page);

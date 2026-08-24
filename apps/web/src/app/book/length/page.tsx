@@ -3,6 +3,7 @@ import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
 import { formatsForVersion } from '@studdy/database';
 import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
+import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
 
 export const metadata = { title: 'How long should the lesson be?' };
@@ -47,8 +48,8 @@ export default async function BookLengthPage({
   return (
     <BookingShell
       step="length"
-      nextStep={booking.nextStep}
       params={params}
+      rows={summaryRows(booking)}
       skipped={formatAlwaysSettled ? ['format'] : []}
       title={`How long should the lesson with ${tutor.firstName} be?`}
       description={`These are the lessons ${tutor.firstName} offers for this subject.`}

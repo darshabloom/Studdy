@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
 import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
+import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
 
 export const metadata = { title: 'Online or in person?' };
@@ -51,8 +52,8 @@ export default async function BookFormatPage({
   return (
     <BookingShell
       step="format"
-      nextStep={booking.nextStep}
       params={params}
+      rows={summaryRows(booking)}
       title="Online or in person?"
       description={`${tutor.firstName} teaches this lesson either way.`}
     >

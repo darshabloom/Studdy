@@ -141,6 +141,20 @@ export const SLOT_STEP_MINUTES = 15;
 export const DEFAULT_MINIMUM_GAP_MINUTES = 15;
 
 /**
+ * The gaps a tutor may choose between.
+ *
+ * A fixed set rather than a free number, so the server has something definite
+ * to validate against and a tutor cannot make themselves unbookable for a day
+ * at a time with a slip of the keyboard. Zero is a real choice — some tutors
+ * genuinely run back to back.
+ */
+export const MINIMUM_GAP_CHOICES = [0, 5, 10, 15, 20, 30, 45, 60] as const;
+
+export function isMinimumGapChoice(value: number): boolean {
+  return (MINIMUM_GAP_CHOICES as readonly number[]).includes(value);
+}
+
+/**
  * The UTC instant of a local wall-clock time in an IANA zone.
  *
  * Node has no zone-aware Date, and the repository carries no date library, so

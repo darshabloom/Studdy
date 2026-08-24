@@ -14,6 +14,7 @@ import {
 } from '@studdy/database';
 import { validateAvailabilityRule, validateBlockedPeriod } from '@studdy/domain/availability';
 import { resolveIdentity } from '../identity/resolve';
+import { isMinimumGapChoice } from '@studdy/domain/availability';
 import { PLATFORM_TIME_ZONE } from '../time';
 import { MINUTES_IN_DAY, minutesToClock, splitDateTime, storedDayOfWeek } from './calendar-time';
 
@@ -288,16 +289,6 @@ function revalidateAvailability(): void {
 }
 
 /**
- * The least time that must pass between one lesson ending and the next
- * beginning: preparing, resetting, or travelling.
- *
- * Bounded here as well as in the database. Zero is a real choice — some tutors
- * genuinely run back to back — and the ceiling exists so a slip of the keyboard
- * cannot quietly make a tutor unbookable for a day at a time.
- */
-export const MINIMUM_GAP_CHOICES = [0, 5, 10, 15, 20, 30, 45, 60] as const;
-
-/**
  * Change the minimum gap between this tutor's lessons.
  *
  * Governs what may be taken NEXT and nothing else. Every reservation already
@@ -309,10 +300,8 @@ export async function setMinimumGapAction(formData: FormData): Promise<void> {
   const { tutorProfileId } = await requireTutor();
 
   const requested = Number(formData.get('minimumGapMinutes'));
-  if (!MINIMUM_GAP_CHOICES.includes(requested as (typeof MINIMUM_GAP_CHOICES)[number])) {
-    // The form offers a fixed set; anything else was not typed by a tutor.
-    return;
-  }
+  // The form offers a fixed set; anything else did not come from this form.
+  if (!isMinimumGapChoice(requested)) return;
 
   await setTutorMinimumGapMinutes({ tutorProfileId, minimumGapMinutes: requested });
   revalidateAvailability();
