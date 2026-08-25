@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
-import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
+import { bookingHref, paramsUpTo, type RawSearchParams } from '@/lib/booking/draft';
 import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
 
@@ -40,6 +40,13 @@ export default async function BookFormatPage({
   if (booking === null) redirect('/sign-in?next=%2Fbook');
   if (!stepIsReachable('format', booking.nextStep)) {
     redirect(bookingHref(booking.nextStep, booking.params));
+  }
+
+  // Settled where the chosen version is delivered only one way. The length
+  // screen links straight past this, but a bookmark or a typed URL can still
+  // arrive here, and it must not present a single option as a decision.
+  if (booking.settled.has('format')) {
+    redirect(bookingHref(booking.nextStep, paramsUpTo(booking.nextStep, booking.params)));
   }
 
   const { tutor, version, formats, params } = booking;

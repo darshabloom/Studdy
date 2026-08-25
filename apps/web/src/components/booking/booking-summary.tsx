@@ -41,10 +41,18 @@ export interface BookingSummaryProps {
  * means the review screen is the finished state of a thing the parent has
  * watched grow rather than a summary appearing from nowhere at the end.
  *
- * EVERY ANSWERED ROW IS A LINK BACK. Changing an early answer is the commonest
- * thing a parent wants and the most expensive thing to get wrong; going back
- * drops the answers that depended on it, exactly as the URL model already does,
- * so a stale price or a time derived for a different lesson cannot survive.
+ * EVERY ANSWERED ROW IS A LINK BACK — except a settled one. Changing an early
+ * answer is the commonest thing a parent wants and the most expensive thing to
+ * get wrong; going back drops the answers that depended on it, exactly as the
+ * URL model already does, so a stale price or a time derived for a different
+ * lesson cannot survive.
+ *
+ * A SETTLED ANSWER OFFERS NO CHANGE. Following one would land on a screen whose
+ * single option is already taken — an action that promises a decision and then
+ * cannot deliver one. Where other answers are genuinely possible, they are
+ * possible because something EARLIER could differ, and that earlier row is
+ * still changeable: a parent who wants a different tutor changes the subject or
+ * the child, and the tutors on offer change with it.
  *
  * There is no client state here at all. The rows come from the same
  * `resolveBooking` every screen runs, so what the summary claims and what the
@@ -63,7 +71,11 @@ export function BookingSummary({
       {rows.map((row) => {
         const answered = row.value !== null;
         const isCurrent = row.step === current;
-        const canGoBack = answered && !isCurrent && BOOKING_STEPS.indexOf(row.step) < frontier;
+        const canGoBack =
+          answered &&
+          !isCurrent &&
+          row.settled !== true &&
+          BOOKING_STEPS.indexOf(row.step) < frontier;
 
         return (
           <li

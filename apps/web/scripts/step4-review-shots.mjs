@@ -62,59 +62,88 @@ async function walk(page, prefix) {
   // appears for a family acting on a subject, so make sure one exists first.
   await page.goto(`${BASE}/parent`);
   const findTutors = page.getByRole('link', { name: 'Find tutors' }).first();
-  if ((await findTutors.count()) === 0) {
-    const addSubject = page.getByRole('link', { name: /Add a subject/ }).first();
-    if ((await addSubject.count()) > 0) {
-      await addSubject.click();
-      await page.getByLabel('Subject', { exact: true }).selectOption({ label: 'Mathematics' });
-      await page.getByLabel('School year for this subject').selectOption({ label: 'Year 9' });
-      await page.getByRole('button', { name: 'Save and find tutors' }).click();
-      await page.waitForURL(/\/tutors\?section=/, { timeout: 30_000 });
-      await shoot(page, prefix, '0-discovery-entry');
-    }
-  } else {
+  const addSubject = page.getByRole('link', { name: /Add a subject/ }).first();
+  /**
+   * Wait for whichever of the two the dashboard offers before asking which it
+   * was: `count()` does not auto-wait, and reading it against a page that has
+   * not rendered reports "neither" and silently skips this screenshot.
+   *
+   * `.first()` on the UNION, not on each side. Once a subject exists the
+   * dashboard shows both links, and waiting on a two-element union is a strict
+   * mode violation — which is why the second viewport failed where the first
+   * had passed.
+   */
+  await findTutors.or(addSubject).first().waitFor({ timeout: 30_000 });
+
+  if (await findTutors.isVisible()) {
     await findTutors.click();
-    await page.waitForURL(/\/tutors/, { timeout: 30_000 });
-    await shoot(page, prefix, '0-discovery-entry');
+  } else {
+    await addSubject.click();
+    await page.getByLabel('Subject', { exact: true }).selectOption({ label: 'Mathematics' });
+    await page.getByLabel('School year for this subject').selectOption({ label: 'Year 9' });
+    await page.getByRole('button', { name: 'Save and find tutors' }).click();
+  }
+  await page.waitForURL(/\/tutors/, { timeout: 30_000 });
+  await shoot(page, prefix, '0-discovery-entry');
+
+  /**
+   * DECIDE ON WHAT RENDERED, NOT ON THE URL.
+   *
+   * Which questions this journey asks depends on the account: a family with one
+   * child is not asked which child, and a subject taught by one tutor at this
+   * level is not asked which tutor. A settled step forwards to the next one, so
+   * reading `page.url()` after `waitForURL` can catch `/book/tutor` while it is
+   * still on its way to `/book/length` — the branch then waits for a heading
+   * that was never going to appear. Waiting for one of the two real headings
+   * asks the only question that matters: which screen is the family looking at?
+   */
+  await page.goto(`${BASE}/book`);
+
+  const childQuestion = page.getByRole('heading', { name: /Who is this lesson for/ });
+  const subjectQuestion = page.getByRole('heading', { name: /help with/ });
+  await childQuestion.or(subjectQuestion).waitFor({ timeout: 30_000 });
+
+  if (await childQuestion.isVisible()) {
+    await shoot(page, prefix, '1a-child');
+    await page
+      .getByRole('link', { name: new RegExp(STUDENT) })
+      .first()
+      .click();
   }
 
-  await page.goto(`${BASE}/book`);
-  await page.getByRole('heading', { name: /Who is this lesson for/ }).waitFor({ timeout: 30_000 });
-  await shoot(page, prefix, '1-child');
-
-  await page
-    .getByRole('link', { name: new RegExp(STUDENT) })
-    .first()
-    .click();
-  await page.getByRole('heading', { name: /help with/ }).waitFor({ timeout: 30_000 });
-  await shoot(page, prefix, '2-subject');
+  await subjectQuestion.waitFor({ timeout: 30_000 });
+  await shoot(page, prefix, '1-subject');
 
   await page.getByRole('link', { name: 'Mathematics', exact: false }).first().click();
-  await page.getByRole('heading', { name: /Who should teach/ }).waitFor({ timeout: 30_000 });
-  await shoot(page, prefix, '3-tutor');
 
-  await page.getByRole('link', { name: /Aroha/ }).first().click();
-  await page
-    .getByRole('heading', { name: /How long should the lesson/ })
-    .waitFor({ timeout: 30_000 });
-  await shoot(page, prefix, '4-length');
+  const tutorQuestion = page.getByRole('heading', { name: /Who should teach/ });
+  const lengthQuestion = page.getByRole('heading', { name: /How long should the lesson/ });
+  await tutorQuestion.or(lengthQuestion).waitFor({ timeout: 30_000 });
+
+  if (await tutorQuestion.isVisible()) {
+    await shoot(page, prefix, '1b-tutor');
+    await page.getByRole('link', { name: /Aroha/ }).first().click();
+  }
+
+  await lengthQuestion.waitFor({ timeout: 30_000 });
+  await shoot(page, prefix, '2-length');
 
   await page
     .getByRole('link', { name: /60 minutes/ })
     .first()
     .click();
   await page.getByRole('heading', { name: /When would suit/ }).waitFor({ timeout: 30_000 });
-  await shoot(page, prefix, '5-times-empty');
+  await shoot(page, prefix, '3-times-empty');
 
   const slots = page.getByRole('group', { name: /Bookable times for/ }).getByRole('button');
   await slots.first().waitFor({ timeout: 30_000 });
   await slots.first().click();
   await slots.nth(2).click();
-  await shoot(page, prefix, '6-times-chosen');
+  await shoot(page, prefix, '4-times-chosen');
 
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('heading', { name: /Check this over/ }).waitFor({ timeout: 30_000 });
-  await shoot(page, prefix, '7-review');
+  await shoot(page, prefix, '5-review');
 }
 
 const browser = await chromium.launch();
@@ -130,40 +159,14 @@ for (const [prefix, viewport] of [
   await context.close();
 }
 
-// The format step only appears for a tutor who teaches both ways, so it needs
-// its own walk rather than being absent from the review entirely.
-{
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await context.newPage();
-  await signIn(page);
-  await ensureStudent(page);
-  await page.goto(`${BASE}/book`);
-  await page
-    .getByRole('link', { name: new RegExp(STUDENT) })
-    .first()
-    .click();
-  const calculus = page.getByRole('link', { name: 'Calculus', exact: false }).first();
-  if ((await calculus.count()) > 0) {
-    await calculus.click();
-    const tutor = page.getByRole('link', { name: /James/ }).first();
-    if ((await tutor.count()) > 0) {
-      await tutor.click();
-      await page
-        .getByRole('heading', { name: /How long should the lesson/ })
-        .waitFor({ timeout: 30_000 });
-      await page
-        .getByRole('link', { name: /minutes/ })
-        .first()
-        .click();
-      const format = page.getByRole('heading', { name: /Online or in person/ });
-      if ((await format.count()) > 0) {
-        await format.waitFor({ timeout: 30_000 });
-        await shoot(page, 'desktop', '4b-format');
-      }
-    }
-  }
-  await context.close();
-}
-
+/**
+ * The format step lives in the extras script, not here.
+ *
+ * It only appears for a tutor who teaches one version both ways, and among the
+ * seeded tutors that is James's Calculus at Years 10–13 — which needs a SENIOR
+ * student this walk's Year 9 account does not have. The version that used to
+ * sit here was guarded by `count()` checks that could never pass, so it wrote
+ * nothing and looked like it had.
+ */
 await browser.close();
 console.log('done');

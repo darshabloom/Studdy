@@ -1,20 +1,21 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { CollapsedSection, CurrentSectionHeader } from './booking-accordion';
 import { BookingSummary, type SummaryRow } from './booking-summary';
-import {
-  BOOKING_STEPS,
-  bookingHref,
-  paramsUpTo,
-  type BookingParams,
-  type BookingStep,
-} from '@/lib/booking/draft';
+import { bookingSections, previousHref, unaskedSteps } from '@/lib/booking/sections';
+import type { BookingParams, BookingStep } from '@/lib/booking/draft';
 
 export interface BookingShellProps {
   readonly step: BookingStep;
   readonly params: BookingParams;
   /** The request so far, from `summaryRows`. */
   readonly rows: readonly SummaryRow[];
-  /** Steps this journey never asks, e.g. format with one possible answer. */
+  /**
+   * Steps known in advance never to be asked, beyond those already settled.
+   * The length screen uses it: a tutor delivering every lesson a single way
+   * will never raise the format question, and the journey should not promise a
+   * step that is not coming.
+   */
   readonly skipped?: readonly BookingStep[];
   readonly title: string;
   readonly description?: string;
@@ -27,15 +28,16 @@ export interface BookingShellProps {
  *
  * ONE DOM, TWO SHAPES. On a wide screen the current question sits beside a
  * persistent panel holding everything decided so far. On a narrow one the same
- * rows become an accordion: answered sections collapsed above, the open
- * question in place, the rest waiting below. Only the summary markup is
- * duplicated across the two — static rows, each hidden by `display: none` at
- * the other width, so neither is read twice. THE QUESTION IS RENDERED ONCE;
- * duplicating it would double-mount its form.
+ * answers become an accordion: completed sections collapsed above, the open
+ * question beneath its own section header, the rest waiting below. Only the
+ * static summary markup differs between the two, and each copy is hidden by
+ * `display: none` at the other width, so nothing is read twice. THE QUESTION IS
+ * RENDERED ONCE; duplicating it would double-mount its form.
  *
  * The accordion needs no client state. Each route already IS one section
  * expanded, so "tap a completed section to reopen it" is an ordinary link, and
- * refresh, the back button and deep links keep working exactly as before.
+ * opening one closes the current one because the next page renders with a
+ * different section open.
  */
 export function BookingShell({
   step,
@@ -47,20 +49,22 @@ export function BookingShell({
   children,
 }: BookingShellProps): ReactNode {
   const visible = rows.filter((row) => !skipped.includes(row.step) || row.value !== null);
-  const currentIndex = visible.findIndex((row) => row.step === step);
+  const sections = bookingSections(visible, step, params);
+  const currentIndex = sections.findIndex((section) => section.state === 'current');
 
   /**
    * The review screen renders the summary itself, as its whole content.
    *
-   * Showing the panel there too would put the same six answers on screen twice,
+   * Showing the panel there too would put the same answers on screen twice,
    * side by side — which reads less like a reminder than like two things that
    * might disagree, at exactly the moment a parent is checking they agree.
    */
   const ownsItsSummary = currentIndex === -1;
-  const before = ownsItsSummary ? [] : visible.slice(0, currentIndex + 1);
-  const after = ownsItsSummary ? [] : visible.slice(currentIndex + 1);
+  const before = ownsItsSummary ? [] : sections.slice(0, currentIndex);
+  const current = ownsItsSummary ? null : (sections[currentIndex] ?? null);
+  const after = ownsItsSummary ? [] : sections.slice(currentIndex + 1);
 
-  const backHref = previousHref(step, params, skipped);
+  const back = previousHref(step, params, unaskedSteps(visible, skipped));
 
   return (
     // Wide enough that the summary panel does not squeeze the question. The
@@ -83,17 +87,34 @@ export function BookingShell({
       >
         {/* Mobile: the sections already answered, collapsed above the question. */}
         {before.length > 0 ? (
-          <div className="mb-4 md:hidden">
-            <BookingSummary rows={before} current={step} params={params} bare />
+          <div className="mb-3 flex flex-col gap-2 md:hidden">
+            {before.map((section) => (
+              <CollapsedSection key={section.step} section={section} />
+            ))}
           </div>
         ) : null}
 
-        <main className="min-w-0">{children}</main>
+        {/*
+         * The open section. On mobile it is a card carrying its own header, so
+         * the question reads as one expanded accordion panel rather than as a
+         * form that happens to follow a receipt. Above `md` the card chrome is
+         * dropped and this is simply the first grid column, unchanged.
+         */}
+        <div className="min-w-0 rounded-[var(--radius-medium)] border border-brand-purple/40 bg-surface-card p-3 shadow-sm md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none">
+          {current !== null ? (
+            <div className="md:hidden">
+              <CurrentSectionHeader section={current} />
+            </div>
+          ) : null}
+          <main className="min-w-0">{children}</main>
+        </div>
 
         {/* Mobile: the questions still to come, waiting below. */}
         {after.length > 0 ? (
-          <div className="mt-5 md:hidden">
-            <BookingSummary rows={after} current={step} params={params} bare />
+          <div className="mt-3 flex flex-col gap-2 md:hidden">
+            {after.map((section) => (
+              <CollapsedSection key={section.step} section={section} />
+            ))}
           </div>
         ) : null}
 
@@ -105,31 +126,13 @@ export function BookingShell({
         )}
       </div>
 
-      {backHref !== null ? (
+      {back !== null ? (
         <div className="mt-6 border-t border-surface-border pt-4">
-          <Link href={backHref} className="text-sm text-brand-purple hover:underline">
+          <Link href={back} className="text-sm text-brand-purple hover:underline">
             ← Back
           </Link>
         </div>
       ) : null}
     </section>
   );
-}
-
-/**
- * The previous question, skipping any this journey never asked.
- *
- * Back has to land where the parent actually came from, not on a screen they
- * were routed past because it had only one possible answer.
- */
-function previousHref(
-  step: BookingStep,
-  params: BookingParams,
-  skipped: readonly BookingStep[],
-): string | null {
-  let index = BOOKING_STEPS.indexOf(step) - 1;
-  while (index > 0 && skipped.includes(BOOKING_STEPS[index]!)) index -= 1;
-  if (index < 0) return null;
-  const target = BOOKING_STEPS[index]!;
-  return bookingHref(target, paramsUpTo(target, params));
 }

@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { listSubjects } from '@studdy/database';
-import { Alert } from '@studdy/design-system';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
 import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
@@ -35,7 +34,16 @@ export default async function BookSubjectPage({
       params={params}
       rows={summaryRows(booking)}
       title={`What does ${student.preferredName} need help with?`}
-      description="Pick a subject. If it is new, we will add it to their profile when you send the request — not before."
+      /**
+       * Said once, quietly, next to the question.
+       *
+       * This used to be a full callout as well. Two notices making the same
+       * promise, on a screen where nothing is at stake yet, gave the moment far
+       * more weight than it has — the parent is picking a subject, not
+       * authorising a change. The prominent notice belongs on Review, where the
+       * write is genuinely about to happen, and that is where it stays.
+       */
+      description={`Pick a subject. A new one is added to ${student.preferredName}'s profile only when you send the request.`}
     >
       <ChoiceList
         ariaLabel="Subjects"
@@ -57,15 +65,6 @@ export default async function BookSubjectPage({
           />
         }
       />
-
-      {alreadyStudying.size === 0 ? (
-        <div className="mt-4">
-          <Alert tone="information" title="Nothing is saved yet">
-            Choosing a subject here does not add it to {student.preferredName}&rsquo;s profile. That
-            happens only if you send a request, and we will say so before you do.
-          </Alert>
-        </div>
-      ) : null}
     </BookingShell>
   );
 }

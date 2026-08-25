@@ -31,13 +31,39 @@ export function bookingTimeLabel(at: Date): string {
     .replace(',', '');
 }
 
+/**
+ * Every answer, and whether the parent actually made it.
+ *
+ * `settled` carries two behaviours further out: the row is marked
+ * `(only option)`, and it offers no `Change` — because following one would land
+ * on a screen with a single choice already taken, which is not a change at all.
+ * A parent wanting a different answer changes something UPSTREAM that could
+ * genuinely open other options.
+ */
 export function summaryRows(booking: ResolvedBooking): readonly SummaryRow[] {
-  const { student, subject, tutor, version, format, formats, times } = booking;
+  const { student, subject, tutor, version, format, times, settled } = booking;
 
   return [
-    { step: 'child', label: 'Who for', value: student?.preferredName ?? null },
-    { step: 'subject', label: 'Subject', value: subject?.displayName ?? null },
-    { step: 'tutor', label: 'Tutor', value: tutor?.firstName ?? null },
+    {
+      step: 'child',
+      label: 'Who for',
+      value: student?.preferredName ?? null,
+      settled: settled.has('child'),
+    },
+    {
+      step: 'subject',
+      label: 'Subject',
+      value: subject?.displayName ?? null,
+      // Never settled by the server: every subject is a valid answer, so a
+      // subject already filled in came from the family, not from us.
+      settled: false,
+    },
+    {
+      step: 'tutor',
+      label: 'Tutor',
+      value: tutor?.firstName ?? null,
+      settled: settled.has('tutor'),
+    },
     {
       step: 'length',
       label: 'Lesson length',
@@ -45,23 +71,19 @@ export function summaryRows(booking: ResolvedBooking): readonly SummaryRow[] {
         version === null
           ? null
           : `${String(version.durationMinutes)} minutes · ${money(version.priceAmountMinor, version.currencyCode)}`,
+      settled: settled.has('length'),
     },
     {
       step: 'format',
       label: 'Online or in person',
       value: format === null ? null : format === 'online' ? 'Online' : 'In person',
-      /**
-       * Settled rather than chosen when the tutor delivers this lesson only one
-       * way. It belongs in the summary — it is a fact about the request — but
-       * marking it keeps the summary from crediting the parent with a decision
-       * they were never offered.
-       */
-      settled: formats.length === 1,
+      settled: settled.has('format'),
     },
     {
       step: 'times',
       label: times.length === 1 ? 'Time' : 'Times',
       value: times.length === 0 ? null : times.map(bookingTimeLabel).join(', '),
+      settled: false,
     },
   ];
 }

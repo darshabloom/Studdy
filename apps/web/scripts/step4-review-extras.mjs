@@ -33,6 +33,14 @@ async function shoot(page, name) {
 
 async function addStudent(page, name, year) {
   await page.goto(`${BASE}/parent`);
+  // Wait for the dashboard before counting: `count()` does not auto-wait, and
+  // reading it too early reports "no such student" and adds a duplicate — which
+  // would quietly change how many children this family has, and with it which
+  // questions the booking journey asks.
+  await page
+    .getByRole('link', { name: /Find tutors|Add a subject|Add a student|Add your first student/ })
+    .first()
+    .waitFor({ timeout: 30_000 });
   if ((await page.getByText(name).count()) > 0) return;
   await page
     .getByRole('link', { name: /Add a student|Add your first student/ })
@@ -87,22 +95,59 @@ for (const [prefix, viewport] of [
   await signIn(page);
   await addStudent(page, 'Senior', 'Year 12');
 
+  /**
+   * Decide on the heading that rendered, not on the URL.
+   *
+   * Adding Senior gives this family two children, so the child question IS
+   * asked here — but only one tutor teaches Calculus at that level, so the
+   * tutor question is not. A settled step forwards to the next, and reading
+   * `page.url()` can catch the one being left rather than the one arrived at.
+   */
   await page.goto(`${BASE}/book`);
-  await page
-    .getByRole('link', { name: /Senior/ })
-    .first()
-    .click();
+
+  const childQuestion = page.getByRole('heading', { name: /Who is this lesson for/ });
+  const subjectQuestion = page.getByRole('heading', { name: /help with/ });
+  await childQuestion.or(subjectQuestion).waitFor({ timeout: 30_000 });
+
+  if (await childQuestion.isVisible()) {
+    await page
+      .getByRole('link', { name: /Senior/ })
+      .first()
+      .click();
+    await subjectQuestion.waitFor({ timeout: 30_000 });
+  }
+
   await page.getByRole('link', { name: 'Calculus', exact: false }).first().click();
-  await page.getByRole('link', { name: /James/ }).first().click();
-  await page
-    .getByRole('heading', { name: /How long should the lesson/ })
-    .waitFor({ timeout: 30_000 });
-  await page
-    .getByRole('link', { name: /minutes/ })
-    .first()
-    .click();
-  await page.getByRole('heading', { name: /Online or in person/ }).waitFor({ timeout: 30_000 });
-  await shoot(page, 'desktop-4b-format');
+
+  /**
+   * BOTH the tutor and the length can settle on the way here.
+   *
+   * James is the only tutor teaching Calculus at Year 12 AND publishes a single
+   * length for it, so this journey skips two questions in a row and arrives at
+   * the format one directly. An earlier version waited for the length heading
+   * and timed out on a screen that was never going to be shown — so every hop
+   * is optional now, and only the format question is required.
+   */
+  const tutorQuestion = page.getByRole('heading', { name: /Who should teach/ });
+  const lengthQuestion = page.getByRole('heading', { name: /How long should the lesson/ });
+  const formatQuestion = page.getByRole('heading', { name: /Online or in person/ });
+
+  await tutorQuestion.or(lengthQuestion).or(formatQuestion).first().waitFor({ timeout: 30_000 });
+
+  if (await tutorQuestion.isVisible()) {
+    await page.getByRole('link', { name: /James/ }).first().click();
+    await lengthQuestion.or(formatQuestion).first().waitFor({ timeout: 30_000 });
+  }
+
+  if (await lengthQuestion.isVisible()) {
+    await page
+      .getByRole('link', { name: /minutes/ })
+      .first()
+      .click();
+  }
+
+  await formatQuestion.waitFor({ timeout: 30_000 });
+  await shoot(page, 'desktop-2b-format');
   await context.close();
 }
 
@@ -117,7 +162,7 @@ for (const [prefix, viewport] of [
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 });
   await page.goto(`${BASE}/tutor/availability`);
   await page.getByRole('heading', { name: 'Your availability' }).waitFor({ timeout: 30_000 });
-  await shoot(page, 'desktop-8-tutor-minimum-gap');
+  await shoot(page, 'desktop-6-tutor-minimum-gap');
   await context.close();
 }
 

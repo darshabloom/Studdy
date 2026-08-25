@@ -593,25 +593,108 @@ needing turnaround; widening it would quietly cost bookable time either side of 
    **Mei / English** exclusively; sharing either broke other specs in ways that read as
    product bugs. It is also excluded from the mobile project, as the other journey specs are.
 
-#### Verified gate state at `99cb74a`
+#### Verified gate state after the final UX pass
 
-| Gate                                       | Result                       |
-| ------------------------------------------ | ---------------------------- |
-| `pnpm typecheck`                           | green                        |
-| `pnpm exec turbo run lint --concurrency=2` | green                        |
-| `pnpm format`                              | green                        |
-| `pnpm check:rls`                           | green — 28 tables classified |
-| `pnpm check:boundaries`                    | green                        |
-| `pnpm build`                               | green                        |
-| Unit + integration                         | **361 passing, 1 skipped**   |
-| End-to-end                                 | **95 passing**               |
+| Gate                                       | Result                                |
+| ------------------------------------------ | ------------------------------------- |
+| `pnpm typecheck`                           | green                                 |
+| `pnpm exec turbo run lint --concurrency=2` | green — 9/9                           |
+| `pnpm format`                              | green                                 |
+| `pnpm check:rls`                           | green — 28 tables classified          |
+| `pnpm check:boundaries`                    | green                                 |
+| `pnpm build`                               | green — clean rebuild, cache bypassed |
+| Unit                                       | **376 passing, 1 skipped** (was 361)  |
+| Integration                                | **110 passing, 1 skipped**            |
+| `booking-journey.spec.ts`                  | **11 passing** (was 9)                |
 
-All after `pnpm db:reset && pnpm db:migrate && pnpm db:seed`.
+All after `pnpm db:reset && pnpm db:migrate && pnpm db:seed`. The +15 unit tests are
+`sections.test.ts`; the +2 end-to-end are auto-settling and the mobile accordion.
+
+> **A COMPLETELY GREEN FULL END-TO-END RUN IS STILL REQUIRED BEFORE ANY PR OR MERGE.**
+> Only `booking-journey.spec.ts` was re-run for this pass, deliberately — the owner
+> directed that a full run now would be wasted while the UX was still moving. The last
+> full run stood at 93 passed, 1 machine-contention failure, 1 not run; the affected spec
+> passed 8/8 when re-run alone on a fresh seed.
+>
+> **Contention, not code.** A test whose recorded duration far exceeds its own timeout — a
+> 30s timeout reported after 9.9 minutes — is a starved machine. Re-run the spec alone
+> before characterising it as a defect.
+
+#### The final UX pass (owner-directed, after the step 4 direction was approved)
+
+Four changes, all presentation-layer. The route-per-step, server-authoritative model is
+unchanged; no client-side booking draft was introduced.
+
+1. **Mobile is a real accordion.** Completed sections collapse above the open question,
+   each with its label, its answer and a chevron; the open question sits beneath its own
+   section header; the rest wait below, dashed. Tapping a completed section reopens it and
+   closes the current one — which needs no client state, because each ROUTE already is one
+   section expanded. Only the static summary markup differs between the two widths, each
+   copy hidden by `display: none` at the other, so nothing is read twice; the question is
+   still rendered once.
+2. **A question with one valid answer is no longer asked.** Child, tutor and length now
+   settle exactly as format already did, in `resolveBooking`. Settled answers are folded
+   back into the returned `params`, so every link built downstream carries them. Visiting a
+   settled step directly forwards to the next open question, so a bookmark cannot resurrect
+   an empty decision. **Subject is deliberately never settled by count** — every subject is
+   a valid answer, so a pre-filled subject came from the entry context, not from us.
+3. **Settled answers offer no `Change`.** Following one would open a screen whose single
+   option is already taken. The route to a different answer is to change something upstream
+   that could genuinely open other options, and those rows stay changeable.
+4. **Subject copy is one sentence,** in the step description. The `Nothing is saved yet`
+   callout is gone; the prominent notice stays on Review, where the write actually happens.
+
+**`minimum_gap_minutes`, the 15-minute grid, 1–5 times, the desktop receipt, Review as its
+completed form, mobile calendar scrolling, the snapshotted gap and effective-interval
+exclusion, the atomic send and the request-not-booking language are all unchanged.**
+
+New: `apps/web/src/lib/booking/sections.ts` (pure — the accordion model, `unaskedSteps`,
+`previousAskedStep`) with `sections.test.ts` (15 tests), and
+`apps/web/src/components/booking/booking-accordion.tsx`. `previousAskedStep` fixed a real
+bug on the way: the old Back walk stopped at index 0 even when the first step was skipped,
+so Back could land on a question the journey had just decided not to ask.
 
 #### Review screenshots
 
-`S:\Studdy\.review\step4\` (gitignored). Eighteen images: `desktop-0-discovery-entry`
-through `desktop-8-tutor-minimum-gap`, and `mobile-0` through `mobile-7`.
+`S:\Studdy\.review\step4\` (gitignored), **fourteen images**, regenerated for this pass.
+The previously approved set is kept alongside at `S:\Studdy\.review\step4-previous\`.
+
+Numbering follows the journey as it is now actually asked, for a family with one child
+booking Mathematics — where child and tutor both settle:
+
+| Screen                        | Desktop                       | Mobile                     |
+| ----------------------------- | ----------------------------- | -------------------------- |
+| Discovery entry point         | `desktop-0-discovery-entry`   | `mobile-0-discovery-entry` |
+| Subject (first open question) | `desktop-1-subject`           | `mobile-1-subject`         |
+| Lesson length                 | `desktop-2-length`            | `mobile-2-length`          |
+| Format (separate walk)        | `desktop-2b-format`           | —                          |
+| Times, none chosen            | `desktop-3-times-empty`       | `mobile-3-times-empty`     |
+| Times, two chosen             | `desktop-4-times-chosen`      | `mobile-4-times-chosen`    |
+| Review                        | `desktop-5-review`            | `mobile-5-review`          |
+| Tutor minimum gap             | `desktop-6-tutor-minimum-gap` | —                          |
+
+There is no `-child` or `-tutor` screenshot **because those questions are no longer put** to
+this family. Both scripts shoot them if a journey does ask them; this account no longer
+does. `desktop-2b-format` comes from a separate walk on a Year 12 student and James's
+Calculus, where the tutor AND the length both settle and the journey lands on format
+directly.
+
+> **THREE ENVIRONMENT TRAPS COST REAL TIME HERE. All three present as product bugs.**
+>
+> 1. **A `next start` from a previous session can still hold port 3200.** A readiness probe
+>    then passes against YESTERDAY's code, and the walk photographs the old build — with
+>    CSS 404s, because `.next` was rebuilt underneath that process and its asset hashes no
+>    longer exist. It reads exactly like a broken stylesheet plus a feature that does not
+>    work. Kill the port and prove the listener is yours before trusting a screenshot.
+> 2. **Building over a `.next` that a server is reading corrupts it:**
+>    `TypeError: a[d] is not a function` from `webpack-runtime.js` on every route. It still
+>    answers `/`, so probe a real page — the scripts now require `/sign-in` to return 200.
+>    Only `rm -rf .next` plus `turbo run build --force` clears it; the cache will otherwise
+>    restore the same broken output.
+> 3. **Never branch a walk on `page.url()` after a redirect.** A settled step forwards, so
+>    the URL read can catch the step being LEFT rather than the one arrived at, and the
+>    branch then waits for a heading that is never coming. Both scripts now decide on the
+>    heading that actually rendered, and treat every skippable hop as optional.
 
 Regenerate against a PRODUCTION server, never `pnpm dev`:
 
@@ -753,31 +836,37 @@ facts above are the ones that stay true.
 
 Then confirm step 4 is implemented, by checking the code rather than trusting this list:
 - apps/web/src/app/book/ holds the entry redirect and one route per step
-- apps/web/src/lib/booking/ holds draft.ts, resolve.ts, availability.ts, summary.ts, actions.ts
+- apps/web/src/lib/booking/ holds draft.ts, resolve.ts, availability.ts, summary.ts,
+  sections.ts, actions.ts
 - apps/web/src/components/booking/ holds booking-shell.tsx, booking-summary.tsx,
-  choice-list.tsx, time-picker.tsx, review-form.tsx
+  booking-accordion.tsx, choice-list.tsx, time-picker.tsx, review-form.tsx
+- resolveBooking returns a `settled` set, and child, tutor, length and format all settle
+  when only one answer is valid — subject NEVER does
 - tutors.tutor_profiles has minimum_gap_minutes, and tutor_time_reservations has
   gap_minutes and effective_end_at
 - packages/database/migrations/reviewed-sql/constraints/0006_reservation_gap_exclusion.sql
   exists and excludes on the effective interval
 
 Then verify the gates yourself, after pnpm db:reset && pnpm db:migrate && pnpm db:seed.
-Expect 361 unit and integration tests passing with 1 skipped, and 95 end-to-end passing,
-with typecheck, lint, format, check:rls (28 tables), check:boundaries and build all green.
+Expect typecheck, lint, format, check:rls (28 tables), check:boundaries and build green,
+and the unit, integration and end-to-end suites green. Read the COUNTS out of the run
+rather than out of this prompt — they move whenever a test is added, so a number stored
+here is stale the moment it is written. A FULL end-to-end run is still owed before any PR.
 
 Then, in your own words rather than copying the handoff back to me, summarise:
 - the parent /book journey, why the shortlist stays optional, and why the subject section
   is created only as part of a successful send
 - the progressive summary: what desktop shows, what mobile shows, why there is no separate
   client-side booking draft, and how Review relates to it
+- which steps settle themselves when only one answer is valid, why subject is excluded from
+  that, and why a settled answer shows no Change action
 - the minimum-gap model: where the setting lives, what a reservation snapshots, what the
   exclusion constraint compares, and WHY derivation widens both sides while the persisted
   constraint pads one — they are the same rule seen from opposite ends
 - why exact start times must stay distinct rather than being merged
 
-Then state plainly that step 4 is awaiting my manual UX approval, and that the final
-progressive-summary and mobile-accordion screenshots in S:\Studdy\.review\step4\ still
-need my review.
+Then state plainly that step 4 is awaiting my manual UX approval, and that the fourteen
+screenshots in S:\Studdy\.review\step4\ still need my review.
 
 Do NOT implement anything, push, open a pull request, merge, or start step 5 until I have
 confirmed your recovered context is correct. Stop after the summary and wait for me.

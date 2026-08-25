@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
 import { formatsForVersion } from '@studdy/database';
-import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
+import { bookingHref, paramsUpTo, type RawSearchParams } from '@/lib/booking/draft';
 import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
 
@@ -32,6 +32,12 @@ export default async function BookLengthPage({
   if (booking === null) redirect('/sign-in?next=%2Fbook');
   if (!stepIsReachable('length', booking.nextStep)) {
     redirect(bookingHref(booking.nextStep, booking.params));
+  }
+
+  // This tutor publishes one length for this subject, so the length is a fact
+  // about them rather than a decision for the family.
+  if (booking.settled.has('length')) {
+    redirect(bookingHref(booking.nextStep, paramsUpTo(booking.nextStep, booking.params)));
   }
 
   const { tutor, params } = booking;

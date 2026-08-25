@@ -1,12 +1,10 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { searchPublicTutors } from '@studdy/database';
 import { Button } from '@studdy/design-system';
 import { formatLabel, priceLabel, yearLevelRangeLabel } from '@studdy/domain/discovery';
-import { schoolYearNumber } from '@studdy/domain/students';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
-import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
+import { bookingHref, paramsUpTo, type RawSearchParams } from '@/lib/booking/draft';
 import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
 
@@ -24,17 +22,18 @@ export default async function BookTutorPage({
     redirect(bookingHref(booking.nextStep, booking.params));
   }
 
+  // One tutor teaches this subject at this level, so there is no choice to put.
+  if (booking.settled.has('tutor')) {
+    redirect(bookingHref(booking.nextStep, paramsUpTo(booking.nextStep, booking.params)));
+  }
+
   const { student, subject, params } = booking;
   if (student === null || subject === null) redirect(bookingHref('child', {}));
 
-  const tutors = await searchPublicTutors({
-    subjectCode: null,
-    schoolYearNumber:
-      student.schoolYearCode === null ? null : schoolYearNumber(student.schoolYearCode),
-    formatCode: null,
-    maxPriceAmountMinor: null,
-  });
-  const forSubject = tutors.filter((tutor) => tutor.subjectDisplayName === subject.displayName);
+  // Already resolved upstream: whether there is a CHOICE of tutor decides
+  // whether this screen appears at all, so the search runs once rather than
+  // here and again wherever that question is asked.
+  const forSubject = booking.tutorChoices;
 
   return (
     <BookingShell
