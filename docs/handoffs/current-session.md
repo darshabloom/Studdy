@@ -32,32 +32,30 @@ current; they are not duplicates.
 
 ## 2. Where the work is
 
-**Branch:** `feat/parent-booking-journey`.
-**HEAD:** `99cb74a373702a97ebf22080a5052b904d39a557` (`99cb74a`) —
-_docs: record the swallowed-click failure mode and its helper_
-**Working tree:** clean. Nothing uncommitted, nothing stashed.
+**Branch:** `main`. **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
 > ### Checkpoint state, verified against git
 >
-> | Fact         | Value                                                       |
-> | ------------ | ----------------------------------------------------------- |
-> | Branch       | `feat/parent-booking-journey`                               |
-> | HEAD         | `99cb74a373702a97ebf22080a5052b904d39a557`                  |
-> | Base         | `origin/main` at `49df4cffa147f00fbe5076915385676972138eea` |
-> | Divergence   | **14 ahead, 0 behind** `origin/main`                        |
-> | Working tree | clean                                                       |
-> | Pushed       | **NO** — the branch exists only locally                     |
-> | Pull request | **NONE** open for it                                        |
-> | Merged       | **NO**                                                      |
+> | Fact      | Value                                                   |
+> | --------- | ------------------------------------------------------- |
+> | Branch    | `main`                                                  |
+> | Step 4    | **APPROVED AND MERGED** — PR #19, squashed as `d676f13` |
+> | Steps 1–3 | merged earlier (PRs #17 and #18)                        |
+> | Step 5    | **NOT STARTED** — the next slice                        |
+> | Step 6    | not started                                             |
 >
-> **Step 4 is implemented, fully tested, and AWAITING THE OWNER'S MANUAL UX APPROVAL.**
-> Steps 1, 2 and 3 are merged to `main` (PRs #17 and #18). **Step 5 has not started.**
+> **UX steps 1, 2, 3 and 4 are all on `main`. Step 5 is next and has not begun.**
 >
-> Do not push, open a pull request, merge, or begin step 5 until the owner confirms.
+> Read the CURRENT HEAD out of git rather than from this file — a document
+> cannot name the commit that contains it, so any hash written here goes stale
+> the moment it is committed. `d676f13` is the step 4 squash and stays true.
 >
-> `main` itself carries steps 1–3 only. Do not reuse the merged branches
+> Do not reuse the merged branches `feat/parent-booking-journey`,
 > `feat/discovery-and-profile-availability-calendars` or
-> `feat/availability-and-multi-time-requests`.
+> `feat/availability-and-multi-time-requests`. Branch fresh from `main`.
+>
+> **Approval is still required before merging step 5**, and each UX step must
+> reach a reviewable visual state before the next begins (§8.1).
 
 ### What PR #17 delivered
 
@@ -122,16 +120,30 @@ cd S:\Studdy; pnpm exec turbo run lint --concurrency=2
 Supabase runs on 14321 (API), 14322 (database), 14323 (Studio), 14324 (Mailpit inbox).
 The analytics container is disabled locally.
 
-**Expected state after a clean run, at `99cb74a`:** 28 tables classified by `check:rls`;
-**361 unit and integration tests passing with 1 skipped** (4 configuration, 50
-design-system, 131 domain, 60 web, 116 database including its integration suite);
-**95 end-to-end**. `typecheck`, `lint`, `format`, `check:rls`, `check:boundaries` and
-`build` all green.
+**Expected state after a clean run, at the step 4 merge (`d676f13`):** 28 tables classified
+by `check:rls`; **389 unit tests passing with 1 skipped** (4 configuration, 50
+design-system, 131 domain, 88 web, 116 database); **110 integration passing with 1
+skipped**; **98 end-to-end**. `typecheck`, `lint`, `format`, `check:rls`,
+`check:boundaries` and `build` all green. Treat these as a shape, not a target — they move
+whenever a test is added, so read the counts out of the run.
 
 **Re-seed before every end-to-end run.** The e2e suite is not idempotent against a used
 database — it creates students and leaves holds — so a second run without a reset fails in
 ways that look like code defects. Run `pnpm db:reset && pnpm db:migrate && pnpm db:seed`
 first. CI is unaffected because it seeds a fresh instance.
+
+> **RUN THE HEAVY SUITES SEQUENTIALLY, NEVER AGAINST EACH OTHER.** This machine starves
+> them, and a starved test fails in ways that read as product defects. The full end-to-end
+> suite takes **about 2.5 minutes when it has the machine to itself**; run against a build
+> and the unit suite it has taken **1.7 hours**, with one test reporting a 30-second
+> timeout after 9.9 minutes of wall clock. **A recorded duration far larger than the
+> test's own timeout is contention, not a bug** — re-run that spec alone against a fresh
+> seed before characterising it.
+>
+> Playwright's `webServer` has `reuseExistingServer: true` locally and listens on **3100**.
+> A `next start` left over from an earlier session is therefore SILENTLY REUSED, and the
+> whole suite runs against stale code. Kill anything on 3000/3100/3200 before a run that
+> has to be trustworthy.
 
 ---
 
@@ -293,9 +305,10 @@ click-to-create, snapping, window fitting and the family-safe refusal.
 
 ## 8. The exact next tasks, in order
 
-Steps 1 to 3 are merged. Step 4 is implemented on its own branch and awaiting the owner's manual UX approval. **Steps 5 and 6 remain.** Rewrite or update the end-to-end
-journey alongside each step rather than leaving all test changes to the end; use targeted
-tests while building and the full suite at major boundaries and before PR readiness.
+Steps 1 to 4 are merged to `main`. **Steps 5 and 6 remain, and step 5 is next.** Rewrite or
+update the end-to-end journey alongside each step rather than leaving all test changes to
+the end; use targeted tests while building and the full suite at major boundaries and
+before PR readiness.
 
 ### Step 2 — calendar-first `/tutor/availability` — **COMPLETE**
 
@@ -446,19 +459,28 @@ horizontal scroll with its hint were both confirmed as wanted and left alone.
 server (`pnpm build` then `pnpm --filter @studdy/web start --port 3200`) rather than `pnpm dev`:
 the dev server on this machine wedges when a build runs against the same `.next` directory.
 
-### Step 4 — the parent `/book` journey — **IMPLEMENTED, AWAITING MANUAL UX APPROVAL**
+### Step 4 — the parent `/book` journey — **COMPLETE AND MERGED**
 
-On `feat/parent-booking-journey`, 14 commits off `main` at `49df4cf`. Complete, fully
-tested, **not pushed, no pull request, not merged.** The owner has approved every decision
-below; what remains is their manual review of the progressive-summary and mobile-accordion
-screens, which changed after the last screenshots they saw.
+Approved by the owner and **merged as `d676f13`** (PR #19, squash, 2026-08-26), from
+`feat/parent-booking-journey`. All four CI jobs and both Vercel checks were green on the
+merged commit.
 
-**Do not push, open a PR, merge or start step 5 until the owner confirms.**
+> **One CI failure on the way, and it was not real.** The first run failed
+> `Typecheck, lint, unit tests, build` with
+> `Could not find the module ".../reset-password/reset-request-form.tsx#ResetRequestForm"
+in the React Client Manifest` while prerendering `/reset-password` — a page this branch
+> never touched. Its only auth-adjacent change was adding `/book` to the middleware's
+> protected prefixes, which cannot affect a client manifest. A cold local build
+> (`rm -rf .next` plus `turbo run build --force`, exactly CI's conditions) compiled and
+> prerendered fine, and re-running the identical commit passed. It is a
+> non-deterministic Next.js RSC bundler fault. **If it recurs, re-run before investigating
+> the diff — but confirm the failing page is one the branch does not touch first.**
 
 #### The journey
 
-Child → Subject → Tutor → Lesson length → Online/in person _(only where it is a real
-question)_ → Times → Review → **Send request**.
+Child → Subject → Tutor → Lesson length → Online/in person → Times → Review →
+**Send request**. Every question is asked, however few options it has (see the
+auto-selection reversal below).
 
 - One route per step under `/book`, server-rendered. `/book` itself redirects to the first
   question still genuinely open.
@@ -612,11 +634,10 @@ All after `pnpm db:reset && pnpm db:migrate && pnpm db:seed`. The +28 unit tests
 accordion, that a one-option question is still asked, and that a chosen time is shown as
 the whole lesson interval.
 
-> **A COMPLETELY GREEN FULL END-TO-END RUN IS STILL REQUIRED BEFORE ANY PR OR MERGE.**
-> Only `booking-journey.spec.ts` was re-run for this pass, deliberately — the owner
-> directed that a full run now would be wasted while the UX was still moving. The last
-> full run stood at 93 passed, 1 machine-contention failure, 1 not run; the affected spec
-> passed 8/8 when re-run alone on a fresh seed.
+> **The full suite was run clean before merge**, sequentially from a fresh database with
+> nothing else on the machine: **98 end-to-end passing in 2.6 minutes**. An earlier run of
+> the same suite, sharing the machine with a build and the unit suite, took 1.7 hours and
+> produced one failure — which passed 8/8 when re-run alone. Same code, same seed.
 >
 > **Contention, not code.** A test whose recorded duration far exceeds its own timeout — a
 > 30s timeout reported after 9.9 minutes — is a starved machine. Re-run the spec alone
@@ -783,10 +804,26 @@ Calculus at Years 10–13, so a senior student), and the tutor's minimum-gap con
 > **THE FINAL PROGRESSIVE-SUMMARY AND MOBILE-ACCORDION SCREENSHOTS STILL NEED THE OWNER'S
 > REVIEW BEFORE ANY PR OR MERGE.** They changed after the last set the owner approved.
 
-### Step 5 — demote the shortlist
+### Step 5 — demote the shortlist — **NEXT, NOT STARTED**
 
 `/shortlist/[id]` keeps saving and comparing. `/shortlist/[id]/times` becomes the optional
 "Ask shortlisted tutors" multi-tutor journey, reached only from the shortlist.
+
+Branch fresh from `main`. Things step 4 settled that this slice should inherit rather than
+re-decide:
+
+- **The two journeys share one bound and one wording.** `REQUEST_TIME_OPTIONS_MIN/MAX` and
+  `TIME_OPTIONS_GUIDANCE` live in the domain and are used by both; `time-grid.tsx` was
+  already aligned to them. A family must not be told different things about how many times
+  to offer depending on which path they took.
+- **A chosen time is displayed as the lesson's interval**, via `bookingIntervalLabel` in
+  `apps/web/src/lib/booking/time-labels.ts`, never padded by the tutor's minimum gap. The
+  fan-out journey should read the same way.
+- **Never infer a preference from scarcity.** One shortlisted tutor is still a tutor the
+  family chose to shortlist, but a step with one option is asked, not assumed.
+- **The `BookingShell` accordion and receipt are booking-specific**, not general chrome.
+  Reuse `sections.ts` if the fan-out wants the same shape; do not bend the shell to serve
+  two journeys before it is clear they want the same thing.
 
 ### Step 6 — cohesive visual-design pass
 
@@ -884,30 +921,25 @@ If S: is missing, run: Start-ScheduledTask -TaskName 'Mount StuddyDev Disk'
 Read docs/handoffs/current-session.md first, in full, before anything else.
 
 Then confirm against the actual repo and git state:
-- the branch is feat/parent-booking-journey
+- the branch is main, and local main matches origin/main
 - the working tree is clean
-- origin/main is 49df4cffa147f00fbe5076915385676972138eea, the merged step 3 baseline
-- the branch is AHEAD of origin/main and 0 behind
-- the branch has NOT been pushed (no remote ref for it)
-- there is NO pull request for it
-- nothing from step 4 is merged
-- UX steps 1, 2 and 3 ARE merged to main
-- step 4 is implemented and awaiting my manual UX approval
-- step 5 has not started
+- UX steps 1, 2, 3 and 4 are ALL merged to main
+- step 4 was merged as d676f13 (PR #19, squash)
+- step 5 has NOT started, and neither has step 6
 
-Read the current HEAD and the exact ahead count out of git and REPORT them to me. Do not
-compare them against a number written in this prompt: a document cannot name the commit
-that contains it, so any hash or count stored here is stale the moment it is written. The
-facts above are the ones that stay true.
+Read the current HEAD out of git and REPORT it to me. Do not compare it against a hash
+written in this prompt: a document cannot name the commit that contains it, so any hash
+stored here is stale the moment it is written. d676f13 is the step 4 squash and stays
+true; the tip of main may have moved past it.
 
-Then confirm step 4 is implemented, by checking the code rather than trusting this list:
+Then confirm step 4 really is on main, by checking the code rather than trusting this list:
 - apps/web/src/app/book/ holds the entry redirect and one route per step
 - apps/web/src/lib/booking/ holds draft.ts, resolve.ts, availability.ts, summary.ts,
-  sections.ts, actions.ts
+  sections.ts, time-labels.ts, actions.ts
 - apps/web/src/components/booking/ holds booking-shell.tsx, booking-summary.tsx,
   booking-accordion.tsx, choice-list.tsx, time-picker.tsx, review-form.tsx
-- resolveBooking returns a `settled` set, and child, tutor, length and format all settle
-  when only one answer is valid — subject NEVER does
+- resolveBooking adds NOTHING the family did not supply — no step is answered just
+  because it has one valid option
 - tutors.tutor_profiles has minimum_gap_minutes, and tutor_time_reservations has
   gap_minutes and effective_end_at
 - packages/database/migrations/reviewed-sql/constraints/0006_reservation_gap_exclusion.sql
@@ -916,26 +948,28 @@ Then confirm step 4 is implemented, by checking the code rather than trusting th
 Then verify the gates yourself, after pnpm db:reset && pnpm db:migrate && pnpm db:seed.
 Expect typecheck, lint, format, check:rls (28 tables), check:boundaries and build green,
 and the unit, integration and end-to-end suites green. Read the COUNTS out of the run
-rather than out of this prompt — they move whenever a test is added, so a number stored
-here is stale the moment it is written. A FULL end-to-end run is still owed before any PR.
+rather than out of this prompt — they move whenever a test is added. RUN THE HEAVY SUITES
+SEQUENTIALLY: this machine starves them against each other, and a test whose recorded
+duration far exceeds its own timeout is contention, not a defect.
 
 Then, in your own words rather than copying the handoff back to me, summarise:
 - the parent /book journey, why the shortlist stays optional, and why the subject section
   is created only as part of a successful send
 - the progressive summary: what desktop shows, what mobile shows, why there is no separate
   client-side booking draft, and how Review relates to it
-- which steps settle themselves when only one answer is valid, why subject is excluded from
-  that, and why a settled answer shows no Change action
+- why a step with only one valid option is STILL asked, how that differs from prefilling
+  an explicit prior choice, and why the difference matters to a parent
 - the minimum-gap model: where the setting lives, what a reservation snapshots, what the
   exclusion constraint compares, and WHY derivation widens both sides while the persisted
   constraint pads one — they are the same rule seen from opposite ends
-- why exact start times must stay distinct rather than being merged
+- why exact start times must stay distinct rather than being merged, and why a chosen time
+  is nonetheless displayed as the lesson's full interval WITHOUT the tutor's gap
 
-Then state plainly that step 4 is awaiting my manual UX approval, and that the fourteen
-screenshots in S:\Studdy\.review\step4\ still need my review.
+Then state plainly that step 5 — demoting the shortlist — is the next slice, and that it
+needs my approval before it is merged.
 
-Do NOT implement anything, push, open a pull request, merge, or start step 5 until I have
-confirmed your recovered context is correct. Stop after the summary and wait for me.
+Do NOT implement anything or start step 5 until I have confirmed your recovered context is
+correct. Stop after the summary and wait for me.
 ```
 
 ---
