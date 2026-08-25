@@ -9,6 +9,9 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
  * and workspace server-side. Entering a protected URL is never sufficient.
  */
 const PROTECTED_PREFIXES = [
+  // The booking journey acts on a real student, so it is never anonymous. The
+  // segment-aware test below keeps this clear of any future '/bookings'.
+  '/book',
   '/requests',
   '/parent',
   '/tutor',

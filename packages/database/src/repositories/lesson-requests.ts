@@ -10,7 +10,11 @@ import {
   type IlrStatus,
   type RequestRules,
 } from '@studdy/domain/bookings';
-import { zonedClockTime, zonedDateOnly } from '@studdy/domain/availability';
+import {
+  DEFAULT_MINIMUM_GAP_MINUTES,
+  zonedClockTime,
+  zonedDateOnly,
+} from '@studdy/domain/availability';
 import { createDatabaseClient } from '../client';
 import {
   auditEvents,
@@ -114,8 +118,37 @@ export class RequestValidationError extends Error {
   }
 }
 
+/**
+ * A subject section that does not exist yet, to be created as part of sending.
+ *
+ * THE SECTION IS A CONSEQUENCE OF A SENT REQUEST, NOT OF PRESSING SEND. The
+ * booking journey lets a family pick a child and a subject they have never
+ * recorded before, and creating the section while they browsed would litter a
+ * student's profile with subjects they only looked at. Creating it in a
+ * separate write just before this one is no better: the request can still fail
+ * — availability moves, a hold collides — and the section would survive a
+ * request that was never sent.
+ *
+ * So the caller passes the draft instead of an id, and the find-or-create runs
+ * inside the same transaction as the request itself. Either both exist or
+ * neither does.
+ */
+export interface SubjectSectionDraft {
+  readonly studentProfileId: string;
+  readonly subjectId: string;
+  readonly schoolYearCode: string | null;
+  readonly formatPreferenceCode: string;
+}
+
 export interface CreateIntendedLessonRequestInput {
-  readonly studentSubjectSectionId: string;
+  /**
+   * An existing section. Mutually exclusive with `subjectSectionDraft`, and the
+   * path the multi-tutor shortlist journey still takes, because there a section
+   * necessarily already exists — it is what the shortlist hangs from.
+   */
+  readonly studentSubjectSectionId?: string;
+  /** A section to find-or-create atomically with the request. */
+  readonly subjectSectionDraft?: SubjectSectionDraft;
   readonly requestedByUserId: string;
   readonly familyAccountId: string | null;
   /**
@@ -124,6 +157,17 @@ export interface CreateIntendedLessonRequestInput {
    * tutor to another tutor's cheaper price.
    */
   readonly tutorProfileIds: readonly string[];
+  /**
+   * The exact priced version the family chose, per tutor.
+   *
+   * Optional: omitted, each tutor's single current version is used, which is
+   * what the shortlist journey does. Supplied, it is VALIDATED against the
+   * tutor and the subject before it is used — a version id from the browser is
+   * an amount of money, and pinning one tutor to another's cheaper version, or
+   * to a version of a different subject, must be impossible rather than
+   * unlikely.
+   */
+  readonly serviceVersionIdByTutor?: ReadonlyMap<string, string>;
   /**
    * The times the family would accept, as start instants (D-3). Each tutor is
    * offered only the subset they can actually do; a tutor who can do none is
@@ -143,6 +187,10 @@ export interface CreateIntendedLessonRequestInput {
 export interface CreatedIntendedLessonRequest {
   readonly intendedLessonRequestId: string;
   readonly reference: string;
+  /** The section the request hangs from, existing or newly created. */
+  readonly studentSubjectSectionId: string;
+  /** True when this send is what put the subject on the student's profile. */
+  readonly subjectSectionCreated: boolean;
   readonly tutorRequestReferences: readonly string[];
   /**
    * Tutors who could do none of the chosen times and were therefore not asked
@@ -178,14 +226,35 @@ export async function createIntendedLessonRequest(
   try {
     const { rules, deadlineRuleVersion } = await loadRequestRules(db);
 
-    // Resolve the priced version for each tutor from the subject section's
-    // subject. Nothing about pricing is taken from the browser.
-    const [sectionRow] = await db
-      .select({ subjectId: studentSubjectSections.subjectId })
-      .from(studentSubjectSections)
-      .where(eq(studentSubjectSections.id, input.studentSubjectSectionId));
-    if (sectionRow === undefined) {
-      throw new RequestValidationError({ targets: 'That subject is no longer available.' });
+    if (
+      (input.studentSubjectSectionId === undefined) ===
+      (input.subjectSectionDraft === undefined)
+    ) {
+      throw new RequestValidationError({
+        targets: 'A request needs exactly one subject to hang from.',
+      });
+    }
+
+    /**
+     * The subject everything else is resolved against.
+     *
+     * Read from the section where one exists; taken from the draft where it
+     * does not. NOTHING IS WRITTEN HERE — every check below is a read, so a
+     * request that fails validation leaves no trace at all, and the only write
+     * path runs inside the transaction further down.
+     */
+    let subjectId: string;
+    if (input.subjectSectionDraft !== undefined) {
+      subjectId = input.subjectSectionDraft.subjectId;
+    } else {
+      const [sectionRow] = await db
+        .select({ subjectId: studentSubjectSections.subjectId })
+        .from(studentSubjectSections)
+        .where(eq(studentSubjectSections.id, input.studentSubjectSectionId!));
+      if (sectionRow === undefined) {
+        throw new RequestValidationError({ targets: 'That subject is no longer available.' });
+      }
+      subjectId = sectionRow.subjectId;
     }
 
     const offerings = await db
@@ -193,6 +262,7 @@ export async function createIntendedLessonRequest(
         tutorProfileId: services.tutorProfileId,
         serviceVersionId: serviceVersions.id,
         durationMinutes: serviceVersions.durationMinutes,
+        priceAmountMinor: serviceVersions.priceAmountMinor,
         tutorFirstName: tutorProfiles.publicFirstName,
       })
       .from(serviceVersions)
@@ -201,21 +271,65 @@ export async function createIntendedLessonRequest(
       .where(
         and(
           inArray(services.tutorProfileId, [...input.tutorProfileIds]),
-          eq(services.subjectId, sectionRow.subjectId),
+          eq(services.subjectId, subjectId),
           eq(services.statusCode, 'published'),
           eq(serviceVersions.statusCode, 'current'),
         ),
       );
 
-    const versionByTutor = new Map(
-      offerings.map((row) => [row.tutorProfileId, row.serviceVersionId]),
-    );
-    const withoutOffering = input.tutorProfileIds.filter((id) => !versionByTutor.has(id));
-    if (withoutOffering.length > 0) {
-      throw new RequestValidationError({
-        targets:
-          'One of the tutors you chose no longer offers this subject. Refresh and try again.',
-      });
+    /**
+     * One priced version per tutor.
+     *
+     * A tutor may publish SEVERAL lengths for one subject, which arrive here as
+     * several rows for the same tutor. Keying a map by tutor id alone silently
+     * kept whichever row the database returned last — so a family choosing
+     * ninety minutes could be charged for sixty, or the reverse, with nothing
+     * anywhere recording that a choice had been ignored. The chosen version is
+     * therefore looked up by its own id, among that tutor's rows only.
+     */
+    const offeringsByTutor = new Map<string, typeof offerings>();
+    for (const row of offerings) {
+      const existing = offeringsByTutor.get(row.tutorProfileId);
+      if (existing === undefined) offeringsByTutor.set(row.tutorProfileId, [row]);
+      else existing.push(row);
+    }
+
+    const versionByTutor = new Map<string, string>();
+    const durationByTutor = new Map<string, number>();
+    for (const tutorProfileId of input.tutorProfileIds) {
+      const rows = offeringsByTutor.get(tutorProfileId) ?? [];
+      if (rows.length === 0) {
+        throw new RequestValidationError({
+          targets:
+            'One of the tutors you chose no longer offers this subject. Refresh and try again.',
+        });
+      }
+
+      const chosenId = input.serviceVersionIdByTutor?.get(tutorProfileId);
+      // The validation that matters: a chosen id has to be one of THIS tutor's
+      // rows for THIS subject. The query above already restricted to published
+      // services and current versions, so membership settles every part of it
+      // at once — wrong tutor, wrong subject, withdrawn version, superseded
+      // version — and the family is told to start again rather than being
+      // quietly given a different price.
+      const chosen =
+        chosenId === undefined
+          ? // Unspecified: the cheapest, so an unstated choice is never the
+            // most expensive one a tutor happens to offer.
+            [...rows].sort((a, b) =>
+              a.priceAmountMinor === b.priceAmountMinor
+                ? a.durationMinutes - b.durationMinutes
+                : Number(a.priceAmountMinor - b.priceAmountMinor),
+            )[0]!
+          : rows.find((row) => row.serviceVersionId === chosenId);
+      if (chosen === undefined) {
+        throw new RequestValidationError({
+          targets: 'That lesson length is no longer offered. Choose again and resend.',
+        });
+      }
+
+      versionByTutor.set(tutorProfileId, chosen.serviceVersionId);
+      durationByTutor.set(tutorProfileId, chosen.durationMinutes);
     }
 
     const targets: FanOutTarget[] = input.tutorProfileIds.map((tutorProfileId) => ({
@@ -223,9 +337,6 @@ export async function createIntendedLessonRequest(
       serviceVersionId: versionByTutor.get(tutorProfileId)!,
     }));
 
-    const durationByTutor = new Map(
-      offerings.map((row) => [row.tutorProfileId, row.durationMinutes]),
-    );
     // The family-side record needs one lesson length. Where invited tutors
     // differ, take the longest: the family should plan for the longest lesson
     // they might get, and each tutor's own option rows still snapshot their own
@@ -330,10 +441,81 @@ export async function createIntendedLessonRequest(
     const positioned = assignPositions(askedTargets);
 
     return await db.transaction(async (tx) => {
+      /**
+       * The subject section, found or created INSIDE this transaction.
+       *
+       * This is the whole point of taking a draft rather than an id. Everything
+       * above was a read, and everything below either commits with this insert
+       * or rolls back with it — including the calendar holds, whose exclusion
+       * constraint is the one thing most likely to fail here. A family whose
+       * send loses a race for a slot gets an error and an unchanged child, not
+       * a subject they never agreed to study.
+       *
+       * `student_subject_sections_live_unique_idx` makes the find-or-create
+       * safe under concurrency without a lock: two simultaneous sends cannot
+       * both insert, and the loser reads the winner's row rather than failing.
+       */
+      let studentSubjectSectionId: string;
+      let subjectSectionCreated = false;
+      const draft = input.subjectSectionDraft;
+      if (draft === undefined) {
+        studentSubjectSectionId = input.studentSubjectSectionId!;
+      } else {
+        const [existing] = await tx
+          .select({ id: studentSubjectSections.id })
+          .from(studentSubjectSections)
+          .where(
+            and(
+              eq(studentSubjectSections.studentProfileId, draft.studentProfileId),
+              eq(studentSubjectSections.subjectId, draft.subjectId),
+              eq(studentSubjectSections.statusCode, 'active'),
+            ),
+          );
+        if (existing !== undefined) {
+          studentSubjectSectionId = existing.id;
+        } else {
+          const [inserted] = await tx
+            .insert(studentSubjectSections)
+            .values({
+              studentProfileId: draft.studentProfileId,
+              subjectId: draft.subjectId,
+              schoolYearCode: draft.schoolYearCode,
+              formatPreferenceCode: draft.formatPreferenceCode,
+              goals: null,
+              createdByUserId: input.requestedByUserId,
+              updatedByUserId: input.requestedByUserId,
+            })
+            // A concurrent send that got there first wins the unique index; we
+            // take their row rather than failing a request that is otherwise
+            // perfectly valid.
+            .onConflictDoNothing()
+            .returning({ id: studentSubjectSections.id });
+          if (inserted === undefined) {
+            const [raced] = await tx
+              .select({ id: studentSubjectSections.id })
+              .from(studentSubjectSections)
+              .where(
+                and(
+                  eq(studentSubjectSections.studentProfileId, draft.studentProfileId),
+                  eq(studentSubjectSections.subjectId, draft.subjectId),
+                  eq(studentSubjectSections.statusCode, 'active'),
+                ),
+              );
+            if (raced === undefined) {
+              throw new Error('student_subject_sections insert returned no row');
+            }
+            studentSubjectSectionId = raced.id;
+          } else {
+            studentSubjectSectionId = inserted.id;
+            subjectSectionCreated = true;
+          }
+        }
+      }
+
       const [ilr] = await tx
         .insert(intendedLessonRequests)
         .values({
-          studentSubjectSectionId: input.studentSubjectSectionId,
+          studentSubjectSectionId,
           requestedByUserId: input.requestedByUserId,
           familyAccountId: input.familyAccountId,
           statusCode: 'awaiting_responses',
@@ -474,6 +656,8 @@ export async function createIntendedLessonRequest(
       return {
         intendedLessonRequestId: ilr.id,
         reference: ilr.reference,
+        studentSubjectSectionId,
+        subjectSectionCreated,
         tutorRequestReferences: references,
         notAskedTutorProfileIds,
       };
@@ -1150,14 +1334,33 @@ export async function acceptTutorRequestTime(
         .returning({ id: tutorRequests.id });
       if (moved === undefined) throw new RequestNotOpenError();
 
-      // 3. Take the ONE reservation. Overlap raises 23P01 and rolls back the
-      //    whole transaction, so the tutor is told the time is gone rather
-      //    than ending up double-booked.
+      /**
+       * 3. Take the ONE reservation.
+       *
+       * The gap is read INSIDE the transaction and snapshotted onto the row,
+       * with `effective_end_at` computed from it. Two things follow. The
+       * exclusion constraint can compare a plain two-column range without
+       * reaching the profile table — and a tutor who widens their gap later
+       * does not retroactively invalidate this hold, or any lesson already
+       * agreed under the old figure.
+       *
+       * Overlap of the EFFECTIVE ranges raises 23P01 and rolls back the whole
+       * transaction, so the tutor is told the time is gone rather than ending
+       * up with two lessons too close to honour.
+       */
+      const [gapRow] = await tx
+        .select({ minimumGapMinutes: tutorProfiles.minimumGapMinutes })
+        .from(tutorProfiles)
+        .where(eq(tutorProfiles.id, request.tutorProfileId));
+      const gapMinutes = gapRow?.minimumGapMinutes ?? DEFAULT_MINIMUM_GAP_MINUTES;
+
       await tx.insert(tutorTimeReservations).values({
         tutorProfileId: request.tutorProfileId,
         tutorRequestId: request.id,
         startAt: claimed.startAt,
         endAt: claimed.endAt,
+        gapMinutes,
+        effectiveEndAt: new Date(claimed.endAt.getTime() + gapMinutes * 60_000),
         statusCode: 'active',
         reservationTypeCode: 'request_hold',
         expiresAt: holdExpiresAt,

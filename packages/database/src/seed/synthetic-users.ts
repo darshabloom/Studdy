@@ -67,6 +67,21 @@ export const SYNTHETIC_USERS: readonly SyntheticUser[] = [
     roleCodes: ['independent_student'],
     deterministicAuthId: '00000000-0000-4000-9000-000000000012',
   },
+  /**
+   * Dedicated to the booking journey, for the same reason and one step further.
+   *
+   * That spec walks the whole wizard and SENDS real requests, so it mutates a
+   * family and takes real calendar holds. Run on `parent.one@` it raced
+   * `discovery-presentation` and `family-students-discovery`, which sign that
+   * account in and out — the session dropped mid-journey and the failure looked
+   * like a broken wizard.
+   */
+  {
+    email: 'parent.booking@local.studdy.test',
+    displayName: 'Synthetic Booking Parent',
+    roleCodes: ['parent_guardian'],
+    deterministicAuthId: '00000000-0000-4000-9000-000000000014',
+  },
   {
     email: 'tutor.a@local.studdy.test',
     displayName: 'Synthetic Tutor A',

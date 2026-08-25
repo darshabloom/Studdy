@@ -3,11 +3,7 @@
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { Button } from '@studdy/design-system';
-import {
-  REQUEST_TIME_OPTIONS_MAX,
-  REQUEST_TIME_OPTIONS_MIN,
-  validateChosenTimes,
-} from '@studdy/domain/availability';
+import { REQUEST_TIME_OPTIONS_MAX, validateChosenTimes } from '@studdy/domain/availability';
 
 export interface TimeGridOption {
   readonly startAtIso: string;
@@ -110,8 +106,11 @@ export function TimeGrid({ subjectSectionId, days, shortlistSize }: TimeGridProp
       </div>
 
       <div className="sticky bottom-0 mt-6 flex flex-wrap items-center gap-3 border-t border-surface-border bg-surface-page py-4">
+        {/* The same sentence the single-tutor journey uses. One rule, one
+            wording: a family should not be told different things about how
+            many times to offer depending on which path they took. */}
         <p className="text-sm text-text-secondary" role="status">
-          {chosen.length} chosen — pick {REQUEST_TIME_OPTIONS_MIN} to {REQUEST_TIME_OPTIONS_MAX}
+          {chosen.length} chosen, up to {REQUEST_TIME_OPTIONS_MAX}
           {problem !== null ? `. ${problem}` : ''}
         </p>
         <Button asChild={problem === null} disabled={problem !== null}>

@@ -75,9 +75,14 @@ export function validateFanOut(
     ...new Map(input.proposedStarts.map((at) => [at.getTime(), at])).values(),
   ].sort((a, b) => a.getTime() - b.getTime());
 
+  // Kept as a configured bound rather than a constant: the same rule governs
+  // the single-tutor journey and the optional multi-tutor fan-out, and they
+  // must not be able to drift apart.
   if (uniqueStarts.length < rules.minTimeOptions) {
     issues['times'] =
-      `Choose at least ${rules.minTimeOptions} different times so tutors have a choice.`;
+      rules.minTimeOptions <= 1
+        ? 'Choose at least one time that would work for you.'
+        : `Choose at least ${rules.minTimeOptions} different times so tutors have a choice.`;
   }
   if (uniqueStarts.length > rules.maxTimeOptions) {
     issues['times'] = `Choose no more than ${rules.maxTimeOptions} times.`;

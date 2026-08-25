@@ -76,7 +76,7 @@ export const PROVISIONAL_REQUEST_RULES: RequestRules = {
   decisionGraceHours: 24,
   minimumNoticeHours: 2,
   requirePaymentMethodBeforeSend: false,
-  minTimeOptions: 2,
+  minTimeOptions: 1,
   maxTimeOptions: 5,
   acceptanceHoldHours: 8,
   acceptanceHoldCutoffBeforeLessonHours: 2,

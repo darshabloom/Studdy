@@ -79,6 +79,15 @@ export interface WeekCalendarProps {
   mode?: WeekCalendarMode;
   /** Mini drops labels and shrinks rows; it still shows real geometry. */
   density?: 'mini' | 'comfortable';
+  /**
+   * Pixels per hour, overriding the comfortable default.
+   *
+   * Exists for the booking grid, where a block is one half-hour START rather
+   * than a whole lesson: at the default scale those are 22px tall, too short to
+   * carry their own time and a poor target for a thumb. Raising the scale is
+   * the honest fix — the geometry stays real, there is just more of it.
+   */
+  hourHeight?: number;
   stepMinutes?: number;
   /** Column headings, e.g. ['Mon 1', 'Tue 2', …]. Defaults to weekday names. */
   dayLabels?: readonly string[];
@@ -130,6 +139,7 @@ export function WeekCalendar({
   window,
   mode = 'read',
   density = 'comfortable',
+  hourHeight,
   stepMinutes = 30,
   dayLabels,
   selectedIds = [],
@@ -155,7 +165,7 @@ export function WeekCalendar({
   const spanMinutes = Math.max(window.dayEndMinutes - window.dayStartMinutes, 1);
   const bodyHeight = mini
     ? MINI_BODY_HEIGHT
-    : Math.round((spanMinutes / 60) * COMFORTABLE_HOUR_HEIGHT);
+    : Math.round((spanMinutes / 60) * (hourHeight ?? COMFORTABLE_HOUR_HEIGHT));
   const editable = mode === 'edit';
 
   // One template for both grids, so a heading always sits above its own column.
@@ -255,6 +265,18 @@ export function WeekCalendar({
           </div>
 
           <div className="grid" style={{ gridTemplateColumns: columnTemplate, height: bodyHeight }}>
+            {/*
+             * The gutter track, ALWAYS occupied — exactly as in the header.
+             *
+             * Mini shows no hour labels, but it still has a zero-width gutter
+             * TRACK, and grid fills tracks in order. Leaving this cell out put
+             * the first day into the zero-width track and pushed the seventh
+             * off the end: Monday was invisible and shared a left edge with
+             * Tuesday, so a card silently dropped a day the tutor teaches.
+             * Nothing looked broken — the week was simply one column short.
+             */}
+            {mini ? <div aria-hidden /> : null}
+
             {/* Time axis. Hidden in mini: the shape carries the meaning there. */}
             {mini ? null : (
               <div className="relative border-r border-surface-border">
@@ -287,6 +309,9 @@ export function WeekCalendar({
             {labels.map((label, dayIndex) => (
               <div
                 key={label}
+                // Marks a day column so a test can prove it has real width.
+                // A zero-width column is a day nobody can see or click.
+                data-calendar-day
                 ref={(node) => {
                   columnRefs.current[dayIndex] = node;
                 }}

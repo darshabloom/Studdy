@@ -137,7 +137,14 @@ describe('bookableSlots — the layered calculation', () => {
   const now = iso('2026-08-10T00:00:00Z');
   const window = { startAt: iso('2026-08-10T00:00:00Z'), endAt: iso('2026-08-13T00:00:00Z') };
 
-  it('cuts a recurring period into slots of the requested duration', () => {
+  /**
+   * Quarter-hour starts, not half-hour.
+   *
+   * Quarter past and quarter to are times people say out loud, and a school day
+   * does not divide neatly into halves — a lesson after a 3:45 pick-up is a
+   * real lesson that a half-hour grid simply cannot express.
+   */
+  it('cuts a recurring period into slots on a quarter-hour grid', () => {
     const slots = bookableSlots({
       ...BASE,
       rules: [tuesdayRule()],
@@ -146,12 +153,133 @@ describe('bookableSlots — the layered calculation', () => {
       window,
       now,
     });
-    // 04:00–06:00 UTC, 60-minute slots on a 30-minute grid.
+    // 04:00–06:00 UTC, 60-minute slots every fifteen minutes.
     expect(show(slots)).toEqual([
       '2026-08-11T04:00:00.000Z→2026-08-11T05:00:00.000Z',
+      '2026-08-11T04:15:00.000Z→2026-08-11T05:15:00.000Z',
       '2026-08-11T04:30:00.000Z→2026-08-11T05:30:00.000Z',
+      '2026-08-11T04:45:00.000Z→2026-08-11T05:45:00.000Z',
       '2026-08-11T05:00:00.000Z→2026-08-11T06:00:00.000Z',
     ]);
+  });
+
+  it('still honours an explicit step, so the send path can ask about one instant', () => {
+    const slots = bookableSlots({
+      ...BASE,
+      rules: [tuesdayRule()],
+      exceptions: [],
+      reservations: [],
+      window,
+      now,
+      stepMinutes: 60,
+    });
+    expect(show(slots)).toEqual([
+      '2026-08-11T04:00:00.000Z→2026-08-11T05:00:00.000Z',
+      '2026-08-11T05:00:00.000Z→2026-08-11T06:00:00.000Z',
+    ]);
+  });
+
+  describe('the tutor minimum gap between lessons', () => {
+    /**
+     * A reservation takes more than its own hour. The next lesson may not begin
+     * until the gap has passed, and the previous one may not end inside it —
+     * so derivation widens a reservation on BOTH sides. The database constraint
+     * pads one side instead, because there every row carries its own padding
+     * and padding both would demand two gaps; these are the same rule seen from
+     * opposite ends.
+     */
+    it('refuses a start inside the gap after a reservation', () => {
+      const slots = bookableSlots({
+        ...BASE,
+        rules: [tuesdayRule()],
+        exceptions: [],
+        // 04:00–05:00 booked, with 15 minutes either side.
+        reservations: [
+          { startAt: iso('2026-08-11T04:00:00Z'), endAt: iso('2026-08-11T05:00:00Z') },
+        ],
+        window,
+        now,
+        minimumGapMinutes: 15,
+      });
+      // 05:00 would abut the lesson; only 05:15 clears the gap, and a 60-minute
+      // lesson from there runs to 06:15 — past the tutor's hours. So nothing.
+      expect(show(slots)).toEqual([]);
+    });
+
+    it('offers the first start that clears the gap', () => {
+      const slots = bookableSlots({
+        ...BASE,
+        rules: [tuesdayRule()],
+        exceptions: [],
+        reservations: [
+          { startAt: iso('2026-08-11T04:00:00Z'), endAt: iso('2026-08-11T04:30:00Z') },
+        ],
+        window,
+        now,
+        minimumGapMinutes: 15,
+      });
+      // Free from 04:45; a 60-minute lesson fits once, ending at 05:45.
+      expect(show(slots)).toEqual([
+        '2026-08-11T04:45:00.000Z→2026-08-11T05:45:00.000Z',
+        '2026-08-11T05:00:00.000Z→2026-08-11T06:00:00.000Z',
+      ]);
+    });
+
+    it('refuses a lesson that would END inside the gap before a reservation', () => {
+      const slots = bookableSlots({
+        ...BASE,
+        rules: [tuesdayRule()],
+        exceptions: [],
+        // 05:00–06:00 booked. A lesson ending at 05:00 abuts it; one ending at
+        // 04:45 clears the gap.
+        reservations: [
+          { startAt: iso('2026-08-11T05:00:00Z'), endAt: iso('2026-08-11T06:00:00Z') },
+        ],
+        window,
+        now,
+        minimumGapMinutes: 15,
+        durationMinutes: 30,
+      });
+      const ends = slots.map((slot) => slot.endAt.toISOString());
+      expect(ends).toContain('2026-08-11T04:45:00.000Z');
+      expect(ends).not.toContain('2026-08-11T05:00:00.000Z');
+    });
+
+    it('does not widen a blocked period, which is time off rather than a lesson', () => {
+      const withBlock = bookableSlots({
+        ...BASE,
+        rules: [tuesdayRule()],
+        exceptions: [
+          {
+            startAt: iso('2026-08-11T04:00:00Z'),
+            endAt: iso('2026-08-11T05:00:00Z'),
+            effectCode: 'removes',
+          },
+        ],
+        reservations: [],
+        window,
+        now,
+        minimumGapMinutes: 15,
+      });
+      // Free from 05:00 exactly: a holiday needs no turnaround afterwards, and
+      // widening it would quietly cost bookable time either side of every break.
+      expect(show(withBlock)).toEqual(['2026-08-11T05:00:00.000Z→2026-08-11T06:00:00.000Z']);
+    });
+
+    it('a zero gap restores plain back-to-back booking', () => {
+      const slots = bookableSlots({
+        ...BASE,
+        rules: [tuesdayRule()],
+        exceptions: [],
+        reservations: [
+          { startAt: iso('2026-08-11T04:00:00Z'), endAt: iso('2026-08-11T05:00:00Z') },
+        ],
+        window,
+        now,
+        minimumGapMinutes: 0,
+      });
+      expect(show(slots)).toEqual(['2026-08-11T05:00:00.000Z→2026-08-11T06:00:00.000Z']);
+    });
   });
 
   it('subtracts an active reservation, and offers what survives', () => {

@@ -10,9 +10,11 @@ import {
   tutorProfileForUser,
   updateAvailabilityException,
   updateAvailabilityRule,
+  setTutorMinimumGapMinutes,
 } from '@studdy/database';
 import { validateAvailabilityRule, validateBlockedPeriod } from '@studdy/domain/availability';
 import { resolveIdentity } from '../identity/resolve';
+import { isMinimumGapChoice } from '@studdy/domain/availability';
 import { PLATFORM_TIME_ZONE } from '../time';
 import { MINUTES_IN_DAY, minutesToClock, splitDateTime, storedDayOfWeek } from './calendar-time';
 
@@ -284,4 +286,23 @@ export async function deleteExceptionFromCalendarAction(
 function revalidateAvailability(): void {
   revalidatePath('/tutor/availability');
   revalidatePath('/tutor');
+}
+
+/**
+ * Change the minimum gap between this tutor's lessons.
+ *
+ * Governs what may be taken NEXT and nothing else. Every reservation already
+ * taken carries its own snapshot of the figure it was taken under, so widening
+ * the gap cannot reach backwards and invalidate a hold a family already has,
+ * and narrowing it cannot retroactively free time somebody was promised.
+ */
+export async function setMinimumGapAction(formData: FormData): Promise<void> {
+  const { tutorProfileId } = await requireTutor();
+
+  const requested = Number(formData.get('minimumGapMinutes'));
+  // The form offers a fixed set; anything else did not come from this form.
+  if (!isMinimumGapChoice(requested)) return;
+
+  await setTutorMinimumGapMinutes({ tutorProfileId, minimumGapMinutes: requested });
+  revalidateAvailability();
 }

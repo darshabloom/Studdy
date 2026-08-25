@@ -60,6 +60,7 @@ export {
   type DeclineTutorRequestInput,
   RequestValidationError,
   type CreateIntendedLessonRequestInput,
+  type SubjectSectionDraft,
   type CreatedIntendedLessonRequest,
   type WithdrawInput,
   type ExpireRequestsResult,
@@ -84,6 +85,8 @@ export {
   archiveAvailabilityRule,
   bookableSlotsForSubjectSection,
   bookableSlotsForTutors,
+  tutorMinimumGapMinutes,
+  setTutorMinimumGapMinutes,
   createAvailabilityException,
   createAvailabilityRule,
   listAvailabilityExceptions,
@@ -103,3 +106,10 @@ export {
   type UpdateAvailabilityExceptionChanges,
   type UpdateAvailabilityRuleChanges,
 } from './repositories/availability';
+
+export {
+  listBookableServices,
+  formatsForVersion,
+  type BookableServiceVersion,
+  type BookableTutorServices,
+} from './repositories/services';

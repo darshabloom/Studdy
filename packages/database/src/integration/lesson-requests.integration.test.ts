@@ -17,6 +17,7 @@ import {
 } from '../repositories/lesson-requests';
 import { listRequestsForTutor, listRequestsForStudents } from '../repositories/request-projections';
 import { setRuleSetting } from '../repositories/rule-settings';
+import { setTutorMinimumGapMinutes, tutorMinimumGapMinutes } from '../repositories/availability';
 import {
   auditEvents,
   availabilityExceptions,
@@ -1580,6 +1581,8 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
           tutorProfileId: fixture.tutors[0]!.tutorProfileId,
           startAt: reservedStart,
           endAt: new Date(reservedStart.getTime() + 60 * 60 * 1000),
+          gapMinutes: 0,
+          effectiveEndAt: new Date(reservedStart.getTime() + 60 * 60 * 1000),
           statusCode: 'active',
           reservationTypeCode: 'request_hold',
           expiresAt: new Date(reservedStart.getTime() - 2 * 60 * 60 * 1000),
@@ -1595,5 +1598,604 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       expect(result.created).toBe(true);
       expect(result.offered).toEqual([free.getTime()]);
     });
+  });
+  /**
+   * The booking journey's two new guarantees, tested where they actually live.
+   *
+   * Both are about a family being charged, or a child's profile being changed,
+   * by something other than what the family chose.
+   */
+});
+
+describe.skipIf(!available)(
+  'booking journey: chosen lengths and atomic sends (integration)',
+  () => {
+    /**
+     * A tutor who publishes TWO lengths for one subject.
+     *
+     * Nothing in the schema ever prevented this; everything else assumed it
+     * away. The dearer, longer version is second so "cheapest" and "first" are
+     * different rows and a test cannot pass by accident.
+     */
+    async function buildTwoLengthFixture(label: string): Promise<{
+      requesterUserId: string;
+      studentProfileId: string;
+      subjectId: string;
+      tutorProfileId: string;
+      shortVersionId: string;
+      longVersionId: string;
+      otherSubjectVersionId: string;
+      otherTutorVersionId: string;
+    }> {
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [requester] = await db
+          .insert(users)
+          .values({
+            displayName: `Requester ${label}`,
+            countryCode: 'NZ',
+            timeZone: 'Pacific/Auckland',
+            locale: 'en-NZ',
+          })
+          .returning({ id: users.id });
+        const [subject] = await db
+          .insert(subjects)
+          .values({ code: `subject-${label}`, displayName: `Subject ${label}` })
+          .returning({ id: subjects.id });
+        const [otherSubject] = await db
+          .insert(subjects)
+          .values({ code: `other-${label}`, displayName: `Other ${label}` })
+          .returning({ id: subjects.id });
+        const [student] = await db
+          .insert(studentProfiles)
+          .values({ preferredName: `Student ${label}`, independenceStatusCode: 'dependent' })
+          .returning({ id: studentProfiles.id });
+
+        const makeTutor = async (suffix: string): Promise<string> => {
+          const [tutorUser] = await db
+            .insert(users)
+            .values({
+              displayName: `Tutor ${label}-${suffix}`,
+              countryCode: 'NZ',
+              timeZone: 'Pacific/Auckland',
+              locale: 'en-NZ',
+            })
+            .returning({ id: users.id });
+          const [profile] = await db
+            .insert(tutorProfiles)
+            .values({
+              userId: tutorUser!.id,
+              publicFirstName: `T${suffix}`,
+              visibilityStateCode: 'unlisted',
+            })
+            .returning({ id: tutorProfiles.id });
+          await db.insert(availabilityExceptions).values({
+            tutorProfileId: profile!.id,
+            startsAt: new Date(Date.now() - 60 * 60 * 1000),
+            endsAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+            effectCode: 'adds',
+          });
+          return profile!.id;
+        };
+
+        const makeVersion = async (
+          tutorProfileId: string,
+          subjectId: string,
+          displayName: string,
+          durationMinutes: number,
+          priceAmountMinor: bigint,
+        ): Promise<string> => {
+          const [service] = await db
+            .insert(services)
+            .values({ tutorProfileId, subjectId, displayName })
+            .returning({ id: services.id });
+          const [version] = await db
+            .insert(serviceVersions)
+            .values({
+              serviceId: service!.id,
+              durationMinutes,
+              priceAmountMinor,
+              currencyCode: 'NZD',
+            })
+            .returning({ id: serviceVersions.id });
+          return version!.id;
+        };
+
+        const tutorProfileId = await makeTutor('a');
+        const otherTutorProfileId = await makeTutor('b');
+
+        return {
+          requesterUserId: requester!.id,
+          studentProfileId: student!.id,
+          subjectId: subject!.id,
+          tutorProfileId,
+          shortVersionId: await makeVersion(
+            tutorProfileId,
+            subject!.id,
+            `Short ${label}`,
+            60,
+            4000n,
+          ),
+          longVersionId: await makeVersion(tutorProfileId, subject!.id, `Long ${label}`, 90, 6000n),
+          otherSubjectVersionId: await makeVersion(
+            tutorProfileId,
+            otherSubject!.id,
+            `Other subject ${label}`,
+            60,
+            1000n,
+          ),
+          otherTutorVersionId: await makeVersion(
+            otherTutorProfileId,
+            subject!.id,
+            `Other tutor ${label}`,
+            60,
+            1000n,
+          ),
+        };
+      } finally {
+        await sql.end();
+      }
+    }
+
+    const draftFor = (fixture: { studentProfileId: string; subjectId: string }) => ({
+      studentProfileId: fixture.studentProfileId,
+      subjectId: fixture.subjectId,
+      schoolYearCode: 'Y9',
+      formatPreferenceCode: 'online',
+    });
+
+    async function countSections(studentProfileId: string): Promise<number> {
+      const { sql, db } = createDatabaseClient();
+      try {
+        const rows = await db
+          .select({ id: studentSubjectSections.id })
+          .from(studentSubjectSections)
+          .where(eq(studentSubjectSections.studentProfileId, studentProfileId));
+        return rows.length;
+      } finally {
+        await sql.end();
+      }
+    }
+
+    it('honours the chosen lesson length rather than whichever row came back last', async () => {
+      const fixture = await buildTwoLengthFixture(`len-${randomUUID().slice(0, 8)}`);
+      const start = future(100);
+
+      const created = await createIntendedLessonRequest({
+        subjectSectionDraft: draftFor(fixture),
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: [fixture.tutorProfileId],
+        serviceVersionIdByTutor: new Map([[fixture.tutorProfileId, fixture.longVersionId]]),
+        proposedStarts: [start],
+        formatCode: 'online',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [ilr] = await db
+          .select({ durationMinutes: intendedLessonRequests.durationMinutes })
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.id, created.intendedLessonRequestId));
+        expect(ilr?.durationMinutes).toBe(90);
+
+        // And the tutor's own row points at the version the family paid for.
+        const [request] = await db
+          .select({ serviceVersionId: tutorRequests.serviceVersionId })
+          .from(tutorRequests)
+          .where(eq(tutorRequests.intendedLessonRequestId, created.intendedLessonRequestId));
+        expect(request?.serviceVersionId).toBe(fixture.longVersionId);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('falls back to the cheapest version when no length is chosen', async () => {
+      const fixture = await buildTwoLengthFixture(`cheap-${randomUUID().slice(0, 8)}`);
+      const created = await createIntendedLessonRequest({
+        subjectSectionDraft: draftFor(fixture),
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: [fixture.tutorProfileId],
+        proposedStarts: [future(101)],
+        formatCode: 'online',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [request] = await db
+          .select({ serviceVersionId: tutorRequests.serviceVersionId })
+          .from(tutorRequests)
+          .where(eq(tutorRequests.intendedLessonRequestId, created.intendedLessonRequestId));
+        // An unstated choice is never the most expensive thing on offer.
+        expect(request?.serviceVersionId).toBe(fixture.shortVersionId);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /**
+     * A service version id is an amount of money. Accepting one because it
+     * exists, rather than because it is this tutor's, would let a crafted form
+     * buy a ninety-minute lesson at another tutor's ten-dollar price.
+     */
+    it('refuses a version belonging to another tutor', async () => {
+      const fixture = await buildTwoLengthFixture(`xtutor-${randomUUID().slice(0, 8)}`);
+      await expect(
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          serviceVersionIdByTutor: new Map([[fixture.tutorProfileId, fixture.otherTutorVersionId]]),
+          proposedStarts: [future(102)],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestValidationError);
+    });
+
+    it('refuses a version for another subject, even from the same tutor', async () => {
+      const fixture = await buildTwoLengthFixture(`xsubject-${randomUUID().slice(0, 8)}`);
+      await expect(
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          serviceVersionIdByTutor: new Map([
+            [fixture.tutorProfileId, fixture.otherSubjectVersionId],
+          ]),
+          proposedStarts: [future(103)],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestValidationError);
+    });
+
+    it('creates the subject section as part of a successful send', async () => {
+      const fixture = await buildTwoLengthFixture(`section-${randomUUID().slice(0, 8)}`);
+      expect(await countSections(fixture.studentProfileId)).toBe(0);
+
+      const created = await createIntendedLessonRequest({
+        subjectSectionDraft: draftFor(fixture),
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: [fixture.tutorProfileId],
+        proposedStarts: [future(104)],
+        formatCode: 'online',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      expect(created.subjectSectionCreated).toBe(true);
+      expect(await countSections(fixture.studentProfileId)).toBe(1);
+
+      // And the request really hangs from it, rather than from something else.
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [ilr] = await db
+          .select({ sectionId: intendedLessonRequests.studentSubjectSectionId })
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.id, created.intendedLessonRequestId));
+        expect(ilr?.sectionId).toBe(created.studentSubjectSectionId);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /**
+     * THE ORPHAN CASE, which is the whole reason the draft exists.
+     *
+     * A send that fails because no tutor can do any of the offered times must
+     * leave the child exactly as it found them. Creating the section first and
+     * the request second would put a subject on a child's profile that they
+     * never agreed to study, because of a request that was never sent.
+     */
+    it('leaves no orphan subject section when the send fails', async () => {
+      const fixture = await buildTwoLengthFixture(`orphan-${randomUUID().slice(0, 8)}`);
+      expect(await countSections(fixture.studentProfileId)).toBe(0);
+
+      // A time outside the tutor's open window: nothing to offer, nothing sent.
+      const outside = new Date(Date.now() + 120 * 24 * 60 * 60 * 1000);
+      outside.setSeconds(0, 0);
+
+      await expect(
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          proposedStarts: [outside],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(NoTutorAvailableError);
+
+      expect(await countSections(fixture.studentProfileId)).toBe(0);
+    });
+
+    it('leaves no orphan subject section when validation rejects the request', async () => {
+      const fixture = await buildTwoLengthFixture(`orphan2-${randomUUID().slice(0, 8)}`);
+
+      await expect(
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          // 'either' is not a lesson anyone can attend; validateFanOut refuses it.
+          proposedStarts: [future(105)],
+          formatCode: 'either',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestValidationError);
+
+      expect(await countSections(fixture.studentProfileId)).toBe(0);
+    });
+
+    it('reuses an existing section rather than creating a second', async () => {
+      const fixture = await buildTwoLengthFixture(`reuse-${randomUUID().slice(0, 8)}`);
+      const send = async (hours: number) =>
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          proposedStarts: [future(hours)],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        });
+
+      const first = await send(106);
+      const second = await send(130);
+
+      expect(first.subjectSectionCreated).toBe(true);
+      expect(second.subjectSectionCreated).toBe(false);
+      expect(second.studentSubjectSectionId).toBe(first.studentSubjectSectionId);
+      expect(await countSections(fixture.studentProfileId)).toBe(1);
+    });
+
+    /** One workable time is a real request (rule change: 1-5 times). */
+    it('accepts a request offering a single time', async () => {
+      const fixture = await buildTwoLengthFixture(`one-${randomUUID().slice(0, 8)}`);
+      const created = await createIntendedLessonRequest({
+        subjectSectionDraft: draftFor(fixture),
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: [fixture.tutorProfileId],
+        proposedStarts: [future(107)],
+        formatCode: 'online',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      });
+      expect(created.tutorRequestReferences).toHaveLength(1);
+    });
+
+    it('refuses a draft and a section id together, rather than guessing', async () => {
+      const fixture = await buildTwoLengthFixture(`both-${randomUUID().slice(0, 8)}`);
+      await expect(
+        createIntendedLessonRequest({
+          subjectSectionDraft: draftFor(fixture),
+          studentSubjectSectionId: randomUUID(),
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: [fixture.tutorProfileId],
+          proposedStarts: [future(108)],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestValidationError);
+    });
+  },
+);
+
+/**
+ * The minimum gap between one lesson and the next, where it is actually
+ * enforced: the database.
+ *
+ * The exclusion constraint compares `[start_at, effective_end_at)`, where the
+ * effective end is the lesson's end plus the gap SNAPSHOTTED when the
+ * reservation was taken. Padding one side on every row requires exactly one gap
+ * between any two; padding both sides of both rows would silently demand two.
+ *
+ * These go through the table directly rather than through acceptance, because
+ * what is under test is the guarantee itself — the thing that holds when two
+ * transactions race and application logic has already had its say.
+ */
+describe.skipIf(!available)('the minimum gap between lessons (integration)', () => {
+  async function tutorWithGap(label: string, gapMinutes: number): Promise<string> {
+    const { sql, db } = createDatabaseClient();
+    try {
+      const [tutorUser] = await db
+        .insert(users)
+        .values({
+          displayName: `Gap tutor ${label}`,
+          countryCode: 'NZ',
+          timeZone: 'Pacific/Auckland',
+          locale: 'en-NZ',
+        })
+        .returning({ id: users.id });
+      const [profile] = await db
+        .insert(tutorProfiles)
+        .values({
+          userId: tutorUser!.id,
+          publicFirstName: `Gap${label}`,
+          visibilityStateCode: 'unlisted',
+          minimumGapMinutes: gapMinutes,
+        })
+        .returning({ id: tutorProfiles.id });
+      return profile!.id;
+    } finally {
+      await sql.end();
+    }
+  }
+
+  /** Insert a reservation exactly as acceptance does: gap snapshotted on the row. */
+  async function reserve(
+    tutorProfileId: string,
+    startAt: Date,
+    minutes: number,
+    gapMinutes: number,
+    reservationTypeCode: 'request_hold' | 'booking_confirmed' = 'request_hold',
+  ): Promise<void> {
+    const { sql, db } = createDatabaseClient();
+    try {
+      const endAt = new Date(startAt.getTime() + minutes * 60_000);
+      await db.insert(tutorTimeReservations).values({
+        tutorProfileId,
+        startAt,
+        endAt,
+        gapMinutes,
+        effectiveEndAt: new Date(endAt.getTime() + gapMinutes * 60_000),
+        statusCode: 'active',
+        reservationTypeCode,
+      });
+    } finally {
+      await sql.end();
+    }
+  }
+
+  const at = (iso: string): Date => new Date(iso);
+
+  it('allows a lesson beginning exactly one gap after the last one ends', async () => {
+    const tutor = await tutorWithGap(`ok-${randomUUID().slice(0, 8)}`, 15);
+    await reserve(tutor, at('2031-03-01T17:00:00Z'), 60, 15); // ends 18:00
+    // 18:15 is exactly fifteen minutes later. The gap is a MINIMUM, so this is
+    // the first legitimate start rather than one minute too soon.
+    await expect(reserve(tutor, at('2031-03-01T18:15:00Z'), 60, 15)).resolves.toBeUndefined();
+  });
+
+  it('refuses a lesson one minute inside the gap', async () => {
+    const tutor = await tutorWithGap(`short-${randomUUID().slice(0, 8)}`, 15);
+    await reserve(tutor, at('2031-03-02T17:00:00Z'), 60, 15); // ends 18:00
+    await expect(reserve(tutor, at('2031-03-02T18:14:00Z'), 60, 15)).rejects.toThrow();
+  });
+
+  /**
+   * Order must not matter. The constraint compares two padded ranges, so a
+   * lesson placed too close BEFORE an existing one is caught by its own padding
+   * running into that lesson's start — which is the half of the rule that a
+   * one-sided pad might be expected to miss, and does not.
+   */
+  it('refuses the same pair inserted in the opposite order', async () => {
+    const tutor = await tutorWithGap(`rev-${randomUUID().slice(0, 8)}`, 15);
+    await reserve(tutor, at('2031-03-03T18:14:00Z'), 60, 15); // later one first
+    await expect(reserve(tutor, at('2031-03-03T17:00:00Z'), 60, 15)).rejects.toThrow();
+  });
+
+  it('allows the legitimate pair inserted in the opposite order', async () => {
+    const tutor = await tutorWithGap(`revok-${randomUUID().slice(0, 8)}`, 15);
+    await reserve(tutor, at('2031-03-04T18:15:00Z'), 60, 15);
+    await expect(reserve(tutor, at('2031-03-04T17:00:00Z'), 60, 15)).resolves.toBeUndefined();
+  });
+
+  /**
+   * A hold and a confirmed lesson are one table and one rule. A tutor needs the
+   * same turnaround whether the next lesson is agreed or still being decided,
+   * and treating them differently would let a hold be taken that could never
+   * become a booking.
+   */
+  it('applies the gap between an active hold and a confirmed lesson', async () => {
+    const tutor = await tutorWithGap(`mixed-${randomUUID().slice(0, 8)}`, 15);
+    await reserve(tutor, at('2031-03-05T17:00:00Z'), 60, 15, 'booking_confirmed');
+    await expect(
+      reserve(tutor, at('2031-03-05T18:05:00Z'), 60, 15, 'request_hold'),
+    ).rejects.toThrow();
+    await expect(
+      reserve(tutor, at('2031-03-05T18:15:00Z'), 60, 15, 'request_hold'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('honours a tutor who needs no gap at all', async () => {
+    const tutor = await tutorWithGap(`zero-${randomUUID().slice(0, 8)}`, 0);
+    await reserve(tutor, at('2031-03-06T17:00:00Z'), 60, 0);
+    await expect(reserve(tutor, at('2031-03-06T18:00:00Z'), 60, 0)).resolves.toBeUndefined();
+  });
+
+  /**
+   * THE SNAPSHOT, which is why the gap lives on the row at all.
+   *
+   * A tutor who widens their gap tomorrow must not retroactively invalidate a
+   * hold a family already has, nor move the line under a lesson already agreed.
+   * The new figure governs what may be taken NEXT.
+   */
+  it('does not rewrite reservations already taken when the tutor changes the setting', async () => {
+    const tutor = await tutorWithGap(`snap-${randomUUID().slice(0, 8)}`, 15);
+    await reserve(tutor, at('2031-03-07T17:00:00Z'), 60, 15);
+
+    await setTutorMinimumGapMinutes({ tutorProfileId: tutor, minimumGapMinutes: 60 });
+
+    const { sql, db } = createDatabaseClient();
+    try {
+      const rows = await db
+        .select({
+          gapMinutes: tutorTimeReservations.gapMinutes,
+          endAt: tutorTimeReservations.endAt,
+          effectiveEndAt: tutorTimeReservations.effectiveEndAt,
+        })
+        .from(tutorTimeReservations)
+        .where(eq(tutorTimeReservations.tutorProfileId, tutor));
+
+      expect(rows).toHaveLength(1);
+      // Still fifteen, and the blocked interval still ends fifteen past.
+      expect(rows[0]?.gapMinutes).toBe(15);
+      expect(rows[0]!.effectiveEndAt.getTime() - rows[0]!.endAt.getTime()).toBe(15 * 60_000);
+    } finally {
+      await sql.end();
+    }
+
+    // And the live setting really did change, so the next one is governed by it.
+    expect(await tutorMinimumGapMinutes(tutor)).toBe(60);
+  });
+
+  it('keeps two tutors gaps to themselves', async () => {
+    const roomy = await tutorWithGap(`roomy-${randomUUID().slice(0, 8)}`, 60);
+    const tight = await tutorWithGap(`tight-${randomUUID().slice(0, 8)}`, 0);
+    await reserve(roomy, at('2031-03-08T17:00:00Z'), 60, 60);
+    // The same pair of times, refused for one tutor and fine for the other.
+    await expect(reserve(roomy, at('2031-03-08T18:15:00Z'), 60, 60)).rejects.toThrow();
+    await reserve(tight, at('2031-03-08T17:00:00Z'), 60, 0);
+    await expect(reserve(tight, at('2031-03-08T18:00:00Z'), 60, 0)).resolves.toBeUndefined();
   });
 });

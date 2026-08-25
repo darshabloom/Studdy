@@ -127,6 +127,19 @@ be protecting a slot nobody could still book.
 > **published service durations**; and a `student_subject_section` is find-or-created **at
 > send**, never as a side effect of browsing.
 >
+> **Step 4 built that journey and settled three further things** (2026-08-24, on
+> `feat/parent-booking-journey`, not yet merged):
+>
+> - **Starts are on a fifteen-minute grid**, server-authoritative, and **exact starts stay
+>   distinct** — the booking calendar never merges contiguous slots, because 4:00 and 4:30
+>   are the choice being made. Read-only calendars still merge, and must.
+> - **Every tutor has a minimum gap between lessons**, default fifteen minutes (PD-020).
+>   Derivation widens existing reservations on both sides; the persisted exclusion constraint
+>   pads one side per row. Same rule, opposite ends.
+> - **The subject section is created ATOMICALLY with the send**, inside the same transaction
+>   as the request, its time options, the tutor request and the hold — not merely "at send".
+>   A send that fails leaves the child unchanged.
+>
 > Everything else in this document — the data model, the state machines, the acceptance and
 > selection transactions, and the whole of §7's access model — **stands unchanged**. See
 > `docs/handoffs/current-session.md` §6 for the authoritative redesign and its steps.
@@ -139,7 +152,7 @@ be protecting a slot nobody could still book.
 | 4   | `/tutors?section=…`                      | Discovery. Signed in with a subject context, the family sees **actual currently bookable slots for any eligible tutor** — no shortlisting required — alongside subject, year range, format and price. This is what lets availability inform **whom to shortlist**. **D-6, §7.**                                                                                        |
 | 4a  | `/tutors/[reference]?section=…`          | A tutor's profile shows their own bookable slots for this subject context, at the section's service duration. Derived slots only; never rules, blocks, exceptions or reasons.                                                                                                                                                                                          |
 | 5   | `/shortlist/[sectionId]`                 | Shortlist 1–3 tutors — for saving and comparing, having **already** seen their availability. Unchanged from PR #14.                                                                                                                                                                                                                                                    |
-| 6   | **`/shortlist/[sectionId]/times`** — NEW | The combined availability grid for the shortlisted tutors at the section's service duration. Each bookable slot is labelled with how many of _their own_ shortlist can do it. The family picks **2–5** acceptable options.                                                                                                                                             |
+| 6   | **`/shortlist/[sectionId]/times`** — NEW | The combined availability grid for the shortlisted tutors at the section's service duration. Each bookable slot is labelled with how many of _their own_ shortlist can do it. The family picks **1–5** acceptable options (superseded from 2–5; see the note above).                                                                                                   |
 | 7   | `/requests/new`                          | Review before sending: each invited tutor with **the subset of chosen times that tutor can actually do**, their own price, and the notes field. If a shortlisted tutor can do none of the chosen times, this screen says so **before** sending and offers to add a time that tutor can do or to send without them. **D-2.** No request is ever sent with zero options. |
 | 8   | `/requests/[reference]`                  | Awaiting responses. Per tutor: status, their response deadline, and which times they were offered. Copy states plainly that nothing is held until a tutor accepts.                                                                                                                                                                                                     |
 | 9   | `/requests/[reference]`                  | As tutors respond: each acceptance shows **that tutor and the specific time they accepted**, with the hold's expiry.                                                                                                                                                                                                                                                   |

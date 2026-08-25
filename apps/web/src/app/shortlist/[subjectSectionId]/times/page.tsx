@@ -8,6 +8,7 @@ import {
   combineSlotsByStart,
   dayLabel,
   timeLabel,
+  TIME_OPTIONS_GUIDANCE,
 } from '@studdy/domain/availability';
 import { schoolYearLabel } from '@studdy/domain/students';
 import { TimeGrid } from '@/components/discovery/time-grid';
@@ -105,6 +106,9 @@ export default async function ChooseTimesPage({
             {section.subjectDisplayName}
             {section.schoolYearCode !== null ? ` · ${schoolYearLabel(section.schoolYearCode)}` : ''}
           </p>
+          {/* The approved wording, shared with the single-tutor journey: it
+              recommends flexibility rather than demanding it. */}
+          <p className="mt-2 max-w-xl text-sm text-text-secondary">{TIME_OPTIONS_GUIDANCE}</p>
         </div>
 
         {entries.length === 0 ? (

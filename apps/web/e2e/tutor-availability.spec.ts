@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clickUntilNavigated } from './helpers/navigation';
 
 /**
  * The tutor's calendar-first availability screen (UX redesign step 2).
@@ -231,6 +232,9 @@ test.describe('tutor availability, as a calendar', () => {
         headingLefts: [...root.querySelectorAll('[data-calendar-heading]')]
           .map((heading) => Math.round(heading.getBoundingClientRect().left))
           .sort((a, b) => a - b),
+        dayColumnWidths: [...root.querySelectorAll('[data-calendar-day]')].map((day) =>
+          Math.round(day.getBoundingClientRect().width),
+        ),
       };
     });
 
@@ -246,6 +250,10 @@ test.describe('tutor availability, as a calendar', () => {
     for (const left of geometry.columnLefts) {
       expect(geometry.headingLefts).toContain(left);
     }
+
+    // And all seven days are on screen with real width, not six and a sliver.
+    expect(geometry.dayColumnWidths).toHaveLength(7);
+    for (const width of geometry.dayColumnWidths) expect(width).toBeGreaterThan(0);
 
     // A block belongs to one day, so it can never span the width of the week.
     expect(geometry.widestBlock).toBeLessThan(geometry.calendarWidth / 3);
@@ -271,16 +279,20 @@ test.describe('tutor availability, as a calendar', () => {
       timeout: 15_000,
     });
 
-    await page.getByRole('link', { name: 'Next week' }).click();
-    await expect(page).toHaveURL(/\/tutor\/availability\?week=\d{4}-\d{2}-\d{2}/);
+    await clickUntilNavigated(page, page.getByRole('link', { name: 'Next week' }));
+    await expect(page).toHaveURL(/\/tutor\/availability\?week=\d{4}-\d{2}-\d{2}/, {
+      timeout: 15_000,
+    });
 
     // The way back only offers itself once the tutor has left this week; on the
     // current week the same spot is a plain "This week" marker instead.
     const backToThisWeek = page.getByRole('link', { name: 'Back to this week' });
-    await expect(backToThisWeek).toBeVisible();
-    await backToThisWeek.click();
-    await expect(backToThisWeek).toHaveCount(0);
-    await expect(page.getByText('This week', { exact: true })).toBeVisible();
+    await expect(backToThisWeek).toBeVisible({ timeout: 15_000 });
+    // The same treatment: this click follows a navigation, so it lands during
+    // the next page's hydration and is swallowed just as readily as the first.
+    await clickUntilNavigated(page, backToThisWeek);
+    await expect(backToThisWeek).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByText('This week', { exact: true })).toBeVisible({ timeout: 15_000 });
   });
 
   test('preview as family shows bookable time and never a reason for a gap', async ({ page }) => {
@@ -296,8 +308,8 @@ test.describe('tutor availability, as a calendar', () => {
 
     // A link, not a toggle: the preview is its own server render, so entering it
     // is a navigation and the private rows are never queried for that request.
-    await page.getByRole('link', { name: 'Preview as family' }).click();
-    await expect(page).toHaveURL(/preview=1/);
+    await clickUntilNavigated(page, page.getByRole('link', { name: 'Preview as family' }));
+    await expect(page).toHaveURL(/preview=1/, { timeout: 15_000 });
 
     const preview = page.getByRole('group', { name: /Bookable times a family can see/ });
     await expect(preview).toBeVisible();
@@ -327,8 +339,12 @@ test.describe('tutor availability, as a calendar', () => {
     }
 
     // And going back restores the tutor's own view, private note and all.
-    await page.getByRole('link', { name: 'Back to editing' }).click();
-    await expect(page.getByRole('group', { name: /Your availability, week of/ })).toBeVisible();
-    await expect(page.getByText(/Private note:/).first()).toBeVisible();
+    // Same treatment as every other navigation here: a click that lands during
+    // hydration is swallowed, and the failure looks like a broken page.
+    await clickUntilNavigated(page, page.getByRole('link', { name: 'Back to editing' }));
+    await expect(page.getByRole('group', { name: /Your availability, week of/ })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText(/Private note:/).first()).toBeVisible({ timeout: 15_000 });
   });
 });

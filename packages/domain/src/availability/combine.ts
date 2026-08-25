@@ -15,9 +15,32 @@ import type { Interval } from './slots';
  * is the same guarantee the single-tutor view gives.
  */
 
-/** The family chooses between these many times (design §3.1 step 6). */
-export const REQUEST_TIME_OPTIONS_MIN = 2;
+/**
+ * How many times a family may offer.
+ *
+ * ONE IS ENOUGH. A parent with a single workable slot in their week has made a
+ * real request, not a defective one, and refusing to send it teaches them that
+ * Studdy wants flexibility they do not have. Offering several genuinely helps —
+ * it is what stops one tutor's full diary ending the conversation — so the copy
+ * recommends it and the bound permits it, which is the difference between
+ * encouraging and requiring.
+ *
+ * The maximum stays: past five, a tutor is reading a timetable rather than
+ * answering a question, and every extra time is one more hold to reason about.
+ */
+export const REQUEST_TIME_OPTIONS_MIN = 1;
 export const REQUEST_TIME_OPTIONS_MAX = 5;
+
+/**
+ * Shown wherever a family is choosing times. Recommends; does not require.
+ *
+ * "The tutor can accept one of them" is the load-bearing half. Several chosen
+ * times are ALTERNATIVES, and a family who reads them as several lessons is
+ * being told they are asking for more than they are — and may well offer fewer
+ * because of it, which is the opposite of what the first sentence is for.
+ */
+export const TIME_OPTIONS_GUIDANCE =
+  'Choose one or more times that work for you. The tutor can accept one of them.';
 
 export interface TutorSlotSet {
   readonly tutorReference: string;
@@ -66,7 +89,9 @@ export function combineSlotsByStart(sets: readonly TutorSlotSet[]): readonly Com
  */
 export function validateChosenTimes(count: number): string | null {
   if (count < REQUEST_TIME_OPTIONS_MIN) {
-    return `Choose at least ${String(REQUEST_TIME_OPTIONS_MIN)} times so tutors have a choice.`;
+    // Not "at least one time so tutors have a choice" — with a minimum of one
+    // there is no choice to appeal to, and the sentence would be nonsense.
+    return 'Choose at least one time that would work for you.';
   }
   if (count > REQUEST_TIME_OPTIONS_MAX) {
     return `Choose no more than ${String(REQUEST_TIME_OPTIONS_MAX)} times.`;

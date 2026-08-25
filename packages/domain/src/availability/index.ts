@@ -1,4 +1,8 @@
 export {
+  DEFAULT_MINIMUM_GAP_MINUTES,
+  MINIMUM_GAP_CHOICES,
+  isMinimumGapChoice,
+  SLOT_STEP_MINUTES,
   bookableSlots,
   formatMatches,
   mergeIntervals,
@@ -16,6 +20,7 @@ export {
 export {
   REQUEST_TIME_OPTIONS_MAX,
   REQUEST_TIME_OPTIONS_MIN,
+  TIME_OPTIONS_GUIDANCE,
   combineSlotsByStart,
   validateChosenTimes,
   type CombinedSlot,
