@@ -38,21 +38,38 @@ function Chevron({ open }: { open: boolean }): ReactNode {
 }
 
 function SectionLabel({ section }: { section: BookingSection }): ReactNode {
+  const answered = section.value !== null || section.values.length > 0;
+
   return (
     <span className="min-w-0 text-left">
       <span className="block text-xs text-text-muted">{section.label}</span>
-      <span
-        className={
-          section.value === null
-            ? 'block text-sm text-text-muted'
-            : 'block truncate text-sm font-medium text-text-primary'
-        }
-      >
-        {section.value ?? 'Not yet'}
-        {section.value !== null && section.settled ? (
-          <span className="ml-1 font-normal text-text-muted">(only option)</span>
-        ) : null}
-      </span>
+      {answered ? (
+        <span className="block text-sm font-medium text-text-primary">
+          {section.values.length > 0 ? (
+            <>
+              {/*
+               * One line each, never joined. Two intervals on one line read as
+               * a lesson that runs from the first to the second, or as two
+               * lessons being asked for — and this is neither.
+               */}
+              {section.values.map((entry) => (
+                <span key={entry} className="block tabular-nums">
+                  {entry}
+                </span>
+              ))}
+              {section.note !== null ? (
+                <span className="mt-0.5 block text-xs font-normal text-text-muted">
+                  {section.note}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <span className="block truncate">{section.value}</span>
+          )}
+        </span>
+      ) : (
+        <span className="block text-sm text-text-muted">Not yet</span>
+      )}
     </span>
   );
 }
@@ -63,10 +80,10 @@ const SHELL =
 /**
  * One collapsed section: its question, its answer, and whether it reopens.
  *
- * A settled answer gets no chevron and no link — there is nothing behind it to
- * disclose, and offering the affordance would promise a choice that does not
- * exist. A question not yet reached gets neither either, for the same reason in
- * the other direction.
+ * Every answered section behind the current one reopens, including one whose
+ * question had a single option — a parent who wants to reconsider "the only
+ * tutor" is exactly the person who needs the way back. A question not yet
+ * reached gets no chevron and no link, because there is nothing there yet.
  */
 export function CollapsedSection({ section }: { section: BookingSection }): ReactNode {
   if (section.href !== null) {

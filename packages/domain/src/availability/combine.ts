@@ -31,9 +31,16 @@ import type { Interval } from './slots';
 export const REQUEST_TIME_OPTIONS_MIN = 1;
 export const REQUEST_TIME_OPTIONS_MAX = 5;
 
-/** Shown wherever a family is choosing times. Recommends; does not require. */
+/**
+ * Shown wherever a family is choosing times. Recommends; does not require.
+ *
+ * "The tutor can accept one of them" is the load-bearing half. Several chosen
+ * times are ALTERNATIVES, and a family who reads them as several lessons is
+ * being told they are asking for more than they are — and may well offer fewer
+ * because of it, which is the opposite of what the first sentence is for.
+ */
 export const TIME_OPTIONS_GUIDANCE =
-  'Choose one or more times that work for you. Choosing a few gives the tutor more options.';
+  'Choose one or more times that work for you. The tutor can accept one of them.';
 
 export interface TutorSlotSet {
   readonly tutorReference: string;

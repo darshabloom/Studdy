@@ -4,7 +4,7 @@ import { Button } from '@studdy/design-system';
 import { schoolYearLabel } from '@studdy/domain/students';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
-import { bookingHref, paramsUpTo, type RawSearchParams } from '@/lib/booking/draft';
+import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
 import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking } from '@/lib/booking/resolve';
 
@@ -18,13 +18,6 @@ export default async function BookChildPage({
   const raw = await searchParams;
   const booking = await resolveBooking(raw);
   if (booking === null) redirect('/sign-in?next=%2Fbook');
-
-  // A family with one child is not choosing between children. The answer is
-  // already made, and shown in the summary; asking for it would be a screen
-  // whose single option is the one already taken.
-  if (booking.settled.has('child')) {
-    redirect(bookingHref(booking.nextStep, paramsUpTo(booking.nextStep, booking.params)));
-  }
 
   const { context, params } = booking;
 

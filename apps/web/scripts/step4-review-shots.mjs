@@ -89,22 +89,23 @@ async function walk(page, prefix) {
   /**
    * DECIDE ON WHAT RENDERED, NOT ON THE URL.
    *
-   * Which questions this journey asks depends on the account: a family with one
-   * child is not asked which child, and a subject taught by one tutor at this
-   * level is not asked which tutor. A settled step forwards to the next one, so
-   * reading `page.url()` after `waitForURL` can catch `/book/tutor` while it is
-   * still on its way to `/book/length` — the branch then waits for a heading
-   * that was never going to appear. Waiting for one of the two real headings
-   * asks the only question that matters: which screen is the family looking at?
+   * Every question is asked now, however few options it has — but a prefilled
+   * answer can still carry the journey past one, so each hop stays optional.
+   * Reading `page.url()` after a `waitForURL` can catch the step being LEFT
+   * rather than the one arrived at, and the branch then waits for a heading
+   * that was never going to appear. Waiting on the real headings asks the only
+   * question that matters: which screen is the family looking at?
    */
   await page.goto(`${BASE}/book`);
 
-  const childQuestion = page.getByRole('heading', { name: /Who is this lesson for/ });
-  const subjectQuestion = page.getByRole('heading', { name: /help with/ });
-  await childQuestion.or(subjectQuestion).waitFor({ timeout: 30_000 });
+  const childQuestion = page.getByRole('heading', { level: 1, name: /Who is this lesson for/ });
+  const subjectQuestion = page.getByRole('heading', { level: 1, name: /help with/ });
+  await childQuestion.or(subjectQuestion).first().waitFor({ timeout: 30_000 });
 
+  // One child on this account, and the question is still put — which is the
+  // point of the screenshot.
   if (await childQuestion.isVisible()) {
-    await shoot(page, prefix, '1a-child');
+    await shoot(page, prefix, '1-child');
     await page
       .getByRole('link', { name: new RegExp(STUDENT) })
       .first()
@@ -112,38 +113,67 @@ async function walk(page, prefix) {
   }
 
   await subjectQuestion.waitFor({ timeout: 30_000 });
-  await shoot(page, prefix, '1-subject');
+  await shoot(page, prefix, '2-subject');
 
   await page.getByRole('link', { name: 'Mathematics', exact: false }).first().click();
 
-  const tutorQuestion = page.getByRole('heading', { name: /Who should teach/ });
-  const lengthQuestion = page.getByRole('heading', { name: /How long should the lesson/ });
-  await tutorQuestion.or(lengthQuestion).waitFor({ timeout: 30_000 });
+  const tutorQuestion = page.getByRole('heading', { level: 1, name: /Who should teach/ });
+  const lengthQuestion = page.getByRole('heading', {
+    level: 1,
+    name: /How long should the lesson/,
+  });
+  await tutorQuestion.or(lengthQuestion).first().waitFor({ timeout: 30_000 });
 
+  // Aroha is the only maths tutor at this level. The screen says so, and the
+  // parent still chooses her — worth a picture, since it is the correction.
   if (await tutorQuestion.isVisible()) {
-    await shoot(page, prefix, '1b-tutor');
+    await shoot(page, prefix, '3-tutor-single-option');
     await page.getByRole('link', { name: /Aroha/ }).first().click();
   }
 
   await lengthQuestion.waitFor({ timeout: 30_000 });
-  await shoot(page, prefix, '2-length');
+  await shoot(page, prefix, '4-length');
 
   await page
     .getByRole('link', { name: /60 minutes/ })
     .first()
     .click();
-  await page.getByRole('heading', { name: /When would suit/ }).waitFor({ timeout: 30_000 });
-  await shoot(page, prefix, '3-times-empty');
 
+  // Aroha teaches this one way only, so this is the single-option format
+  // screen: shown, explained, and confirmed rather than assumed.
+  const formatQuestion = page.getByRole('heading', { level: 1, name: /Online or in person/ });
+  const timesQuestion = page.getByRole('heading', { level: 1, name: /When would suit/ });
+  await formatQuestion.or(timesQuestion).first().waitFor({ timeout: 30_000 });
+
+  if (await formatQuestion.isVisible()) {
+    await shoot(page, prefix, '5-format-single-option');
+    await page
+      .getByRole('link', { name: /^Online|^In person/ })
+      .first()
+      .click();
+  }
+
+  await timesQuestion.waitFor({ timeout: 30_000 });
+  await shoot(page, prefix, '6-times-empty');
+
+  // Two starts, so the chips show full intervals AND say they are alternatives.
   const slots = page.getByRole('group', { name: /Bookable times for/ }).getByRole('button');
   await slots.first().waitFor({ timeout: 30_000 });
   await slots.first().click();
   await slots.nth(2).click();
-  await shoot(page, prefix, '4-times-chosen');
+  await shoot(page, prefix, '7-times-chosen');
 
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('heading', { name: /Check this over/ }).waitFor({ timeout: 30_000 });
-  await shoot(page, prefix, '5-review');
+  await page
+    .getByRole('heading', { level: 1, name: /Check this over/ })
+    .waitFor({ timeout: 30_000 });
+  await shoot(page, prefix, '8-review');
+
+  // Back from review is the state where the persistent receipt itself holds the
+  // times, since the picker's selection only reaches the URL on Continue.
+  await page.getByRole('link', { name: '← Back' }).click();
+  await timesQuestion.waitFor({ timeout: 30_000 });
+  await shoot(page, prefix, '9-receipt-with-intervals');
 }
 
 const browser = await chromium.launch();

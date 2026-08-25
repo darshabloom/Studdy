@@ -7,20 +7,23 @@ import {
   type BookingParams,
   type BookingStep,
 } from '@/lib/booking/draft';
+import { rowIsAnswered } from '@/lib/booking/sections';
 
 /**
  * One answered — or not yet answered — question, as the summary shows it.
  *
- * `value` is what the parent chose, already formatted. `settled` marks a
- * question that never had to be asked because only one answer was possible: it
- * belongs in the summary as a fact about the request, but not as something the
- * parent decided.
+ * `value` is a single answer, already formatted. `values` is for an answer that
+ * is genuinely several things — the preferred times — which are listed one per
+ * line rather than joined, because joining them reads as several lessons being
+ * requested rather than alternatives among which one will be accepted.
  */
 export interface SummaryRow {
   readonly step: BookingStep;
   readonly label: string;
   readonly value: string | null;
-  readonly settled?: boolean;
+  readonly values?: readonly string[] | undefined;
+  /** A short qualifier under the value, e.g. 'Any one of these'. */
+  readonly note?: string | undefined;
 }
 
 export interface BookingSummaryProps {
@@ -41,18 +44,15 @@ export interface BookingSummaryProps {
  * means the review screen is the finished state of a thing the parent has
  * watched grow rather than a summary appearing from nowhere at the end.
  *
- * EVERY ANSWERED ROW IS A LINK BACK — except a settled one. Changing an early
- * answer is the commonest thing a parent wants and the most expensive thing to
- * get wrong; going back drops the answers that depended on it, exactly as the
- * URL model already does, so a stale price or a time derived for a different
- * lesson cannot survive.
+ * EVERY ANSWERED ROW IS A LINK BACK. Changing an early answer is the commonest
+ * thing a parent wants and the most expensive thing to get wrong; going back
+ * drops the answers that depended on it, exactly as the URL model already does,
+ * so a stale price or a time derived for a different lesson cannot survive.
  *
- * A SETTLED ANSWER OFFERS NO CHANGE. Following one would land on a screen whose
- * single option is already taken — an action that promises a decision and then
- * cannot deliver one. Where other answers are genuinely possible, they are
- * possible because something EARLIER could differ, and that earlier row is
- * still changeable: a parent who wants a different tutor changes the subject or
- * the child, and the tutors on offer change with it.
+ * That includes a row whose question had only one option, and a row that
+ * arrived prefilled from the entry context. Both are real choices the parent
+ * made, and a parent who wants to reconsider "the only tutor" is exactly the
+ * person who most needs the way back.
  *
  * There is no client state here at all. The rows come from the same
  * `resolveBooking` every screen runs, so what the summary claims and what the
@@ -69,13 +69,9 @@ export function BookingSummary({
   const list = (
     <ol className="flex flex-col">
       {rows.map((row) => {
-        const answered = row.value !== null;
+        const answered = rowIsAnswered(row);
         const isCurrent = row.step === current;
-        const canGoBack =
-          answered &&
-          !isCurrent &&
-          row.settled !== true &&
-          BOOKING_STEPS.indexOf(row.step) < frontier;
+        const canGoBack = answered && !isCurrent && BOOKING_STEPS.indexOf(row.step) < frontier;
 
         return (
           <li
@@ -99,13 +95,22 @@ export function BookingSummary({
                 <span className="block text-xs text-text-muted">{row.label}</span>
                 {answered ? (
                   <span className="block text-sm font-medium text-text-primary">
-                    {row.value}
-                    {row.settled === true ? (
-                      // Said plainly rather than hidden: the parent did not
-                      // choose this, and a summary that implied they had would
-                      // be putting words in their mouth.
-                      <span className="ml-1 font-normal text-text-muted">(only option)</span>
-                    ) : null}
+                    {row.values !== undefined ? (
+                      <>
+                        {row.values.map((entry) => (
+                          <span key={entry} className="block tabular-nums">
+                            {entry}
+                          </span>
+                        ))}
+                        {row.note !== undefined ? (
+                          <span className="mt-0.5 block text-xs font-normal text-text-muted">
+                            {row.note}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      row.value
+                    )}
                   </span>
                 ) : (
                   <span className="block text-sm text-text-muted">

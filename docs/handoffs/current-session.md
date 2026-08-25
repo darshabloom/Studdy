@@ -603,12 +603,14 @@ needing turnaround; widening it would quietly cost bookable time either side of 
 | `pnpm check:rls`                           | green — 28 tables classified          |
 | `pnpm check:boundaries`                    | green                                 |
 | `pnpm build`                               | green — clean rebuild, cache bypassed |
-| Unit                                       | **376 passing, 1 skipped** (was 361)  |
+| Unit                                       | **389 passing, 1 skipped** (was 361)  |
 | Integration                                | **110 passing, 1 skipped**            |
-| `booking-journey.spec.ts`                  | **11 passing** (was 9)                |
+| `booking-journey.spec.ts`                  | **12 passing** (was 9)                |
 
-All after `pnpm db:reset && pnpm db:migrate && pnpm db:seed`. The +15 unit tests are
-`sections.test.ts`; the +2 end-to-end are auto-settling and the mobile accordion.
+All after `pnpm db:reset && pnpm db:migrate && pnpm db:seed`. The +28 unit tests are
+`sections.test.ts` (18) and `time-labels.test.ts` (10); the +3 end-to-end cover the mobile
+accordion, that a one-option question is still asked, and that a chosen time is shown as
+the whole lesson interval.
 
 > **A COMPLETELY GREEN FULL END-TO-END RUN IS STILL REQUIRED BEFORE ANY PR OR MERGE.**
 > Only `booking-journey.spec.ts` was re-run for this pass, deliberately — the owner
@@ -632,52 +634,116 @@ unchanged; no client-side booking draft was introduced.
    section expanded. Only the static summary markup differs between the two widths, each
    copy hidden by `display: none` at the other, so nothing is read twice; the question is
    still rendered once.
-2. **A question with one valid answer is no longer asked.** Child, tutor and length now
-   settle exactly as format already did, in `resolveBooking`. Settled answers are folded
-   back into the returned `params`, so every link built downstream carries them. Visiting a
-   settled step directly forwards to the next open question, so a bookmark cannot resurrect
-   an empty decision. **Subject is deliberately never settled by count** — every subject is
-   a valid answer, so a pre-filled subject came from the entry context, not from us.
-3. **Settled answers offer no `Change`.** Following one would open a screen whose single
-   option is already taken. The route to a different answer is to change something upstream
-   that could genuinely open other options, and those rows stay changeable.
+2. ~~A question with one valid answer is no longer asked.~~ **REVERSED — see below.**
+3. ~~Settled answers offer no `Change`.~~ **REVERSED — see below.**
 4. **Subject copy is one sentence,** in the step description. The `Nothing is saved yet`
    callout is gone; the prominent notice stays on Review, where the write actually happens.
+
+#### THE AUTO-SELECTION RULE WAS REVERSED BY THE OWNER. Do not reinstate it.
+
+An intermediate version of this pass skipped any step whose question had a single valid
+option — one child, one eligible tutor, one length, one format — and marked the answer
+`(only option)` in the summary. **The owner withdrew that rule before merge, and the
+distinction they drew is the thing to remember:**
+
+> `only one option currently matches` is NOT `the parent chose that option`.
+
+Studdy does not make preference decisions on a family's behalf. That Aroha is the only
+tutor teaching this subject at this level is a fact about SUPPLY; it says nothing about
+whom this parent wants, and a parent shown "Aroha is the only tutor" may perfectly well
+decide to browse instead. Skipping the question removes that decision while appearing to
+have made it. The same holds for format: "online only" is a condition of the lesson, and a
+family who needs someone in the room must meet it while going back is still cheap.
+
+**So every step is asked, however few options it has.** The screens stay light and say why
+there is only one — the tutor step names the scarcity and keeps "Browse every tutor"
+beside it; the format row reads "Mei offers this lesson online only". `(only option)` is
+gone, and every answered row offers `Change` again, because every one of them is now a
+choice the parent actually made.
+
+**PREFILLING IS DIFFERENT AND STILL ALLOWED.** An answer already in the URL is there
+because the family did something — `Aroha profile → Book a lesson` IS choosing Aroha — so
+it is carried in, shown in the receipt and accordion, and stays changeable. The rule in one
+line: **prefill an explicit prior choice; never infer one from the fact that only one row
+happens to match.**
+
+`resolveBooking` therefore adds nothing the family did not supply; it only CLEARS answers
+that no longer validate, so a stale tutor or an unpublished price cannot travel forward.
+
+#### 5. A chosen time is shown as the lesson's interval
+
+Starts are offered every fifteen minutes, but the family is not choosing fifteen-minute
+blocks. On the calendar a marker stays compact (`4:15`) because the heading has just said
+how long the lesson is; the moment a time is chosen it leaves that context, so from then on
+it reads as the span the lesson occupies — in the chips under the calendar, the desktop
+receipt, the mobile Times section and Review. `bookingIntervalLabel` in
+`apps/web/src/lib/booking/time-labels.ts` is the single place that decides the wording.
+
+- 60 minutes: `4:00–5:00 pm`, `4:15–5:15 pm`, `4:30–5:30 pm`
+- 90 minutes: `4:00–5:30 pm`
+- crossing midday: `11:30 am–12:30 pm` (the meridiem is said once only when both ends agree)
+
+> **THE MINIMUM GAP IS NEVER IN THE DISPLAYED INTERVAL.** A 60-minute lesson at four
+> o'clock is `4:00–5:00 pm` even where the tutor keeps fifteen minutes clear and cannot
+> take another lesson until 5:15. That gap is scheduling protection for the tutor, not
+> lesson time the family asked for or is paying for.
+
+#### 6. Preferred times read as alternatives
+
+`TIME_OPTIONS_GUIDANCE` is now "Choose one or more times that work for you. The tutor can
+accept one of them." The picker counts "2 preferred times chosen" and adds "These are
+alternatives — Mei can accept any one of them"; the receipt, accordion and Review list each
+interval on its own line under `Any one of these`, never comma-joined. A joined list reads
+as several lessons being requested, which may make a family offer fewer times — the exact
+opposite of what the guidance is for.
+
+**A note on where times appear.** While the family is still picking, the selection lives in
+the picker and only reaches the URL on Continue, so the receipt correctly reads "Not yet"
+mid-selection. It holds intervals once the times are in the URL — on Review, and on the
+times step reached by going Back. This is by design, not a gap in the wiring.
 
 **`minimum_gap_minutes`, the 15-minute grid, 1–5 times, the desktop receipt, Review as its
 completed form, mobile calendar scrolling, the snapshotted gap and effective-interval
 exclusion, the atomic send and the request-not-booking language are all unchanged.**
 
 New: `apps/web/src/lib/booking/sections.ts` (pure — the accordion model, `unaskedSteps`,
-`previousAskedStep`) with `sections.test.ts` (15 tests), and
+`previousAskedStep`), `apps/web/src/lib/booking/time-labels.ts` (pure — the interval
+wording), their two test files, and
 `apps/web/src/components/booking/booking-accordion.tsx`. `previousAskedStep` fixed a real
 bug on the way: the old Back walk stopped at index 0 even when the first step was skipped,
 so Back could land on a question the journey had just decided not to ask.
 
 #### Review screenshots
 
-`S:\Studdy\.review\step4\` (gitignored), **fourteen images**, regenerated for this pass.
-The previously approved set is kept alongside at `S:\Studdy\.review\step4-previous\`.
+`S:\Studdy\.review\step4\` (gitignored), **twenty-two images**, regenerated after the
+auto-selection reversal. The previous set is kept at `S:\Studdy\.review\step4-previous\`.
 
-Numbering follows the journey as it is now actually asked, for a family with one child
-booking Mathematics — where child and tutor both settle:
+Every question is now shown, so the walk is the full journey again:
 
-| Screen                        | Desktop                       | Mobile                     |
-| ----------------------------- | ----------------------------- | -------------------------- |
-| Discovery entry point         | `desktop-0-discovery-entry`   | `mobile-0-discovery-entry` |
-| Subject (first open question) | `desktop-1-subject`           | `mobile-1-subject`         |
-| Lesson length                 | `desktop-2-length`            | `mobile-2-length`          |
-| Format (separate walk)        | `desktop-2b-format`           | —                          |
-| Times, none chosen            | `desktop-3-times-empty`       | `mobile-3-times-empty`     |
-| Times, two chosen             | `desktop-4-times-chosen`      | `mobile-4-times-chosen`    |
-| Review                        | `desktop-5-review`            | `mobile-5-review`          |
-| Tutor minimum gap             | `desktop-6-tutor-minimum-gap` | —                          |
+| Screen                            | Desktop                            | Mobile                            |
+| --------------------------------- | ---------------------------------- | --------------------------------- |
+| Discovery entry point             | `desktop-0-discovery-entry`        | `mobile-0-discovery-entry`        |
+| Child — one option, still asked   | `desktop-1-child`                  | `mobile-1-child`                  |
+| Subject                           | `desktop-2-subject`                | `mobile-2-subject`                |
+| Tutor — one option, reason given  | `desktop-3-tutor-single-option`    | `mobile-3-tutor-single-option`    |
+| Lesson length                     | `desktop-4-length`                 | `mobile-4-length`                 |
+| Format — one option, reason given | `desktop-5-format-single-option`   | `mobile-5-format-single-option`   |
+| Format — two options (other walk) | `desktop-5b-format-two-options`    | —                                 |
+| Times, none chosen                | `desktop-6-times-empty`            | `mobile-6-times-empty`            |
+| Times, two chosen (intervals)     | `desktop-7-times-chosen`           | `mobile-7-times-chosen`           |
+| Review                            | `desktop-8-review`                 | `mobile-8-review`                 |
+| Receipt holding times             | `desktop-9-receipt-with-intervals` | `mobile-9-receipt-with-intervals` |
+| Tutor minimum gap                 | `desktop-10-tutor-minimum-gap`     | —                                 |
 
-There is no `-child` or `-tutor` screenshot **because those questions are no longer put** to
-this family. Both scripts shoot them if a journey does ask them; this account no longer
-does. `desktop-2b-format` comes from a separate walk on a Year 12 student and James's
-Calculus, where the tutor AND the length both settle and the journey lands on format
-directly.
+`-9-receipt-with-intervals` is reached by going BACK from Review, which is the state where
+the receipt itself holds the times. `desktop-5b` comes from a separate walk on a Year 12
+student and James's Calculus, the one seeded version delivered both ways.
+
+Two of these carry the corrections most directly: `*-3-tutor-single-option` shows the sole
+tutor OFFERED with the scarcity named and "Browse every tutor" beside it, and
+`mobile-9-receipt-with-intervals` shows compact quarter-hour markers on the grid
+(`4 pm`, `4:15 pm`) alongside chosen chips reading `Wed 26 Aug · 4:00–5:00 pm` and
+`4:30–5:30 pm`, under "These are alternatives".
 
 > **THREE ENVIRONMENT TRAPS COST REAL TIME HERE. All three present as product bugs.**
 >

@@ -36,29 +36,32 @@ import {
  * depended on it, and the family is sent to the first unanswered step. Silently
  * carrying it would be worse than an error — a stale version id is a price.
  *
- * A QUESTION WITH ONE VALID ANSWER IS NOT A QUESTION. Where the server can see
- * that exactly one child, tutor, length or format is available, it answers on
- * the family's behalf and the step never appears. The answer still shows in the
- * summary, marked, so the parent sees the whole shape of the request — they are
- * simply not asked to click through a decision that was never theirs to make.
+ * ONE ELIGIBLE ROW IS NOT A DECISION THE FAMILY HAS MADE. Studdy never infers a
+ * preference from scarcity: that Aroha is currently the only tutor teaching this
+ * subject at this level says something about supply, not about whom this parent
+ * wants. So a step with a single option is still ASKED — the screen is light,
+ * and says why there is only one — and the parent chooses it, or goes back and
+ * changes something. A parent who sees "Aroha is the only tutor" may well decide
+ * they would rather browse, and skipping the question takes that decision away
+ * while appearing to have made it for them.
  *
- * The one deliberate exception is SUBJECT. Every subject Studdy offers is a
- * valid answer, so there is no "only option" to settle on; a subject arrives
- * pre-answered only when the entry context supplied it explicitly, which is a
- * choice the family already made somewhere else.
+ * PREFILLING IS DIFFERENT, and allowed. An answer already in the URL got there
+ * because the family did something — chose "Book a lesson" on Aroha's profile,
+ * or entered from a subject they had picked. That IS an explicit prior choice,
+ * so it is carried in, shown in the summary, and stays changeable.
+ *
+ * The distinction to hold on to: prefill an explicit prior choice; never infer
+ * one from the fact that only one row happens to match.
  */
-
-/** Steps the server answered because exactly one answer was ever available. */
-export type SettledSteps = ReadonlySet<BookingStep>;
 
 export interface ResolvedBooking {
   readonly context: DiscoveryContext;
   /**
-   * The answers as they now stand, INCLUDING any the server settled.
+   * The answers as they now stand, after validation.
    *
-   * Deliberately not the raw parsed URL: every link the journey builds comes
-   * from here, so a settled answer travels forward exactly as a chosen one
-   * does and no caller has to remember which is which.
+   * Deliberately not the raw parsed URL: an answer that no longer resolves is
+   * cleared here, so no link built downstream can carry a stale tutor or a
+   * price the family was never shown. Nothing is ADDED that they did not give.
    */
   readonly params: BookingParams;
   readonly student: DiscoveryStudent | null;
@@ -84,7 +87,6 @@ export interface ResolvedBooking {
   readonly tutorChoices: readonly PublicTutorRow[];
   /** An existing section for this child and subject, when there is one. */
   readonly existingSection: DiscoverySubjectSection | null;
-  readonly settled: SettledSteps;
   /** The first step whose answer is still missing. */
   readonly nextStep: BookingStep;
 }
@@ -94,18 +96,14 @@ export async function resolveBooking(raw: RawSearchParams): Promise<ResolvedBook
   if (context === null) return null;
 
   const params = parseBookingParams(raw);
-  const settled = new Set<BookingStep>();
 
-  // ---- Child. The only question is whether this user may act for them, and
-  //      where they may act for exactly one child there is nothing to ask.
-  const soleStudent = context.students.length === 1 ? (context.students[0] ?? null) : null;
+  // ---- Child. The only question is whether this user may act for them. -----
+  //      Having one child does not answer it: the parent still says who this
+  //      lesson is for, on a screen that then has one option.
   const student =
-    context.students.find((candidate) => candidate.studentProfileId === params.child) ??
-    soleStudent;
-  if (student !== null && soleStudent !== null) settled.add('child');
+    context.students.find((candidate) => candidate.studentProfileId === params.child) ?? null;
 
   // ---- Subject. Real, active, and named for the review screen. -------------
-  //      Never settled by count: every subject is a valid answer.
   const subjects = student === null ? [] : await listSubjects();
   const subjectRow =
     student === null ? undefined : subjects.find((row) => row.subjectId === params.subject);
@@ -115,37 +113,17 @@ export async function resolveBooking(raw: RawSearchParams): Promise<ResolvedBook
       : { subjectId: subjectRow.subjectId, displayName: subjectRow.displayName };
 
   // ---- Tutor. Who could teach this subject at this student's level. --------
+  //      Listed for the tutor screen; never used to answer it. One eligible
+  //      tutor still means one option shown, not one option assumed.
   const tutorChoices =
     student === null || subject === null ? [] : await eligibleTutors(student, subject.displayName);
-  const soleTutorReference =
-    tutorChoices.length === 1 ? (tutorChoices[0]?.tutorReference ?? null) : null;
 
-  /**
-   * Resolved through the bookable allow-list, which is the authority — the
-   * public search above only decides WHICH tutor to put to it, never whether
-   * that tutor may be booked.
-   *
-   * The retry exists for one narrow case: a stale or edited `tutor` parameter
-   * where the subject has only one tutor anyway. Without it the family would be
-   * shown a tutor step listing a single option, which is exactly the fake
-   * decision this resolution is meant to remove.
-   */
-  const requested = params.tutor ?? soleTutorReference;
-  let services =
-    subject === null || requested === null
+  // Resolved through the bookable allow-list, which is the authority — the
+  // public search above never decides whether a tutor may be booked.
+  const services =
+    subject === null || params.tutor === null
       ? null
-      : await listBookableServices({ tutorReference: requested, subjectId: subject.subjectId });
-  if (
-    services === null &&
-    subject !== null &&
-    soleTutorReference !== null &&
-    requested !== soleTutorReference
-  ) {
-    services = await listBookableServices({
-      tutorReference: soleTutorReference,
-      subjectId: subject.subjectId,
-    });
-  }
+      : await listBookableServices({ tutorReference: params.tutor, subjectId: subject.subjectId });
   const tutor =
     services === null
       ? null
@@ -155,30 +133,20 @@ export async function resolveBooking(raw: RawSearchParams): Promise<ResolvedBook
           firstName: services.tutorFirstName,
           versions: services.versions,
         };
-  if (tutor !== null && soleTutorReference !== null) settled.add('tutor');
 
   // ---- Length. Must be one of THIS tutor's versions for THIS subject. ------
-  //      A tutor who publishes one length is not offering a choice of length.
-  const soleVersion =
-    tutor !== null && tutor.versions.length === 1 ? (tutor.versions[0] ?? null) : null;
   const version =
     tutor === null
       ? null
-      : (tutor.versions.find((row) => row.serviceVersionId === params.version) ?? soleVersion);
-  if (version !== null && soleVersion !== null) settled.add('length');
+      : (tutor.versions.find((row) => row.serviceVersionId === params.version) ?? null);
 
   // ---- Format. Only what the chosen version can actually be delivered as. --
+  //      A version delivered one way still asks: "online only" is something the
+  //      family should see and accept, not a detail decided behind them. Some
+  //      parents need in person, and being moved past the question silently is
+  //      how they find out too late.
   const formats = version === null ? [] : formatsForVersion(version);
-  const format =
-    params.format !== null && formats.includes(params.format)
-      ? params.format
-      : // Exactly one possibility is not a question. Carrying it forward here
-        // means the format step can be skipped without any other code having to
-        // know that it sometimes does not exist.
-        formats.length === 1
-        ? (formats[0] ?? null)
-        : null;
-  if (format !== null && formats.length === 1) settled.add('format');
+  const format = params.format !== null && formats.includes(params.format) ? params.format : null;
 
   // ---- Times. Instants, kept only while everything they depend on holds. ---
   const times =
@@ -200,8 +168,8 @@ export async function resolveBooking(raw: RawSearchParams): Promise<ResolvedBook
 
   return {
     context,
-    // Settled answers folded back in, so every href built downstream carries
-    // them and a settled step is never re-derived by accident.
+    // Only answers that survived validation, so a dropped one cannot travel
+    // forward in a link. Nothing is added here that the family did not supply.
     params: {
       ...params,
       child: student?.studentProfileId ?? null,
@@ -219,7 +187,6 @@ export async function resolveBooking(raw: RawSearchParams): Promise<ResolvedBook
     times,
     tutorChoices,
     existingSection,
-    settled,
     nextStep: firstUnanswered({ student, subject, tutor, version, format, times }),
   };
 }

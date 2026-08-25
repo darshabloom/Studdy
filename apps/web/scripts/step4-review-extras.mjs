@@ -147,7 +147,7 @@ for (const [prefix, viewport] of [
   }
 
   await formatQuestion.waitFor({ timeout: 30_000 });
-  await shoot(page, 'desktop-2b-format');
+  await shoot(page, 'desktop-5b-format-two-options');
   await context.close();
 }
 
@@ -162,7 +162,7 @@ for (const [prefix, viewport] of [
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 });
   await page.goto(`${BASE}/tutor/availability`);
   await page.getByRole('heading', { name: 'Your availability' }).waitFor({ timeout: 30_000 });
-  await shoot(page, 'desktop-6-tutor-minimum-gap');
+  await shoot(page, 'desktop-10-tutor-minimum-gap');
   await context.close();
 }
 

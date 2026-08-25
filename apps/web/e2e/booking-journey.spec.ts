@@ -15,10 +15,14 @@ import { clickUntilNavigated } from './helpers/navigation';
  *   * EXACT START TIMES STAY DISTINCT. The read-only calendars merge contiguous
  *     slots into bands; this one must not, because four o'clock and half past
  *     four are the choice being made.
- *   * A QUESTION WITH ONE ANSWER IS NEVER ASKED. This account has one child, and
- *     one tutor teaches English at that level, so both are settled by the server
- *     — they still appear in the summary, marked, but offer no choice and no
- *     `Change`, because following one could not produce a different answer.
+ *   * A QUESTION WITH ONE ANSWER IS STILL ASKED. This account has one child and
+ *     one English tutor at that level, and both are still put to the parent —
+ *     on a light screen that says why there is one option. That only one row is
+ *     eligible is a fact about supply, and inferring a preference from it would
+ *     take a decision away while appearing to have made it for them.
+ *   * A CHOSEN TIME IS SHOWN AS AN INTERVAL. Starts are offered every fifteen
+ *     minutes, but the family is asking for a whole lesson, so once chosen a
+ *     time reads `4:00–5:00 pm` — never padded by the tutor's minimum gap.
  */
 const supabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL !== undefined;
 const SEEDED_PASSWORD = 'Studdy-local-only-1';
@@ -84,12 +88,12 @@ async function ensureStudent(page: Page): Promise<void> {
 }
 
 /**
- * Open the wizard at the subject question.
+ * Open the wizard and answer the child question.
  *
- * With one child on the account the child question is settled and never shown.
- * This tolerates both shapes rather than hard-coding one: a retry, or a second
- * student left behind by an earlier run, would otherwise fail here for a reason
- * that has nothing to do with what is being tested.
+ * The question is asked even though this account has one child, so this always
+ * answers it rather than branching. It still tolerates arriving straight at the
+ * subject, because a URL carrying a valid child prefills it — a prefilled
+ * answer IS allowed, being a choice the parent already made elsewhere.
  */
 async function openAtSubject(page: Page): Promise<void> {
   await page.goto('/book');
@@ -104,22 +108,33 @@ async function openAtSubject(page: Page): Promise<void> {
   });
 }
 
-/**
- * Walk as far as the times step, choosing the given lesson length.
- *
- * Subject then length: the tutor question is skipped because only Mei teaches
- * English at this level, and the format question because she teaches it online
- * only. Both still show in the summary.
- */
+/** Walk as far as the times step, choosing the given lesson length. */
 async function walkToTimes(page: Page, length: RegExp): Promise<void> {
   await openAtSubject(page);
 
   await clickUntilNavigated(page, page.getByRole('link', { name: SUBJECT, exact: false }).first());
+
+  // Mei is the only English tutor at this level, and the screen says so — but
+  // the parent still chooses her.
+  await expect(page.getByRole('heading', { name: /Who should teach/ })).toBeVisible({
+    timeout: 15_000,
+  });
+  await clickUntilNavigated(page, page.getByRole('link', { name: new RegExp(TUTOR) }).first());
+
   await expect(page.getByRole('heading', { name: /How long should the lesson/ })).toBeVisible({
     timeout: 15_000,
   });
-
   await page.getByRole('link', { name: length }).first().click();
+
+  // Online only, and still confirmed rather than assumed.
+  await expect(page.getByRole('heading', { name: /Online or in person/ })).toBeVisible({
+    timeout: 15_000,
+  });
+  await page
+    .getByRole('link', { name: /^Online/ })
+    .first()
+    .click();
+
   await expect(page.getByRole('heading', { name: /When would suit/ })).toBeVisible({
     timeout: 15_000,
   });
@@ -156,6 +171,7 @@ test.describe('the parent booking journey', () => {
       page,
       page.getByRole('link', { name: SUBJECT, exact: false }).first(),
     );
+    await clickUntilNavigated(page, page.getByRole('link', { name: new RegExp(TUTOR) }).first());
 
     // This tutor publishes two lengths, so it is a real choice rather than a
     // screen with one option clicked through.
@@ -169,12 +185,56 @@ test.describe('the parent booking journey', () => {
       .first()
       .click();
 
-    // Mei teaches online only, so the format question never had to be asked.
+    // Mei teaches online only — and the parent is told that and accepts it,
+    // rather than being moved past a condition of the lesson.
+    await expect(page.getByRole('heading', { name: /Online or in person/ })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText(/offers this lesson online only/)).toBeVisible();
+    await page
+      .getByRole('link', { name: /^Online/ })
+      .first()
+      .click();
+
     await expect(page.getByRole('heading', { name: /When would suit/ })).toBeVisible({
       timeout: 15_000,
     });
     await expect(page.getByRole('heading', { name: /90 minutes/ })).toBeVisible();
-    await expect(page.getByText(/Choose one or more times that work for you/)).toBeVisible();
+    await expect(page.getByText(/The tutor can accept one of them/)).toBeVisible();
+  });
+
+  /**
+   * The correction that matters most here.
+   *
+   * Studdy must not read a preference off scarcity. One eligible tutor means
+   * one option SHOWN, with a reason — a parent may well look at "the only
+   * tutor" and decide to browse instead, and skipping the question would take
+   * that decision away while looking like it had been made.
+   */
+  test('still asks a question that has only one valid answer', async ({ page }) => {
+    await signIn(page, FAMILY);
+    await ensureStudent(page);
+
+    // One child on the account, and the question is still put.
+    await page.goto('/book');
+    await expect(page).toHaveURL(/\/book\/child/, { timeout: 15_000 });
+    await expect(page.getByRole('link', { name: new RegExp(STUDENT) })).toBeVisible();
+    await clickUntilNavigated(page, page.getByRole('link', { name: new RegExp(STUDENT) }).first());
+
+    // One English tutor at this level, and the question is still put — with the
+    // scarcity stated, and a way out of it offered.
+    await clickUntilNavigated(
+      page,
+      page.getByRole('link', { name: SUBJECT, exact: false }).first(),
+    );
+    await expect(page).toHaveURL(/\/book\/tutor/, { timeout: 15_000 });
+    await expect(page.getByText(/is the only tutor teaching/)).toBeVisible();
+    await expect(page.getByRole('link', { name: /Browse every tutor/ })).toBeVisible();
+
+    // And nothing was decided on the parent's behalf on the way here: the tutor
+    // row is still empty until they choose.
+    const summary = page.getByRole('complementary', { name: 'Your request so far' });
+    await expect(summary.getByText('(only option)')).toHaveCount(0);
   });
 
   test('offers distinct start times rather than merged bands', async ({ page }) => {
@@ -258,28 +318,20 @@ test.describe('the parent booking journey', () => {
     }
 
     /**
-     * The three questions never asked still appear, each marked: one child, one
-     * English tutor at this level, and Mei teaches online only. The parent chose
-     * none of them, and a summary crediting them with the decisions would be
-     * putting words in their mouth.
+     * NOTHING IS MARKED AS DECIDED FOR THEM, because nothing was. Every answer
+     * on this list is one the parent gave, including the ones whose question
+     * had a single option.
      */
-    await expect(summary.getByText('(only option)')).toHaveCount(3);
+    await expect(summary.getByText('(only option)')).toHaveCount(0);
 
-    /**
-     * AND NONE OF THEM OFFERS A CHANGE.
-     *
-     * A `Change` on a settled answer would open a screen with one option already
-     * taken — an action promising a decision it cannot deliver. The way to a
-     * different tutor is to change the subject, which is offered.
-     */
-    for (const settled of ['Who for', 'Tutor', 'Online or in person']) {
+    // And every one of them offers a way back — especially the single-option
+    // ones, since a parent reconsidering "the only tutor" needs it most.
+    for (const answered of ['Who for', 'Subject', 'Tutor', 'Online or in person']) {
       await expect(
-        summary.getByRole('link', { name: new RegExp(`Change ${settled}`) }),
-      ).toHaveCount(0);
+        summary.getByRole('link', { name: new RegExp(`Change ${answered}`) }),
+      ).toBeVisible();
     }
-    await expect(summary.getByRole('link', { name: /Change Subject/ })).toBeVisible();
 
-    // And an answer the parent really made is one click from being changed.
     await summary.getByRole('link', { name: /Change Lesson length/ }).click();
     await expect(page.getByRole('heading', { name: /How long should the lesson/ })).toBeVisible({
       timeout: 15_000,
@@ -287,35 +339,65 @@ test.describe('the parent booking journey', () => {
   });
 
   /**
-   * The parent is never made to click through a decision that was not theirs.
+   * A chosen time is a lesson, not a fifteen-minute slot.
    *
-   * Asserted as navigation rather than as absence of markup: the proof is that
-   * the journey never STOPS on those questions, whatever the screens contain.
+   * The grid offers starts every quarter hour because that is the granularity
+   * that is bookable. The moment one is chosen it leaves that context — into a
+   * receipt, a row, a review screen — so it is written as the span the lesson
+   * occupies. Anything less invites a parent to think they asked for fifteen
+   * minutes.
    */
-  test('does not ask a question that has only one valid answer', async ({ page }) => {
+  test('shows a chosen time as the whole lesson interval', async ({ page }) => {
     await signIn(page, FAMILY);
     await ensureStudent(page);
+    await walkToTimes(page, /60 minutes/);
 
-    // One child on the account, so the wizard opens on the subject.
-    await page.goto('/book');
-    await expect(page).toHaveURL(/\/book\/subject/, { timeout: 15_000 });
+    const slots = page.getByRole('group', { name: /Bookable times for/ }).getByRole('button');
+    await expect(slots.first()).toBeVisible({ timeout: 15_000 });
 
-    // One English tutor at this level, so choosing the subject lands on length.
-    await clickUntilNavigated(
-      page,
-      page.getByRole('link', { name: SUBJECT, exact: false }).first(),
-    );
-    await expect(page).toHaveURL(/\/book\/length/, { timeout: 15_000 });
+    /**
+     * A 60-minute lesson, so an interval an hour wide — never the start alone,
+     * and never padded by the gap the tutor keeps afterwards.
+     *
+     * The calendar's own markers stay compact (`4:15`) because the heading has
+     * just said how long the lesson is. Everything a chosen time travels INTO
+     * has lost that context, so the interval is asserted there.
+     */
+    const interval = /\d{1,2}:\d{2}–\d{1,2}:\d{2}\s?(am|pm)/;
 
-    // Both settled answers are still on screen — skipped is not hidden.
+    await slots.first().click();
+    await expect(page.getByText(/1 preferred time chosen/)).toBeVisible();
+    await expect(page.getByText(interval).first()).toBeVisible();
+
+    // A second choice reads as an alternative, not a second lesson.
+    await slots.nth(2).click();
+    await expect(page.getByText(/2 preferred times chosen/)).toBeVisible();
+    await expect(page.getByText(/can accept any one of them/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByRole('heading', { name: /Check this over/ })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // Review says the same thing, in the same shape, and says outright that
+    // they are alternatives where a bare list of two would not.
+    await expect(page.getByText('Any one of these')).toBeVisible();
+    await expect(page.getByText(interval).first()).toBeVisible();
+
+    /**
+     * And so does the persistent receipt.
+     *
+     * Reached by going BACK, which is the state where the receipt genuinely
+     * holds times: while the family is still picking, the selection lives in
+     * the picker and only reaches the URL on Continue — so a receipt reading
+     * "Not yet" mid-selection is correct, not a gap in the wiring.
+     */
+    await clickUntilNavigated(page, page.getByRole('link', { name: '← Back' }));
+    await expect(page).toHaveURL(/\/book\/times/, { timeout: 15_000 });
+
     const summary = page.getByRole('complementary', { name: 'Your request so far' });
-    await expect(summary.getByText(STUDENT, { exact: false }).first()).toBeVisible();
-    await expect(summary.getByText(TUTOR, { exact: false }).first()).toBeVisible();
-
-    // Reached directly, a settled question still refuses to present itself as a
-    // choice: a bookmark or a typed URL must not resurrect the empty decision.
-    await page.goto('/book/child');
-    await expect(page).not.toHaveURL(/\/book\/child/, { timeout: 15_000 });
+    await expect(summary.getByText(interval).first()).toBeVisible();
+    await expect(summary.getByText('Any one of these')).toBeVisible();
   });
 
   /**
@@ -335,6 +417,7 @@ test.describe('the parent booking journey', () => {
       page,
       page.getByRole('link', { name: SUBJECT, exact: false }).first(),
     );
+    await clickUntilNavigated(page, page.getByRole('link', { name: new RegExp(TUTOR) }).first());
     await expect(page.getByRole('heading', { name: /How long should the lesson/ })).toBeVisible({
       timeout: 15_000,
     });
@@ -347,15 +430,14 @@ test.describe('the parent booking journey', () => {
     await expect(openSections).toHaveCount(1);
     await expect(openSections).toHaveText('Lesson length');
 
-    // A completed section shows its answer while collapsed.
+    // Completed sections show their answers while collapsed, and every one of
+    // them reopens — including the tutor, whose question had a single option.
     const subjectSection = page.getByRole('link', { name: new RegExp(`Subject.*${SUBJECT}`, 's') });
     await expect(subjectSection).toBeVisible();
-
-    // A settled one shows its answer and does not pretend to open.
-    await expect(page.getByText('(only option)').first()).toBeVisible();
-    await expect(page.getByRole('link', { name: new RegExp(`Tutor.*${TUTOR}`, 's') })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByRole('link', { name: new RegExp(`Tutor.*${TUTOR}`, 's') }),
+    ).toBeVisible();
+    await expect(page.getByText('(only option)')).toHaveCount(0);
 
     // Tapping a completed section opens it — and closes the one that was open.
     await clickUntilNavigated(page, subjectSection);
@@ -423,7 +505,7 @@ test.describe('the parent booking journey', () => {
     const slots = page.getByRole('group', { name: /Bookable times for/ }).getByRole('button');
     await expect(slots.first()).toBeVisible({ timeout: 15_000 });
     await slots.first().click();
-    await expect(page.getByText(/1 time chosen/)).toBeVisible();
+    await expect(page.getByText(/1 preferred time chosen/)).toBeVisible();
     await page.getByRole('button', { name: 'Continue' }).click();
 
     await expect(page.getByRole('heading', { name: /Check this over/ })).toBeVisible({

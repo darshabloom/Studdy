@@ -7,9 +7,8 @@ import type { SummaryRow } from '@/components/booking/booking-summary';
  * The accordion and the Back link, without a database.
  *
  * These are the rules a family actually feels — which section is open, which
- * one reopens when tapped, and which questions were never asked at all — so
- * they are worth pinning down independently of what any particular tutor
- * happens to publish.
+ * one reopens when tapped — so they are worth pinning down independently of
+ * what any particular tutor happens to publish.
  */
 
 const PARAMS: BookingParams = {
@@ -24,12 +23,18 @@ const PARAMS: BookingParams = {
 
 function rows(overrides: Partial<Record<BookingStep, Partial<SummaryRow>>> = {}): SummaryRow[] {
   const base: SummaryRow[] = [
-    { step: 'child', label: 'Who for', value: 'Fox', settled: false },
-    { step: 'subject', label: 'Subject', value: 'Mathematics', settled: false },
-    { step: 'tutor', label: 'Tutor', value: 'Aroha', settled: false },
-    { step: 'length', label: 'Lesson length', value: '60 minutes · $40.00', settled: false },
-    { step: 'format', label: 'Online or in person', value: 'Online', settled: false },
-    { step: 'times', label: 'Time', value: 'Tue 1 Sep, 4:00 pm', settled: false },
+    { step: 'child', label: 'Who for', value: 'Fox' },
+    { step: 'subject', label: 'Subject', value: 'Mathematics' },
+    { step: 'tutor', label: 'Tutor', value: 'Aroha' },
+    { step: 'length', label: 'Lesson length', value: '60 minutes · $40.00' },
+    { step: 'format', label: 'Online or in person', value: 'Online' },
+    {
+      step: 'times',
+      label: 'Preferred times',
+      value: null,
+      values: ['Tue 1 Sep · 4:00–5:00 pm', 'Tue 1 Sep · 4:30–5:30 pm'],
+      note: 'Any one of these',
+    },
   ];
   return base.map((row) => ({ ...row, ...(overrides[row.step] ?? {}) }));
 }
@@ -77,60 +82,74 @@ describe('bookingSections', () => {
   });
 
   /**
-   * The heart of it: a settled answer is shown but not offered as a choice.
-   * Following it would land on a screen with one option already taken.
+   * The correction that matters. A question with one eligible option is still
+   * the parent's to answer, so its row is an ordinary answered row: no marker,
+   * and a way back like any other. Scarcity is a fact about supply, not a
+   * preference this family expressed.
    */
-  it('shows a settled answer without offering to change it', () => {
-    const sections = bookingSections(
-      rows({ tutor: { settled: true }, length: { settled: true } }),
-      'times',
-      PARAMS,
+  it('offers every completed answer back, however few options it had', () => {
+    const sections = bookingSections(rows(), 'times', PARAMS);
+
+    for (const step of ['child', 'subject', 'tutor', 'length', 'format'] as const) {
+      expect(sections.find((section) => section.step === step)?.href).not.toBeNull();
+    }
+  });
+
+  /** Times are alternatives, and are carried as separate entries to stay so. */
+  it('keeps each preferred time as its own entry, with its full interval', () => {
+    const times = bookingSections(rows(), 'review', PARAMS).find(
+      (section) => section.step === 'times',
     );
 
-    const tutor = sections.find((section) => section.step === 'tutor');
-    expect(tutor?.value).toBe('Aroha');
-    expect(tutor?.settled).toBe(true);
-    expect(tutor?.href).toBeNull();
+    expect(times?.values).toEqual(['Tue 1 Sep · 4:00–5:00 pm', 'Tue 1 Sep · 4:30–5:30 pm']);
+    expect(times?.note).toBe('Any one of these');
+  });
 
-    expect(sections.find((section) => section.step === 'length')?.href).toBeNull();
-    // An answer the family really made is still changeable beside it.
-    expect(sections.find((section) => section.step === 'subject')?.href).not.toBeNull();
+  it('counts a multi-value answer as answered', () => {
+    const sections = bookingSections(rows(), 'review', PARAMS);
+    expect(sections.find((section) => section.step === 'times')?.href).not.toBeNull();
   });
 
   it('treats every answered section as complete once the family reaches review', () => {
     const sections = bookingSections(rows(), 'review', PARAMS);
     expect(sections.every((section) => section.state === 'complete')).toBe(true);
   });
+
+  it('shows an unanswered question as upcoming, with nothing behind it', () => {
+    const sections = bookingSections(rows({ length: { value: null } }), 'length', PARAMS);
+    const length = sections.find((section) => section.step === 'length');
+
+    expect(length?.value).toBeNull();
+    expect(length?.href).toBeNull();
+  });
 });
 
 describe('unaskedSteps', () => {
-  it('counts a settled answer as a question that was never put', () => {
-    const unasked = unaskedSteps(rows({ child: { settled: true }, tutor: { settled: true } }));
-    expect([...unasked].sort()).toEqual(['child', 'tutor']);
+  /** Nothing is inferred: a one-option question is still asked. */
+  it('infers nothing from the answers themselves', () => {
+    expect([...unaskedSteps(rows())]).toEqual([]);
   });
 
-  it('also honours a step the caller already knows will not appear', () => {
-    const unasked = unaskedSteps(rows({ child: { settled: true } }), ['format']);
-    expect([...unasked].sort()).toEqual(['child', 'format']);
+  it('honours only what a caller states outright', () => {
+    expect([...unaskedSteps(rows(), ['format'])]).toEqual(['format']);
   });
 });
 
 describe('previousAskedStep', () => {
-  it('walks back to the previous real question', () => {
+  it('walks back to the previous question', () => {
     expect(previousAskedStep('times', new Set())).toBe('format');
   });
 
-  it('steps over questions the family was never asked', () => {
+  it('steps over a question the caller declared unasked', () => {
     expect(previousAskedStep('times', new Set<BookingStep>(['format', 'length']))).toBe('tutor');
   });
 
   /**
-   * The case that made this worth extracting. When everything before a step was
-   * settled there is nowhere to go back TO, and Back must disappear rather than
-   * land on the first screen — which would be a one-option question the journey
-   * has just finished deciding not to ask.
+   * The case that made this worth extracting: the old walk stopped at index 0
+   * even when the first step was skipped, and Back then landed on a question
+   * the journey had never shown.
    */
-  it('reports no previous step when every earlier question was settled', () => {
+  it('reports no previous step when every earlier question was skipped', () => {
     const unasked = new Set<BookingStep>(['child', 'subject', 'tutor', 'length', 'format']);
     expect(previousAskedStep('times', unasked)).toBeNull();
   });

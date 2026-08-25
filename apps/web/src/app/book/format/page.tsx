@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
-import { bookingHref, paramsUpTo, type RawSearchParams } from '@/lib/booking/draft';
+import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
 import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
 
@@ -19,12 +19,14 @@ const COPY = {
 } as const;
 
 /**
- * Online or in person — asked only when it is genuinely a question.
+ * Online or in person — always asked, even when the answer can only be one.
  *
- * A tutor's service version may permit one format or both. Where it permits
- * one, `resolveBooking` has already settled the answer and the length step
- * links straight past this screen: showing a page with a single option and no
- * decision would be a step that exists to be clicked through.
+ * A tutor's service version may permit one format or both, and where it permits
+ * one this screen shows that one and says why. It is deliberately NOT skipped:
+ * "online only" is a condition of the lesson, and a family who needs someone in
+ * the room should meet that fact here, while going back is cheap, rather than
+ * discover it after a request has been sent. One eligible option is a fact
+ * about the tutor; accepting it is still the parent's to do.
  *
  * The answer is always CONCRETE. `either` is a tutor's permission, never a
  * family's choice, and `validateFanOut` refuses it — a lesson happens one way
@@ -42,13 +44,6 @@ export default async function BookFormatPage({
     redirect(bookingHref(booking.nextStep, booking.params));
   }
 
-  // Settled where the chosen version is delivered only one way. The length
-  // screen links straight past this, but a bookmark or a typed URL can still
-  // arrive here, and it must not present a single option as a decision.
-  if (booking.settled.has('format')) {
-    redirect(bookingHref(booking.nextStep, paramsUpTo(booking.nextStep, booking.params)));
-  }
-
   const { tutor, version, formats, params } = booking;
   if (tutor === null || version === null) {
     redirect(
@@ -62,7 +57,11 @@ export default async function BookFormatPage({
       params={params}
       rows={summaryRows(booking)}
       title="Online or in person?"
-      description={`${tutor.firstName} teaches this lesson either way.`}
+      description={
+        formats.length === 1
+          ? `This is the only way ${tutor.firstName} teaches this lesson. Confirm it works for you, or go back and choose a different length or tutor.`
+          : `${tutor.firstName} teaches this lesson either way.`
+      }
     >
       <ChoiceList
         ariaLabel="Lesson format"
@@ -76,7 +75,12 @@ export default async function BookFormatPage({
             format,
           }),
           title: COPY[format].title,
-          detail: COPY[format].detail,
+          // Where it is the only option, the row says so itself — the choice
+          // and the reason for it should not be a paragraph apart.
+          detail:
+            formats.length === 1
+              ? `${tutor.firstName} offers this lesson ${format === 'online' ? 'online' : 'in person'} only. ${COPY[format].detail}`
+              : COPY[format].detail,
           selected: format === params.format,
         }))}
         empty={

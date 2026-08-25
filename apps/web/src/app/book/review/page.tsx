@@ -7,22 +7,9 @@ import { bookingAvailability, stillBookable } from '@/lib/booking/availability';
 import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
 import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
-import { PLATFORM_TIME_ZONE } from '@/lib/time';
+import { bookingIntervalLabel } from '@/lib/booking/time-labels';
 
 export const metadata = { title: 'Review your request' };
-
-function timeLabel(at: Date): string {
-  return new Intl.DateTimeFormat('en-NZ', {
-    timeZone: PLATFORM_TIME_ZONE,
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-    .format(at)
-    .replace(',', '');
-}
 
 export default async function BookReviewPage({
   searchParams,
@@ -36,8 +23,7 @@ export default async function BookReviewPage({
     redirect(bookingHref(booking.nextStep, booking.params));
   }
 
-  const { student, subject, tutor, version, format, times, params, formats, existingSection } =
-    booking;
+  const { student, subject, tutor, version, format, times, params, existingSection } = booking;
   if (
     student === null ||
     subject === null ||
@@ -61,7 +47,7 @@ export default async function BookReviewPage({
       step="review"
       params={params}
       rows={rows}
-      skipped={formats.length === 1 ? ['format'] : []}
+
       title="Check this over before you send"
       description={`Nothing is booked yet. ${tutor.firstName} will be asked, and can accept one of your times or decline.`}
     >
@@ -83,8 +69,8 @@ export default async function BookReviewPage({
           {/* Says the time has gone, and nothing about why. A tutor's diary, a
               private block and ordinary time off must stay indistinguishable. */}
           <Alert tone="warning" title="One of your times is no longer available">
-            {lost.map(timeLabel).join(', ')} can no longer be requested. The rest will still be
-            sent, or you can{' '}
+            {lost.map((at) => bookingIntervalLabel(at, version.durationMinutes)).join(', ')} can no
+            longer be requested. The rest will still be sent, or you can{' '}
             <a
               href={bookingHref('times', {
                 child: params.child,

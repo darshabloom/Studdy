@@ -188,11 +188,20 @@ export function TimePicker({
       <div className="rounded-[var(--radius-medium)] border border-surface-border bg-surface-card-secondary p-4">
         <p className="text-sm font-semibold text-text-primary">
           {selected.length === 0
-            ? 'No times chosen yet'
-            : `${String(selected.length)} time${selected.length === 1 ? '' : 's'} chosen`}
+            ? 'No preferred times chosen yet'
+            : `${String(selected.length)} preferred time${selected.length === 1 ? '' : 's'} chosen`}
         </p>
+        {selected.length > 1 ? (
+          // The one thing a list of times gets misread as. Said here, beside
+          // the list itself, not only in the guidance above the calendar.
+          <p className="mt-0.5 text-xs text-text-muted">
+            These are alternatives — {tutorName} can accept any one of them.
+          </p>
+        ) : null}
         {selected.length > 0 ? (
-          <ul className="mt-2 flex flex-wrap gap-1.5">
+          // One per line, not wrapped inline: each chip is now a full interval,
+          // and several of them flowing together read as one long span.
+          <ul className="mt-2 flex flex-col items-start gap-1.5">
             {selected.map((iso) => (
               <li key={iso}>
                 <button

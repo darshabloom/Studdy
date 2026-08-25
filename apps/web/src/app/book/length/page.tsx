@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { BookingShell } from '@/components/booking/booking-shell';
 import { ChoiceEmpty, ChoiceList } from '@/components/booking/choice-list';
 import { formatsForVersion } from '@studdy/database';
-import { bookingHref, paramsUpTo, type RawSearchParams } from '@/lib/booking/draft';
+import { bookingHref, type RawSearchParams } from '@/lib/booking/draft';
 import { summaryRows } from '@/lib/booking/summary';
 import { resolveBooking, stepIsReachable } from '@/lib/booking/resolve';
 
@@ -34,31 +34,21 @@ export default async function BookLengthPage({
     redirect(bookingHref(booking.nextStep, booking.params));
   }
 
-  // This tutor publishes one length for this subject, so the length is a fact
-  // about them rather than a decision for the family.
-  if (booking.settled.has('length')) {
-    redirect(bookingHref(booking.nextStep, paramsUpTo(booking.nextStep, booking.params)));
-  }
-
   const { tutor, params } = booking;
   if (tutor === null)
     redirect(bookingHref('tutor', { child: params.child, subject: params.subject }));
-
-  // Knowable here, and worth knowing: if not one of this tutor's versions can
-  // be delivered both ways, the format question will never be asked, and the
-  // rail should not promise a step that is not coming.
-  const formatAlwaysSettled = tutor.versions.every(
-    (candidate) => formatsForVersion(candidate).length === 1,
-  );
 
   return (
     <BookingShell
       step="length"
       params={params}
       rows={summaryRows(booking)}
-      skipped={formatAlwaysSettled ? ['format'] : []}
       title={`How long should the lesson with ${tutor.firstName} be?`}
-      description={`These are the lessons ${tutor.firstName} offers for this subject.`}
+      description={
+        tutor.versions.length === 1
+          ? `${tutor.firstName} offers one length for this subject. Confirm it to carry on.`
+          : `These are the lessons ${tutor.firstName} offers for this subject.`
+      }
     >
       <ChoiceList
         ariaLabel="Lesson lengths"
@@ -66,14 +56,17 @@ export default async function BookLengthPage({
           const formats = formatsForVersion(version);
           return {
             key: version.serviceVersionId,
-            // Where the tutor delivers this version only one way, the format
-            // answer is settled here and the format step never appears.
-            href: bookingHref(formats.length === 1 ? 'times' : 'format', {
+            /*
+             * Always to the format question, even where this version is
+             * delivered one way. "Online only" is something the family should
+             * see and accept — a parent who needs in person must find that out
+             * here rather than after the request has gone.
+             */
+            href: bookingHref('format', {
               child: params.child,
               subject: params.subject,
               tutor: params.tutor,
               version: version.serviceVersionId,
-              format: formats.length === 1 ? (formats[0] ?? null) : null,
             }),
             title: `${String(version.durationMinutes)} minutes`,
             detail:

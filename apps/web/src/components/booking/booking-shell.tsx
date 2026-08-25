@@ -11,10 +11,11 @@ export interface BookingShellProps {
   /** The request so far, from `summaryRows`. */
   readonly rows: readonly SummaryRow[];
   /**
-   * Steps known in advance never to be asked, beyond those already settled.
-   * The length screen uses it: a tutor delivering every lesson a single way
-   * will never raise the format question, and the journey should not promise a
-   * step that is not coming.
+   * Steps this journey states outright it will not ask.
+   *
+   * Nothing is inferred into this any more — a question with one option is
+   * still asked — but the prop stays so a screen that genuinely knows a step is
+   * unreachable can say so rather than promise it.
    */
   readonly skipped?: readonly BookingStep[];
   readonly title: string;
