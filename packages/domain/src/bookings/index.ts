@@ -20,6 +20,20 @@ export {
   type ValidatedFanOut,
 } from './fan-out';
 export {
+  durationChoices,
+  formatChoices,
+  resolveFanOutEligibility,
+  exclusionLabel,
+  type DurationChoice,
+  type EligibilityCandidate,
+  type EligibilityVersion,
+  type ExcludedTutor,
+  type ExclusionReason,
+  type FanOutEligibility,
+  type FormatChoice,
+  type IncludedTutor,
+} from './fan-out-eligibility';
+export {
   ILR_STATUSES,
   TUTOR_REQUEST_STATUSES,
   RESERVATION_STATUSES,

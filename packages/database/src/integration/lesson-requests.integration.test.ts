@@ -169,6 +169,42 @@ const future = (hours: number): Date => {
  */
 const altStart = (start: Date): Date => new Date(start.getTime() + 24 * 60 * 60 * 1000);
 
+/**
+ * Publish a second version for a tutor who already has one.
+ *
+ * The base fixture gives every tutor sixty minutes online, so a mixed-length or
+ * wrong-format request cannot be built from it — and a guard nothing can
+ * violate is a guard nothing proves.
+ */
+async function addVersion(
+  tutorProfileId: string,
+  durationMinutes: number,
+  formatCode?: string,
+): Promise<string> {
+  const { sql, db } = createDatabaseClient();
+  try {
+    const [service] = await db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.tutorProfileId, tutorProfileId));
+
+    const [version] = await db
+      .insert(serviceVersions)
+      .values({
+        serviceId: service!.id,
+        durationMinutes,
+        priceAmountMinor: 6500n,
+        currencyCode: 'NZD',
+        ...(formatCode === undefined ? {} : { formatCode }),
+      })
+      .returning({ id: serviceVersions.id });
+
+    return version!.id;
+  } finally {
+    await sql.end();
+  }
+}
+
 describe.skipIf(!available)('intended lesson requests (integration)', () => {
   beforeAll(async () => {
     // Deadline rules must exist so a version is snapshotted onto records.
@@ -182,6 +218,175 @@ describe.skipIf(!available)('intended lesson requests (integration)', () => {
       ],
       'Provisional seed for integration tests',
     );
+  });
+
+  /**
+   * ONE REQUEST IS ONE LESSON.
+   *
+   * These four cover the invariant from both sides. The public creation path
+   * used to RECONCILE a mixed set by taking the longest length, so the family
+   * could ask three tutors and mean three different lessons; whichever accepted,
+   * they had agreed to something they were never shown. That reconciliation is
+   * gone, and nothing may depend on it any more.
+   */
+  describe('one shared lesson length', () => {
+    it('refuses a mixed-length request even when no length is asserted', async () => {
+      const fixture = await buildFixture(`mixed-${randomUUID().slice(0, 8)}`);
+      const ninety = await addVersion(fixture.tutors[0]!.tutorProfileId, 90);
+      const start = future(100);
+
+      /**
+       * NO `requestedDurationMinutes` HERE, deliberately. That is precisely the
+       * shape that used to fall through to "longest wins": a caller that says
+       * nothing about length must not be given a reconciled one.
+       */
+      await expect(
+        createIntendedLessonRequest({
+          studentSubjectSectionId: fixture.subjectSectionId,
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: fixture.tutors.map((tutor) => tutor.tutorProfileId),
+          serviceVersionIdByTutor: new Map([[fixture.tutors[0]!.tutorProfileId, ninety]]),
+          proposedStarts: [start, altStart(start)],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestValidationError);
+    });
+
+    it('writes nothing when it refuses a mixed-length request', async () => {
+      const fixture = await buildFixture(`mixednone-${randomUUID().slice(0, 8)}`);
+      const ninety = await addVersion(fixture.tutors[0]!.tutorProfileId, 90);
+      const start = future(101);
+
+      await expect(
+        createIntendedLessonRequest({
+          studentSubjectSectionId: fixture.subjectSectionId,
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: fixture.tutors.map((tutor) => tutor.tutorProfileId),
+          serviceVersionIdByTutor: new Map([[fixture.tutors[0]!.tutorProfileId, ninety]]),
+          proposedStarts: [start, altStart(start)],
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toThrow();
+
+      // Refused, not partially written: every check runs before the transaction.
+      const { sql, db } = createDatabaseClient();
+      try {
+        const rows = await db
+          .select({ id: intendedLessonRequests.id })
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.studentSubjectSectionId, fixture.subjectSectionId));
+        expect(rows).toHaveLength(0);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('refuses a length the resolved versions do not match', async () => {
+      const fixture = await buildFixture(`assert-${randomUUID().slice(0, 8)}`);
+      const start = future(102);
+
+      // Every tutor is on sixty minutes; asking for ninety is a disagreement
+      // between what the family was shown and what the tutors publish.
+      await expect(
+        createIntendedLessonRequest({
+          studentSubjectSectionId: fixture.subjectSectionId,
+          requestedByUserId: fixture.requesterUserId,
+          familyAccountId: null,
+          tutorProfileIds: fixture.tutors.map((tutor) => tutor.tutorProfileId),
+          proposedStarts: [start, altStart(start)],
+          requestedDurationMinutes: 90,
+          formatCode: 'online',
+          timeZone: 'Pacific/Auckland',
+          notesForTutors: null,
+          hasPaymentMethodOnFile: false,
+          paymentExemptionCode: null,
+          correlationId: `cor_${randomUUID()}`,
+        }),
+      ).rejects.toBeInstanceOf(RequestValidationError);
+    });
+
+    /** The positive control: the guard must not simply refuse everything. */
+    it('accepts a request where every tutor shares the asserted length', async () => {
+      const fixture = await buildFixture(`shared-${randomUUID().slice(0, 8)}`);
+      const start = future(103);
+
+      const pinned = new Map<string, string>();
+      for (const tutor of fixture.tutors) {
+        pinned.set(tutor.tutorProfileId, await addVersion(tutor.tutorProfileId, 90));
+      }
+
+      const created = await createIntendedLessonRequest({
+        studentSubjectSectionId: fixture.subjectSectionId,
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: fixture.tutors.map((tutor) => tutor.tutorProfileId),
+        serviceVersionIdByTutor: pinned,
+        proposedStarts: [start, altStart(start)],
+        requestedDurationMinutes: 90,
+        formatCode: 'online',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      });
+
+      expect(created.intendedLessonRequestId).toBeTruthy();
+
+      // And the family-side record carries that one length, not a reconciled one.
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [row] = await db
+          .select({ durationMinutes: intendedLessonRequests.durationMinutes })
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.id, created.intendedLessonRequestId));
+        expect(row?.durationMinutes).toBe(90);
+      } finally {
+        await sql.end();
+      }
+    });
+  });
+
+  /**
+   * A tutor must never be asked for a lesson they cannot deliver. Nothing
+   * checked this before: the offerings query restricts to the right subject and
+   * a current published version, and `validateFanOut` only checks the format is
+   * one of the two concrete values.
+   */
+  it('refuses a format the tutor does not teach that lesson in', async () => {
+    const fixture = await buildFixture(`format-${randomUUID().slice(0, 8)}`);
+    const onlineOnly = await addVersion(fixture.tutors[0]!.tutorProfileId, 120, 'online');
+    const start = future(104);
+
+    await expect(
+      createIntendedLessonRequest({
+        studentSubjectSectionId: fixture.subjectSectionId,
+        requestedByUserId: fixture.requesterUserId,
+        familyAccountId: null,
+        tutorProfileIds: [fixture.tutors[0]!.tutorProfileId],
+        serviceVersionIdByTutor: new Map([[fixture.tutors[0]!.tutorProfileId, onlineOnly]]),
+        proposedStarts: [start, altStart(start)],
+        requestedDurationMinutes: 120,
+        formatCode: 'in_person',
+        timeZone: 'Pacific/Auckland',
+        notesForTutors: null,
+        hasPaymentMethodOnFile: false,
+        paymentExemptionCode: null,
+        correlationId: `cor_${randomUUID()}`,
+      }),
+    ).rejects.toBeInstanceOf(RequestValidationError);
   });
 
   it('fans out to three tutors with holds, transitions, events and outbox entries', async () => {
@@ -717,29 +922,33 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
     }
   });
 
-  it('gives the tutor their own lesson length, not the family-wide one', async () => {
-    // The ILR stores the LONGEST duration across invited tutors. Showing that
-    // to a 60-minute tutor invited alongside a 90-minute one would hand them a
-    // number they know is not theirs — proof another tutor was asked.
+  it('reads the tutor lesson length from their own version, not the request', async () => {
+    /**
+     * A tutor must be shown THEIR length, never the family-side field.
+     *
+     * This used to be demonstrated by fanning out to a 60-minute and a
+     * 90-minute tutor at once and checking each saw their own — the request
+     * then stored the longest, and handing that to the 60-minute tutor would
+     * have been a number they knew was not theirs, and so proof another tutor
+     * had been asked.
+     *
+     * That fan-out is now refused outright: one request is one lesson. The
+     * guarantee still matters, though, because the request row STILL carries a
+     * family-side `durationMinutes` and a future change to the projection could
+     * start reading it. So the divergence is created directly here, after a
+     * perfectly ordinary uniform request, which tests the projection rather
+     * than a creation path that can no longer produce a mix.
+     */
     const fixture = await buildFixture(`duration-${randomUUID().slice(0, 8)}`);
     const start = future(105);
 
-    const { sql, db } = createDatabaseClient();
-    try {
-      await db
-        .update(serviceVersions)
-        .set({ durationMinutes: 90 })
-        .where(eq(serviceVersions.id, fixture.tutors[1]!.serviceVersionId));
-    } finally {
-      await sql.end();
-    }
-
-    await createIntendedLessonRequest({
+    const created = await createIntendedLessonRequest({
       studentSubjectSectionId: fixture.subjectSectionId,
       requestedByUserId: fixture.requesterUserId,
       familyAccountId: null,
       tutorProfileIds: [fixture.tutors[0]!.tutorProfileId, fixture.tutors[1]!.tutorProfileId],
       proposedStarts: [start, altStart(start)],
+      requestedDurationMinutes: 60,
       formatCode: 'online',
       timeZone: 'Pacific/Auckland',
       notesForTutors: null,
@@ -748,10 +957,24 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       correlationId: `cor_${randomUUID()}`,
     });
 
-    const shortTutor = await listRequestsForTutor(fixture.tutors[0]!.tutorProfileId);
-    const longTutor = await listRequestsForTutor(fixture.tutors[1]!.tutorProfileId);
-    expect(shortTutor[0]!.durationMinutes).toBe(60);
-    expect(longTutor[0]!.durationMinutes).toBe(90);
+    // Force the two apart. Nothing in the product does this; it exists so the
+    // assertion below can tell which column the projection actually reads.
+    const { sql, db } = createDatabaseClient();
+    try {
+      await db
+        .update(intendedLessonRequests)
+        .set({ durationMinutes: 90 })
+        .where(eq(intendedLessonRequests.id, created.intendedLessonRequestId));
+    } finally {
+      await sql.end();
+    }
+
+    const first = await listRequestsForTutor(fixture.tutors[0]!.tutorProfileId);
+    const second = await listRequestsForTutor(fixture.tutors[1]!.tutorProfileId);
+
+    // Their own sixty, not the ninety now sitting on the request.
+    expect(first[0]!.durationMinutes).toBe(60);
+    expect(second[0]!.durationMinutes).toBe(60);
   });
 
   it('sets each tutor response deadline from their own earliest offered time', async () => {

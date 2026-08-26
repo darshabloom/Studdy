@@ -110,6 +110,7 @@ export {
 export {
   listBookableServices,
   formatsForVersion,
+  formatsForCode,
   type BookableServiceVersion,
   type BookableTutorServices,
 } from './repositories/services';
