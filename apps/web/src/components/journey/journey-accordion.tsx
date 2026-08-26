@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import type { BookingSection } from '@/lib/booking/sections';
+import { sectionIsAnswered, type JourneySection } from '@/lib/journey/section';
 
 /**
- * The narrow-screen shape of the booking journey: one accordion, one section
+ * The narrow-screen shape of a multi-step journey: one accordion, one section
  * open.
  *
  * There is no client state and no toggle handler. Each route already IS one
  * section expanded, so "open that section" is a link and "close this one" is
- * what happens when the next page renders. That keeps the whole journey
+ * what happens when the next page renders. That keeps the journey
  * server-authoritative, and keeps reload, deep links and the back button
  * behaving exactly as they do everywhere else in the product.
  *
@@ -37,19 +37,17 @@ function Chevron({ open }: { open: boolean }): ReactNode {
   );
 }
 
-function SectionLabel({ section }: { section: BookingSection }): ReactNode {
-  const answered = section.value !== null || section.values.length > 0;
-
+function SectionLabel({ section }: { section: JourneySection }): ReactNode {
   return (
     <span className="min-w-0 text-left">
       <span className="block text-xs text-text-muted">{section.label}</span>
-      {answered ? (
+      {sectionIsAnswered(section) ? (
         <span className="block text-sm font-medium text-text-primary">
           {section.values.length > 0 ? (
             <>
               {/*
                * One line each, never joined. Two intervals on one line read as
-               * a lesson that runs from the first to the second, or as two
+               * a lesson running from the first to the second, or as two
                * lessons being asked for — and this is neither.
                */}
               {section.values.map((entry) => (
@@ -80,12 +78,10 @@ const SHELL =
 /**
  * One collapsed section: its question, its answer, and whether it reopens.
  *
- * Every answered section behind the current one reopens, including one whose
- * question had a single option — a parent who wants to reconsider "the only
- * tutor" is exactly the person who needs the way back. A question not yet
+ * Every answered section behind the current one reopens. A question not yet
  * reached gets no chevron and no link, because there is nothing there yet.
  */
-export function CollapsedSection({ section }: { section: BookingSection }): ReactNode {
+export function CollapsedSection({ section }: { section: JourneySection }): ReactNode {
   if (section.href !== null) {
     return (
       <Link
@@ -127,7 +123,7 @@ export function CollapsedSection({ section }: { section: BookingSection }): Reac
  * nothing for a control here to do. It is a heading, which also gives the
  * question below it a name in the document outline.
  */
-export function CurrentSectionHeader({ section }: { section: BookingSection }): ReactNode {
+export function CurrentSectionHeader({ section }: { section: JourneySection }): ReactNode {
   return (
     <div className="mb-3 flex items-center justify-between gap-3 border-b border-surface-border pb-2.5">
       <h2 className="text-sm font-semibold text-brand-purple-deep">{section.label}</h2>

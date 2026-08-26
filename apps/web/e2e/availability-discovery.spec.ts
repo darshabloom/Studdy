@@ -322,48 +322,96 @@ test.describe('availability in discovery', () => {
       await expect(page.getByRole('link', { name: 'Show the later seven days' })).toHaveCount(0);
     });
 
+    /**
+     * Reach the multi-tutor times grid, which now sits behind two questions.
+     *
+     * Length and format come first because they decide which shortlisted tutors
+     * the request can reach, and therefore whose availability the grid is drawn
+     * from.
+     */
+    /**
+     * Make sure this family has a shortlist before a journey that reads one.
+     *
+     * `locator.count()` does NOT auto-wait, so reading it against a page whose
+     * cards have not rendered reports "nothing to save", the save never
+     * happens, and the shortlist stays empty — which surfaces several screens
+     * later as "no tutor offers this subject", a long way from the cause. A
+     * rendered card shows one of two controls, so wait for either.
+     */
+    async function ensureShortlisted(page: Page): Promise<void> {
+      const addToShortlist = page.getByRole('button', { name: 'Save for later' });
+      const alreadySaved = page.getByText('Saved for later');
+      await expect(addToShortlist.or(alreadySaved).first()).toBeVisible({ timeout: 15_000 });
+
+      if ((await alreadySaved.count()) > 0) return;
+
+      await addToShortlist.first().click();
+      // Saving is a server action and a re-render; the shortlist has to exist
+      // before the journey that reads it starts.
+      await expect(alreadySaved.first()).toBeVisible({ timeout: 15_000 });
+    }
+
+    async function askTimes(page: Page): Promise<void> {
+      const sectionId = new URL(page.url()).searchParams.get('section') ?? '';
+      await page.goto(`/shortlist/${sectionId}/ask/length`);
+      await expect(
+        page.getByRole('heading', { level: 1, name: /How long should the lesson/ }),
+      ).toBeVisible({ timeout: 15_000 });
+      await page
+        .getByRole('link', { name: /minutes/ })
+        .first()
+        .click();
+
+      await expect(
+        page.getByRole('heading', { level: 1, name: /Online or in person/ }),
+      ).toBeVisible({ timeout: 15_000 });
+      await page
+        .getByRole('link', { name: /^Online|^In person/ })
+        .first()
+        .click();
+
+      await expect(page.getByRole('heading', { level: 1, name: /When would suit/ })).toBeVisible({
+        timeout: 15_000,
+      });
+    }
+
     test('the combined grid counts only the family own shortlist', async ({ page }) => {
       await signIn(page, FAMILY);
       await scopedDiscovery(page);
 
-      const addToShortlist = page.getByRole('button', { name: 'Save for later' });
-      if ((await addToShortlist.count()) > 0) await addToShortlist.first().click();
+      await ensureShortlisted(page);
+      await askTimes(page);
 
-      await page.getByRole('link', { name: 'Review shortlist' }).first().click();
-      await expect(page.getByRole('heading', { name: 'Your shortlist' })).toBeVisible();
-
-      await page.getByRole('link', { name: /Choose times for/ }).click();
-      await expect(page.getByRole('heading', { name: 'Choose times that suit' })).toBeVisible();
-
-      // Counts are scoped to the shortlist, never to the platform.
-      await expect(page.getByText(/of your \d+ tutors? can do this/).first()).toBeVisible({
+      // Counts are scoped to the tutors this request actually reaches, never to
+      // the platform — and to the INCLUDED ones now, since a tutor who cannot
+      // take the chosen lesson is not offering times for it.
+      await expect(page.getByText(/of \d+ tutors? can do this/).first()).toBeVisible({
         timeout: 15_000,
       });
     });
 
     /**
-     * The bound is now ONE to five, here as well as in the single-tutor
-     * journey. It is a single configured rule, deliberately, so the two paths
-     * cannot drift apart — and a parent with one workable time has made a real
-     * request even when they are asking several tutors at once.
+     * The bound is ONE to five, here as well as in the single-tutor journey. It
+     * is a single configured rule, deliberately, so the two paths cannot drift
+     * apart — and a family with one workable time has made a real request even
+     * when they are asking several tutors at once.
      */
     test('the grid holds the family to between one and five times', async ({ page }) => {
       await signIn(page, FAMILY);
       await scopedDiscovery(page);
-      const sectionId = new URL(page.url()).searchParams.get('section') ?? '';
-      await page.goto(`/shortlist/${sectionId}/times`);
-      await expect(page.getByRole('heading', { name: 'Choose times that suit' })).toBeVisible();
+      await ensureShortlisted(page);
+      await askTimes(page);
 
       const options = page.getByRole('checkbox');
       await expect(options.first()).toBeVisible({ timeout: 15_000 });
 
       // Nothing chosen is still nothing to ask about.
-      await expect(page.getByRole('link', { name: 'Review request' })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Continue' })).toHaveCount(0);
 
       // One is enough. The copy recommends more; the rule does not demand it.
       await options.nth(0).check();
       await expect(page.getByText(/Choose at least/)).toHaveCount(0);
-      await expect(page.getByRole('link', { name: 'Review request' })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Continue' })).toBeVisible();
     });
   });
 });

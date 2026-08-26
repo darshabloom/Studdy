@@ -67,7 +67,7 @@ async function ensureSubjectNeed(page: Page, dashboard: string): Promise<void> {
     // a student, an independent student sets up their own profile.
     await page.getByLabel(/Student's first name|Your first name/).fill('Reqi');
     await page.getByLabel('Family name').fill('Tester');
-    await page.getByLabel('School year').selectOption({ label: 'Year 9' });
+    await page.getByLabel('School year').selectOption({ label: 'Year 10' });
     await page.getByRole('button', { name: /Add student|Save my profile/ }).click();
     // Anchored: `/parent` alone also matches `/parent/students/new`, so a
     // failed submission would slip through unnoticed.
@@ -91,7 +91,7 @@ async function ensureSubjectNeed(page: Page, dashboard: string): Promise<void> {
     // Pinned rather than positional: the journey depends on reaching tutors
     // whose seeded availability covers the lesson time chosen below.
     await page.getByLabel('Subject', { exact: true }).selectOption({ label: 'Mathematics' });
-    await page.getByLabel('School year for this subject').selectOption({ label: 'Year 9' });
+    await page.getByLabel('School year for this subject').selectOption({ label: 'Year 10' });
     await page.getByRole('button', { name: 'Save and find tutors' }).click();
   }
 }
@@ -113,8 +113,28 @@ async function shortlistAndCompose(page: Page, dashboard: string): Promise<void>
   const onShortlist = page.getByText('Saved for later');
   await expect(addToShortlist.or(onShortlist).first()).toBeVisible({ timeout: 15_000 });
 
-  if ((await addToShortlist.count()) > 0) {
+  /*
+   * Save EVERY eligible tutor, not just the first.
+   *
+   * This used to save one, so the "fan-out" journey it set up only ever asked a
+   * single tutor and nothing here exercised the thing the multi-tutor path
+   * exists for. Waits for the count of unsaved cards to DROP rather than for a
+   * fixed pause: saving is a server action followed by a re-render.
+   */
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const before = await addToShortlist.count();
+    if (before === 0) break;
     await addToShortlist.first().click();
+    await page
+      .waitForFunction(
+        (count) =>
+          [...document.querySelectorAll('button')].filter((button) =>
+            button.textContent?.includes('Save for later'),
+          ).length < count,
+        before,
+        { timeout: 15_000 },
+      )
+      .catch(() => {});
   }
 
   await expect(page.getByRole('link', { name: 'Review shortlist' }).first()).toBeVisible();
@@ -123,24 +143,45 @@ async function shortlistAndCompose(page: Page, dashboard: string): Promise<void>
 }
 
 /**
- * Reach the request composer through the combined availability grid.
+ * Reach the review screen through the optional multi-tutor journey.
  *
- * The shortlist leads to choosing times rather than straight to the composer:
- * a family picks the times that suit, from real bookable availability, before
- * anyone is asked. The composer no longer collects a time at all — it reviews
- * what each tutor will actually be asked about.
+ * Length and format come BEFORE times, because they decide which shortlisted
+ * tutors the request can reach and therefore whose availability the times are
+ * drawn from. One request is one lesson: every tutor asked gets the same
+ * length and the same format, so a chosen start means one interval for all of
+ * them.
  */
-async function chooseTimesAndCompose(page: Page): Promise<void> {
-  await page.getByRole('link', { name: /Choose times for/ }).click();
-  await expect(page.getByRole('heading', { name: 'Choose times that suit' })).toBeVisible();
+async function askMultipleAndReview(page: Page): Promise<void> {
+  await page.getByRole('link', { name: 'Ask multiple tutors' }).click();
 
+  await expect(
+    page.getByRole('heading', { level: 1, name: /How long should the lesson/ }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page
+    .getByRole('link', { name: /minutes/ })
+    .first()
+    .click();
+
+  await expect(page.getByRole('heading', { level: 1, name: /Online or in person/ })).toBeVisible({
+    timeout: 15_000,
+  });
+  await page
+    .getByRole('link', { name: /^Online|^In person/ })
+    .first()
+    .click();
+
+  await expect(page.getByRole('heading', { level: 1, name: /When would suit/ })).toBeVisible({
+    timeout: 15_000,
+  });
   const options = page.getByRole('checkbox');
   await expect(options.first()).toBeVisible({ timeout: 15_000 });
   await options.nth(0).check();
   await options.nth(1).check();
 
-  await page.getByRole('link', { name: 'Review request' }).click();
-  await expect(page.getByRole('heading', { name: 'Send your lesson request' })).toBeVisible();
+  await page.getByRole('link', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: /Check this over/ })).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -148,20 +189,28 @@ test.describe.configure({ mode: 'serial' });
 test.describe('lesson requests', () => {
   test.skip(!supabaseConfigured, 'Requires local Supabase (pnpm supabase:start)');
 
-  test('parent: shortlist → compose → send → awaiting responses', async ({ page }) => {
+  test('parent: shortlist → ask multiple → send → awaiting responses', async ({ page }) => {
     await signIn(page, REQUEST_PARENT);
     await shortlistAndCompose(page, '/parent');
 
-    await chooseTimesAndCompose(page);
+    await askMultipleAndReview(page);
 
-    // Honest payment copy: nothing may claim a card exists.
-    await expect(page.getByText('You will not be charged when requests are sent')).toBeVisible();
-    await expect(page.getByText('your card will not be charged')).toHaveCount(0);
+    // Nothing may claim a card exists or a lesson is booked.
+    await expect(page.getByText(/charged/i)).toHaveCount(0);
+    await expect(page.getByText('Nothing is booked yet').first()).toBeVisible();
 
-    // The times were chosen on the availability grid, so the composer has none
-    // to collect — it shows what each tutor will actually be asked about.
-    await expect(page.getByText(/Times you chose \(2\)/)).toBeVisible();
-    await expect(page.getByText(/Will be asked about:/).first()).toBeVisible();
+    /**
+     * WHO IS BEING ASKED IS ON SCREEN, and so is every tutor who is not.
+     * A shortlisted tutor missing from a request is, to the family,
+     * indistinguishable from one who declined it.
+     */
+    await expect(page.getByText(/Asking \d+ tutors?/)).toBeVisible();
+
+    // Times read as the whole lesson, and as alternatives rather than as two
+    // lessons being requested.
+    await expect(page.getByText(/\d{1,2}:\d{2}–\d{1,2}:\d{2}\s?(am|pm)/).first()).toBeVisible();
+    await expect(page.getByText('Any one of these')).toBeVisible();
+
     await page.getByRole('button', { name: /Send request to/ }).click();
 
     await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
@@ -189,7 +238,7 @@ test.describe('lesson requests', () => {
     await signIn(page, REQUEST_STUDENT);
     await shortlistAndCompose(page, '/student');
 
-    await chooseTimesAndCompose(page);
+    await askMultipleAndReview(page);
     await page.getByRole('button', { name: /Send request to/ }).click();
 
     await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
