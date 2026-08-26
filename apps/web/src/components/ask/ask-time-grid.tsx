@@ -131,7 +131,15 @@ export function AskTimeGrid({
         ))}
       </div>
 
-      <div className="rounded-[var(--radius-medium)] border border-surface-border bg-surface-card-secondary p-4">
+      {/*
+       * STAYS IN VIEW. Quarter-hour starts across a fortnight make this list
+       * thousands of pixels long, so a selection summary and a Continue button
+       * that scroll away with it are effectively unreachable — a family would
+       * choose a time and then have to hunt for the way on. The grid it
+       * replaced kept its action bar pinned for exactly this reason; dropping
+       * that in the rewrite was an accident rather than a decision.
+       */}
+      <div className="sticky bottom-0 z-10 rounded-[var(--radius-medium)] border border-surface-border bg-surface-card-secondary p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
         <p className="text-sm font-semibold text-text-primary" role="status">
           {chosen.length === 0
             ? 'No preferred times chosen yet'
@@ -168,13 +176,13 @@ export function AskTimeGrid({
             That is the most you can offer. Remove one to choose a different time.
           </p>
         ) : null}
-      </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Button size="lg" asChild={problem === null} disabled={problem !== null}>
-          {problem === null ? <Link href={nextHref}>Continue</Link> : <span>Continue</span>}
-        </Button>
-        {problem !== null ? <p className="text-sm text-text-secondary">{problem}</p> : null}
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button asChild={problem === null} disabled={problem !== null}>
+            {problem === null ? <Link href={nextHref}>Continue</Link> : <span>Continue</span>}
+          </Button>
+          {problem !== null ? <p className="text-sm text-text-secondary">{problem}</p> : null}
+        </div>
       </div>
     </div>
   );

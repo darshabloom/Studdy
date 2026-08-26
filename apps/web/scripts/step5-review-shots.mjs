@@ -134,6 +134,8 @@ async function walk(page, prefix) {
   const count = await boxes.count();
   if (count > 2) await boxes.nth(2).check();
   await shoot(page, prefix, '5-times-chosen');
+  await page.screenshot({ path: `${OUT}/${prefix}-5b-times-viewport.png` });
+  console.log(`wrote ${prefix}-5b-times-viewport.png`);
 
   await page.getByRole('link', { name: 'Continue' }).click();
   await page
