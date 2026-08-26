@@ -37,31 +37,26 @@ current; they are not duplicates.
 
 > ### Checkpoint state, verified against git
 >
-> | Fact         | Value                                                            |
-> | ------------ | ---------------------------------------------------------------- |
-> | Branch       | `feat/optional-shortlist-and-fan-out`                            |
-> | Base         | `origin/main` at `7f9fd58` (steps 1–4)                           |
-> | Divergence   | **3 ahead, 0 behind** at the time of writing                     |
-> | Pushed       | **NO** — the branch exists only locally                          |
-> | Pull request | **NONE**                                                         |
-> | Steps 1–4    | merged (PRs #17, #18, #19)                                       |
-> | Step 5       | **IMPLEMENTED, NOT VERIFIED, NOT MERGED** — one UX issue remains |
-> | Step 6       | not started                                                      |
+> | Fact       | Value                                                        |
+> | ---------- | ------------------------------------------------------------ |
+> | Branch     | `feat/optional-shortlist-and-fan-out`                        |
+> | Base       | `origin/main` at `7f9fd58` (steps 1–4)                       |
+> | Divergence | ahead of `origin/main`, 0 behind — read the count out of git |
+> | Steps 1–4  | merged (PRs #17, #18, #19)                                   |
+> | Step 5     | **UX APPROVED BY THE OWNER.** Closeout in progress           |
+> | Step 6     | not started                                                  |
 >
-> The three commits, oldest first:
+> The step 5 commits, oldest first:
 >
 > | Commit    | What                                                                  |
 > | --------- | --------------------------------------------------------------------- |
 > | `fbc1757` | the shared-duration and format invariants, server-side                |
 > | `923b16e` | the optional multi-tutor journey and the reframed shortlist           |
 > | `7c90069` | the times action bar pinned back into view (found during screenshots) |
+> | `ab39367` | the times step rebuilt on the booking calendar; the picker shared     |
 >
 > Read the CURRENT HEAD and ahead count out of git rather than from this file —
-> a document cannot name the commit that contains it. The three hashes above
-> stay true.
->
-> **Do not push, open a pull request or merge.** Full sequential verification
-> has NOT been run, and the times screen still needs the correction below.
+> a document cannot name the commit that contains it. The hashes above stay true.
 >
 > Do not reuse the merged branches `feat/parent-booking-journey`,
 > `feat/discovery-and-profile-availability-calendars` or
@@ -315,15 +310,14 @@ click-to-create, snapping, window fitting and the family-safe refusal.
 
 ## 8. The exact next tasks, in order
 
-Steps 1 to 4 are merged to `main`. **Step 5 is implemented on its own branch with one UX
-issue open; step 6 has not started.** Rewrite or update the end-to-end journey alongside
-each step rather than leaving all test changes to the end; use targeted tests while
-building and the full suite at major boundaries and before PR readiness.
+Steps 1 to 4 are merged to `main`. **Step 5's UX is approved by the owner; step 6 has not
+started.** Rewrite or update the end-to-end journey alongside each step rather than leaving
+all test changes to the end; use targeted tests while building and the full suite at major
+boundaries and before PR readiness.
 
-**The immediate next task is the `/ask/times` correction** described at the end of the step
-5 section: rebuild it on the step 4 calendar interaction instead of the quarter-hour
-checkbox list. Then the full sequential verification, then the owner's final screenshot
-review — in that order, and nothing merges before all three.
+**The immediate next task is step 6**, the cohesive visual-design pass. Do not reopen any
+step 5 behaviour: it was reviewed screen by screen and approved, and the decisions that look
+arbitrary are recorded with their reasons in the step 5 section above.
 
 ### Step 2 — calendar-first `/tutor/availability` — **COMPLETE**
 
@@ -819,155 +813,161 @@ Calculus at Years 10–13, so a senior student), and the tutor's minimum-gap con
 > **THE FINAL PROGRESSIVE-SUMMARY AND MOBILE-ACCORDION SCREENSHOTS STILL NEED THE OWNER'S
 > REVIEW BEFORE ANY PR OR MERGE.** They changed after the last set the owner approved.
 
-### Step 5 — the optional multi-tutor journey — **IMPLEMENTED, ONE UX ISSUE OPEN**
+### Step 5 — the optional multi-tutor journey — **UX APPROVED**
 
-On `feat/optional-shortlist-and-fan-out`, three commits off `main` at `7f9fd58`. Not
-pushed, no pull request, not merged, and **full sequential verification has not been run**.
+On `feat/optional-shortlist-and-fan-out`, branched from `main` at `7f9fd58`. The owner
+approved the shortlist, length, format, times and review screens after the times step was
+rebuilt on the booking calendar. This section records the APPROVED behaviour; do not change
+any of it without the owner asking.
 
-The owner has **provisionally accepted the shortlist, length, format and review screens**
-from the screenshot set below. That acceptance is conditional: the final review comes after
-the times screen is corrected (see the open issue at the end of this section).
+#### The shape of the product, and why
 
-#### What the slice is, and what it found
+- **The shortlist is a saving-and-comparison surface, not a way to book.** A family saves
+  tutors against one `student_subject_section` in order to compare them. Each card's primary
+  action is `Book a lesson`, into the ordinary single-tutor journey.
+- **The normal way to book is `/book`.** Single-tutor is the main road. Shortlisting is never
+  a prerequisite, and a family asking one tutor must never be routed through the multi-tutor
+  workflow.
+- **`Ask multiple tutors` is the optional power journey**, a quiet block at the foot of the
+  shortlist, offered **only where more than one tutor is saved** — with one saved it is the
+  booking journey wearing a longer coat.
+- **`/requests/new` is folded in, not patched**, and `/shortlist/[id]/times` redirects into
+  the journey. One composer, one set of rules. The old composer asked for times without ever
+  establishing what lesson was being requested, and defaulted the format to `online` without
+  asking.
 
-The one-line description this section used to carry — "`/shortlist/[id]/times` becomes the
-optional Ask shortlisted tutors journey" — understated it. The fan-out already existed and
-worked; what was wrong was framing and drift, and four concrete defects nobody had noticed:
-
-1. **The shortlist told a lie.** It carried "Sending requests opens in the next release",
-   true when written and false from the moment the booking journey shipped.
-2. **Its primary action was the fan-out** ("Choose times for N tutors"), presenting asking
-   everyone at once as the way to book.
-3. **The fan-out never asked lesson length**, so one chosen start could mean a 60-minute
-   lesson for one tutor and 90 for another — an unanswerable request.
-4. **It defaulted the format to `online` without asking**, so an in-person-only tutor could
-   be sent a lesson they do not teach.
-
-#### The journey now
+#### One request is one lesson
 
 `/shortlist/[id]` → `/ask/length` → `/ask/format` → `/ask/times` → `/ask/review` → send.
 Answers live in the URL and are re-resolved on every request, exactly as `/book` does.
 
-- **The shortlist saves and compares.** Each tutor carries a primary `Book a lesson` into
-  the single-tutor `/book` journey. `Ask multiple tutors` is a quiet block at the foot of
-  the page, offered **only where more than one tutor is saved** — with one saved it is the
-  booking journey wearing a longer coat.
-- **Length comes first, and that ordering is the point.** One request is one lesson, so a
-  chosen start must mean the same interval for every tutor asked. That is only possible if
-  the length is settled before anyone's availability is drawn.
+- **One shared duration and one shared format for the whole request.** A chosen start has to
+  mean the same interval for every tutor asked, which is only possible if both are settled
+  before anyone's availability is drawn. That is why length is asked FIRST.
+- **A mixed set of lesson lengths is REFUSED SERVER-SIDE, unconditionally.** It used to be
+  reconciled — `familyDurationMinutes = Math.max(...)` took the longest — which is exactly
+  what this abolishes. The guard does not depend on the caller asserting
+  `requestedDurationMinutes`: a caller that says nothing about length must not be handed a
+  reconciled one.
+- **A format the tutor's own version cannot deliver is REFUSED SERVER-SIDE.** `formatsForCode`
+  is extracted so the request path and `/book` share one rule; two copies is how an
+  online-only tutor gets sent an in-person lesson.
+- **Both guards live in the repository, not in the screens.** Every URL parameter is
+  attacker-controlled and the screens are one caller among several, so a rule about what a
+  request may CONTAIN belongs where the request is written.
 - **Compatibility counts are shown, not acted on**: `60 minutes · 2 of 2 shortlisted tutors
 offer this`, `90 minutes · 1 of 2`. The denominator is tutors who still offer the subject.
-- **Nobody is silently dropped.** A shortlisted tutor who cannot take the request appears
-  under `Not included` with a reason about the LESSON rather than about them — "Doesn't
-  offer 90-minute Mathematics lessons". They stay on the shortlist.
-- **One eligible option is still asked.** Scarcity is a fact about supply, never a
-  preference this family expressed — the rule step 4 established, applied here.
-- **`/requests/new` is folded in, not patched**, and `/shortlist/[id]/times` redirects into
-  the journey. One composer, one set of rules.
-
-#### The backend invariants (`fbc1757`) — server-authoritative, not UI-enforced
-
-No schema change, no migration, no state-machine change. The model already carried one
-shared `formatCode` per request and could already pin each tutor to their own version.
-
-- **A mixed set of lesson lengths is REFUSED, unconditionally.** It used to be reconciled —
-  `familyDurationMinutes = Math.max(...)` took the longest — which is exactly the behaviour
-  this abolishes. The guard does not depend on the caller asserting
-  `requestedDurationMinutes`: a caller that says nothing about length must not be handed a
-  reconciled one. `Math.max` and `groupByDuration` remain but now run **only after** that
-  guard has proved the set uniform, so the first reads a single value and the second yields
-  a single group.
-- **A format the tutor cannot deliver is REFUSED.** Nothing checked this before:
-  `validateFanOut` only checked the code was one of two concrete values. `formatsForCode` is
-  extracted so the request path and `/book` share one rule — two copies is how an
-  online-only tutor gets sent an in-person lesson.
+- **Nobody is silently dropped.** A shortlisted tutor who cannot take the request stays
+  VISIBLE under `Not included`, with a neutral reason about the LESSON rather than about
+  them — "Doesn't offer 90-minute Mathematics lessons". They stay on the shortlist. A tutor
+  quietly missing from a request is, to the family, indistinguishable from one who declined.
+- **A question with one eligible option is still asked**, here as in `/book`. That one
+  duration reaches this shortlist is a fact about SUPPLY, never a preference this family
+  expressed.
 
 `packages/domain/src/bookings/fan-out-eligibility.ts` is the pure rule the journey draws
 from: `durationChoices`, `formatChoices`, `resolveFanOutEligibility`, `exclusionLabel`.
 
-#### Shared chrome, not a copy
+#### The times step IS the booking calendar
 
-`JourneyShell`, `JourneySummary` and `journey-accordion` take precomputed sections; each
-journey supplies its own ordering and hrefs. `/book` was rewired onto them and its tests
-still pass. A family moving between the two paths should not feel they have changed product.
+The screen was a chronological list of every quarter-hour start across the whole fortnight —
+about a hundred and eighty checkboxes, **roughly 7,300 pixels tall**. It is now the step 4
+interaction, and the desktop page is about 1,600.
 
-#### Targeted test results at `7c90069`
+- **`WeekCalendar` in `select` mode**, one seven-day week at a time, `hourHeight={128}`,
+  `Earlier`/`Later` paging that CARRIES the selection, a window fitted to the tutors being
+  asked, the today marker, the screen-reader summary and `familySafe`. A `week` parameter
+  travels in the URL exactly as it does in `/book`, and `askParamsUpTo` drops it so reopening
+  an earlier question lands on week one rather than on whichever page the calendar was left
+  showing.
+- **Availability is derived at the SELECTED SHARED DURATION AND FORMAT**, over the INCLUDED
+  tutors' profile ids, through `bookableSlotsForTutors` — `apps/web/src/lib/ask/availability.ts`.
+  **This was a real defect the rebuild had to fix.** The old screen used
+  `bookableSlotsForSubjectSection`, which derives at each tutor's own CHEAPEST published
+  length and takes no format at all, because it exists to draw discovery cards — so a family
+  choosing 90 minutes was offered starts derived for 60-minute lessons.
+- **15-minute start granularity**, from `SLOT_STEP_MINUTES`, imported rather than restated so
+  a marker cannot drift from what is derivable.
+- **The union across the included tutors**, via `combineSlotsByStart`. A start is selectable
+  when **at least one** included tutor can offer it.
+- **Starts are drawn as one-step MARKERS, never at full lesson length.** Slots derived every
+  fifteen minutes and drawn an hour long overlap, and an absolutely positioned block covers
+  the one beneath it — so every start but the last became physically unclickable. And never
+  call `mergeContiguousBlocks` here: 4:00 and 4:30 are the choice being made.
+- **A marker carries its start time and nothing else** — `4 pm`, `4:15 pm`, from the shared
+  `clockLabel`, visually identical to `/book`.
+- **COMPATIBILITY NAMES BELONG IN THE SELECTED-TIMES SUMMARY, NOT ON EVERY MARKER.** A ratio
+  on each marker (`1 of 2`, `2 of 2`) was built, screenshotted and REJECTED by the owner: a
+  second line on a hundred and eighty quarter-hour blocks makes the week unreadable, worst on
+  a phone, and the parent's job on the grid is simply to find times that suit their family.
+  The data is still derived and kept (`namesByStart`) and is spent BENEATH the calendar,
+  against the times actually chosen — `Aroha can do this`, `Aroha and James can do this`. The
+  copy above the grid promises it: "After you choose a time, we'll show which of your tutors
+  can do it."
+- **1–5 preferred times**, the same configured bound `/book` uses, so the two cannot drift.
+- **A chosen time reads as the full lesson interval** — `Thu 27 Aug · 4:15–5:15 pm` — in the
+  chips, the desktop receipt, the mobile accordion and Review. `bookingIntervalLabel` is the
+  one place that wording is decided. The minimum gap is NEVER in the displayed interval.
+- **Selected times stay framed as ALTERNATIVES, never several lessons**: one interval per
+  line under `Any one of these`, with "These are alternatives — one tutor can accept any one
+  of them." A comma-joined list reads as several lessons being requested, which may make a
+  family offer fewer times.
+- **Mobile reuses step 4's behaviour** — the calendar scrolls horizontally inside the shared
+  `JourneyShell` accordion, with the "Scroll sideways" hint. **The sticky action bar is
+  gone**: it existed only because the list was unreachably long, and `/book` never needed one.
+- **PRIVACY IS UNCHANGED.** Only positive derived slots ever reach the screen, so a gap stays
+  indistinguishable between booked, blocked, held, on holiday and outside working hours. What
+  is said about a chosen time names the family's OWN included tutors and nothing else — never
+  a platform-wide figure, never a competitor, never a reason for a gap.
 
-| Suite                             | Result      |
-| --------------------------------- | ----------- |
-| domain `fan-out-eligibility`      | 15 passing  |
-| database integration (whole file) | 55 passing  |
-| web unit                          | 106 passing |
-| `lesson-requests.spec.ts`         | 17 passing  |
-| `availability-discovery.spec.ts`  | 8 passing   |
-| typecheck / lint / format / build | green       |
+#### One picker, two journeys
 
-**Targeted only. The full suite has NOT been run**, and neither has `check:rls`,
-`check:boundaries` or the mobile Playwright project since the journey landed.
+`JourneyTimePicker` (`apps/web/src/components/journey/time-picker.tsx`) holds the
+interaction; `components/booking/time-picker.tsx` and `components/ask/ask-time-picker.tsx`
+are thin wrappers supplying their own wording — the same relationship `BookingShell` and
+`AskShell` already have with `JourneyShell`. The multi-tutor screen drifted into a second,
+far worse time picker precisely because it had been written separately.
+`/book/times/page.tsx` did not change.
 
-Five of the integration tests are new and pin the invariant from both sides: a mixed-length
-request is refused **even when no length is asserted**, refusal writes nothing, an asserted
-length that disagrees is refused, a uniform request succeeds, and an undeliverable format is
-refused. One existing test had to change — it proved the tutor projection shows a tutor
-their own length by fanning out to a 60- and a 90-minute tutor at once, which is now
-refused. The guarantee still matters because the request row still carries a family-side
-`durationMinutes`, so the divergence is now created directly after an ordinary uniform
-request. That tests the projection rather than a creation path that can no longer produce a
-mix.
+#### Review reads naturally with one tutor
 
-Two bugs were found by tests written alongside: a duration parsed from the URL with
-`parseInt` turned `12.5` into `12` and `60abc` into `60` (a duration is a price, so it is
-matched strictly now), and `availability-discovery` counted shortlist buttons before the
-cards had rendered, so the save never happened and it failed several screens later as "no
-tutor offers this subject".
+The exclusion journey routinely leaves exactly one tutor being asked — choosing 90 minutes
+where only one shortlisted tutor publishes it. Four strings on Review branch on
+`tutorCount === 1`, so the screen never describes a group that does not exist: "A time is
+only held once **the tutor** accepts it", "Anything you'd like the **tutor** to know?",
+"**The tutor** you ask will see this", "**The tutor** can accept one of your times or
+decline". Plural wording is unchanged at two or more.
 
 #### Review screenshots
 
-`S:\Studdy\.review\step5\` (gitignored), **eighteen images**, regenerated from a clean
-build with zero server errors. Regenerate with:
+`S:\Studdy\.review\step5\` (gitignored), **sixteen images**, all current against the approved
+behaviour: desktop and mobile at each of `1-shortlist`, `2-length`, `3-format`,
+`4-times-empty`, `5-times-chosen`, `6-review`, `7-format-fewer-tutors`,
+`8-review-with-exclusion`. The `5b-times-viewport` crops are gone; they existed only because
+the old list was too tall to photograph whole.
+
+Regenerate against a PRODUCTION server, never `pnpm dev`. The script takes an optional list
+of `prefix-name` shots after the output directory — the walk always runs in full and only
+the SAVING is filtered, so correcting one screen cannot silently replace shots the owner has
+already accepted.
 
 ```bash
 node apps/web/scripts/step5-review-shots.mjs http://localhost:3200 S:/Studdy/.review/step5
 ```
 
-Desktop and mobile at each of: `1-shortlist`, `2-length`, `3-format`, `4-times-empty`,
-`5-times-chosen`, `5b-times-viewport`, `6-review`, `7-format-fewer-tutors`,
-`8-review-with-exclusion`. The `5b` pair are viewport crops — the full-page times image is
-seven thousand pixels tall and scales down to something nobody can read.
-
 **A format-driven exclusion is not reachable with the current seed.** Both Aroha's and
 James's Mathematics versions are `formatCode: 'online'`, so `formatChoices` correctly offers
 online only; the only `either` version is James's Calculus, which he alone teaches, so it
-never reaches a multi-tutor shortlist. The exclusion shots therefore demonstrate the
-DURATION path (90 minutes excludes James). Showing a format exclusion would need a new seed
-fixture, which has not been added.
+never reaches a multi-tutor shortlist. The exclusion shots therefore demonstrate the DURATION
+path (90 minutes excludes James). Showing a format exclusion would need a new seed fixture,
+which has not been added.
 
-> ### THE ONE OPEN UX ISSUE: `/ask/times` IS THE WRONG SHAPE
->
-> The times screen is **roughly 7,300 pixels tall** — the old list renders every
-> quarter-hour start across the whole availability horizon, about 180 checkboxes.
->
-> This is not new to step 5. It grew when step 4 made 15-minute granularity
-> server-authoritative: `bookableSlotsForSubjectSection` defaults to `SLOT_STEP_MINUTES`,
-> so the same list that was tolerable at half-hourly starts became four times longer, and
-> nobody had looked at that screen since.
->
-> `7c90069` pinned the selection summary and Continue back into view — the grid this
-> replaced had a sticky action bar and dropping it in the rewrite was an accident. **That
-> makes the screen usable. It does not make it good, and it is not the fix.**
->
-> **RECOMMENDATION: rebuild `/ask/times` on the step 4 calendar interaction** rather than
-> keeping the checkbox list. `WeekCalendar` in `@studdy/design-system` already draws
-> quarter-hour starts as selectable markers, already handles the seven-day window and the
-> mobile horizontal scroll, and is what the single-tutor journey uses — so a family would
-> meet one way of choosing a time rather than two. The multi-tutor case needs one addition
-> the single-tutor one does not: a marker must say how many of the included tutors can do
-> that start, which today is the list's `2 of 2 tutors can do this · Aroha, James`. Keep
-> that information; the privacy rule is unchanged — the family's OWN included tutors,
-> never anything about the platform, and never a reason for a gap.
->
-> Do not merge step 5 before this is settled. The owner's provisional acceptance of the
-> other screens is conditional on reviewing the corrected times screen.
+#### Two bugs found by tests written alongside
+
+A duration parsed from the URL with `parseInt` turned `12.5` into `12` and `60abc` into `60`
+— a duration is a price, so it is matched strictly now. And `availability-discovery` counted
+shortlist buttons before the cards had rendered, so the save never happened and it failed
+several screens later as "no tutor offers this subject".
 
 ### Step 6 — cohesive visual-design pass
 
@@ -1064,41 +1064,42 @@ If S: is missing, run: Start-ScheduledTask -TaskName 'Mount StuddyDev Disk'
 
 Read docs/handoffs/current-session.md first, in full, before anything else.
 
-Then confirm against the actual repo and git state:
-- the branch is feat/optional-shortlist-and-fan-out
-- the working tree is clean
-- it is AHEAD of origin/main and 0 behind
-- it has NOT been pushed (no remote ref for it) and there is NO pull request
+Then confirm against the actual repo and git state, reading the CURRENT HEAD and the exact
+ahead/behind counts out of git rather than from any number written in this prompt — a
+document cannot name the commit that contains it:
+- which branch you are on, and whether the working tree is clean
+- whether feat/optional-shortlist-and-fan-out has been pushed and merged
+- whether local main matches origin/main
 - UX steps 1, 2, 3 and 4 ARE merged to main; step 4 was merged as d676f13 (PR #19)
-- step 5 is IMPLEMENTED on this branch but NOT verified and NOT merged
+- step 5's UX is APPROVED by the owner; check git for whether it has merged yet
 - step 6 has not started
 
-Read the current HEAD and the exact ahead count out of git and REPORT them to me. Do not
-compare them against a number written in this prompt: a document cannot name the commit
-that contains it, so any hash or count stored here is stale the moment it is written.
-fbc1757, 923b16e and 7c90069 are the three step 5 commits and stay true.
+fbc1757, 923b16e, 7c90069 and ab39367 are the four step 5 commits and stay true.
 
 Then confirm step 5 is implemented, by checking the code rather than trusting this list:
 - apps/web/src/app/shortlist/[subjectSectionId]/ask/ holds length, format, times, review
   and an entry redirect
 - apps/web/src/lib/ask/ holds draft.ts, resolve.ts, sections.ts, summary.ts, actions.ts
-- apps/web/src/components/journey/ holds the shell, summary and accordion SHARED with
-  /book — booking-shell.tsx and booking-summary.tsx delegate to them
+  and availability.ts
+- apps/web/src/components/journey/ holds the shell, summary, accordion AND time-picker,
+  all SHARED with /book — the booking and ask components delegate to them
+- /ask/times draws WeekCalendar in select mode, one week at a time, deriving availability
+  at the chosen SHARED duration and format through bookableSlotsForTutors
 - packages/domain/src/bookings/fan-out-eligibility.ts is pure and decides who is included
   and who is excluded with a reason
 - createIntendedLessonRequest REFUSES a mixed set of lesson lengths unconditionally, and
   refuses a format the tutor's version cannot deliver
 - /requests/new and /shortlist/[id]/times are redirects into the new journey
 
-Do NOT run the full suite yet, and do not push, open a PR or merge.
+STEP 5 IS CLOSED. Its UX was reviewed screen by screen and approved; do not reopen it, and
+do not "improve" the times calendar. Two things there look arbitrary and are not: a marker
+carries only its start time (a per-marker tutor ratio was built and rejected as unreadable),
+and compatibility names appear only against times the family has actually chosen.
 
-THE FIRST REAL TASK IS THE /ask/times CORRECTION. That screen is about 7,300 pixels tall:
-it lists every quarter-hour start across the availability horizon as a checkbox, roughly
-180 of them. A sticky action bar was restored so it is usable, but that is not the fix.
-Rebuild it on the step 4 calendar interaction (WeekCalendar), keeping the one thing the
-multi-tutor case needs that the single-tutor one does not: each start says how many of the
-family's OWN included tutors can do it. The privacy rule is unchanged — never anything
-about the platform, and never a reason for a gap.
+THE NEXT TASK IS STEP 6, the cohesive visual-design pass — see the step 6 section. Styling
+is no longer deferred (§8.1): every UX step must reach a reviewable visual state before the
+next begins, so step 6 is a final consistency pass rather than the first time styling
+happens.
 
 Then, in your own words rather than copying the handoff back to me, summarise:
 - why the shortlist is a saving-and-comparison surface rather than a way to book, and how
@@ -1109,10 +1110,8 @@ Then, in your own words rather than copying the handoff back to me, summarise:
 - why a shortlisted tutor who cannot take the request is shown rather than dropped, and why
   the reason describes the lesson rather than the tutor
 - why a question with one eligible option is still asked, in this journey as in /book
-
-Then state plainly that the shortlist, length, format and review screens are
-PROVISIONALLY accepted, that the times screen still needs correcting, and that the full
-sequential verification and my final screenshot review both come after that.
+- why the times calendar shows only start times on its markers, and where the tutor
+  compatibility information went instead
 
 Do NOT implement anything until I have confirmed your recovered context is correct. Stop
 after the summary and wait for me.
