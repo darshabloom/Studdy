@@ -15,10 +15,13 @@ conversation**. It should be enough to continue safely on its own.
 2. `docs/decisions/` — decisions approved during implementation. **These override the
    planning pack** where stated. Three files: approved product decisions, the multi-tutor
    state machine, security and privacy decisions.
-3. `docs/source-material/README.md` — index of the fourteen planning documents, their
+3. `docs/design/payments-and-first-paid-booking.md` — **the authority for the current
+   work.** The launch-critical payment slice: approved product decisions, schema, Stripe
+   Connect architecture, webhooks, money model and the PR sequence.
+4. `docs/source-material/README.md` — index of the fourteen planning documents, their
    status, and which decisions override each.
-4. `docs/source-material/*.md` — the planning documents themselves, when you need detail.
-5. `claude/studdy-planning-pack-digest.md` — a condensed extract of all fourteen. Useful as
+5. `docs/source-material/*.md` — the planning documents themselves, when you need detail.
+6. `claude/studdy-planning-pack-digest.md` — a condensed extract of all fourteen. Useful as
    an index; the full sources are authoritative.
 
 **Authority order when two documents disagree:** brief → `docs/decisions/` → planning
@@ -307,13 +310,59 @@ click-to-create, snapping, window fitting and the family-safe refusal.
 
 ## 8. The exact next tasks, in order
 
-Steps 1 to 5 are merged to `main`. **Step 6 has not started.** Rewrite or update the end-to-end journey alongside each step rather than leaving
-all test changes to the end; use targeted tests while building and the full suite at major
-boundaries and before PR readiness.
+Steps 1 to 5 are merged to `main`. Rewrite or update the end-to-end journey alongside each
+step rather than leaving all test changes to the end; use targeted tests while building and
+the full suite at major boundaries and before PR readiness.
 
-**The immediate next task is step 6**, the cohesive visual-design pass. Do not reopen any
-step 5 behaviour: it was reviewed screen by screen and approved, and the decisions that look
-arbitrary are recorded with their reasons in the step 5 section above.
+> ### THE NEXT TASK IS NOT STEP 6. IT IS PAYMENTS.
+>
+> **Directed by the owner on 2026-08-26, after a launch-priority assessment.** Studdy is now
+> working against a launch-critical roadmap whose goal is the first real paid lesson, as
+> quickly and safely as possible. The historical step 6 visual pass advances none of
+>
+> `parent sends request → tutor responds → family selects → awaiting_payment → payment →
+confirmed booking`
+>
+> so it is **explicitly deferred**. Not cancelled: once the payment screens exist, a visual
+> pass across the whole family journey including them is the natural follow-up.
+>
+> **Read `docs/design/payments-and-first-paid-booking.md` — it is the authority for this
+> work** and carries the approved Gate 0 product decisions, the schema, the Stripe Connect
+> architecture, the webhook and idempotency design, the money model and an eight-PR
+> sequence. Where it disagrees with the PR sequence in
+> `claude/studdy-implementation-plan.md` or with the step 6 section below, that document
+> wins.
+>
+> **The immediate next task is slice 1, `feat/payment-window`** — the 60-minute payment
+> window, the 30-minute near-lesson cutoff, and the expiry-sweep guards. It touches no
+> Stripe surface.
+>
+> Do not reopen any step 5 behaviour: it was reviewed screen by screen and approved, and the
+> decisions that look arbitrary are recorded with their reasons in the step 5 section above.
+
+### THE LAUNCH-CRITICAL PAYMENT SLICES — **NOT STARTED**
+
+Full detail, including every schema column and the reasoning behind each choice, is in
+`docs/design/payments-and-first-paid-booking.md`. The sequence, in order:
+
+| #   | Branch                                | What                                                       |
+| --- | ------------------------------------- | ---------------------------------------------------------- |
+| 1   | `feat/payment-window`                 | Window + cutoff rules, near-lesson refusal, sweep guards   |
+| 2   | `feat/inngest-scheduler`              | Expiry automated BEFORE any money can be taken             |
+| 3   | `feat/payments-schema-and-pricing`    | `payments` tables, pure pricing domain, RLS classification |
+| 4   | `feat/stripe-connect-onboarding`      | Express accounts, `account.updated`                        |
+| 5   | `feat/stripe-payment-intent`          | Payment Element, server-authoritative pricing              |
+| 6   | `feat/stripe-webhooks-and-fulfilment` | **First real paid booking possible here**                  |
+| 7   | `feat/resend-outbox-notifications`    | Outbox drain, the seven launch-critical emails             |
+| 8   | `feat/admin-settlement`               | Weekly manual tutor settlement                             |
+
+Two rules from that document are worth repeating here, because both are easy to get wrong:
+
+- **The Tutor Request state machine does NOT gain a `confirmed` state.** A paid booking is
+  ILR `fulfilled` + reservation `booking_confirmed` + payment `succeeded`, with the winning
+  request staying `selected`. The expiry sweep is guarded on the ILR's status instead.
+- **No real money is accepted while expiry depends on a manual endpoint.** That is why
+  Inngest lands at slice 2 rather than later.
 
 ### Step 2 — calendar-first `/tutor/availability` — **COMPLETE**
 
@@ -988,14 +1037,21 @@ A duration parsed from the URL with `parseInt` turned `12.5` into `12` and `60ab
 shortlist buttons before the cards had rendered, so the save never happened and it failed
 several screens later as "no tutor offers this subject".
 
-### Step 6 — cohesive visual-design pass
+### Step 6 — cohesive visual-design pass — **DEFERRED, NOT CANCELLED**
 
-Hierarchy, spacing, card proportions, typography, button hierarchy, calendar states,
-selected/hover/focus states, responsive behaviour, useful empty states — using the existing
-design system. The owner's standard: the next manual review should feel like a real product,
-not a demonstration that the backend works.
+**Deferred by the owner on 2026-08-26 in favour of the launch-critical payment path.** Do
+not start it. See the box at the top of §8 and
+`docs/design/payments-and-first-paid-booking.md`.
 
-**Now a final consistency pass, not the first time styling happens.** See §8.1.
+What it is, for when it returns: hierarchy, spacing, card proportions, typography, button
+hierarchy, calendar states, selected/hover/focus states, responsive behaviour, useful empty
+states — using the existing design system. The owner's standard: the review should feel like
+a real product, not a demonstration that the backend works.
+
+**A final consistency pass, not the first time styling happens** (§8.1) — and when it does
+return it should cover the payment screens too, which will not exist until the slices in the
+payments design document have landed. Each of those slices still reaches a reviewable visual
+state before the next begins; §8.1 is unaffected by this deferral.
 
 ---
 
@@ -1090,7 +1146,8 @@ document cannot name the commit that contains it:
 - whether local main matches origin/main
 - UX steps 1 to 5 ARE ALL merged to main; step 4 was merged as d676f13 (PR #19) and
   step 5 as a738913 (PR #20)
-- step 6 has not started, and needs a NEW branch off main
+- step 6 is DEFERRED, not next — the launch-critical payment path replaced it
+- the next task needs a NEW branch off main
 
 Then confirm step 5 is on main, by checking the code rather than trusting this list:
 - apps/web/src/app/shortlist/[subjectSectionId]/ask/ holds length, format, times, review
@@ -1112,10 +1169,15 @@ do not "improve" the times calendar. Two things there look arbitrary and are not
 carries only its start time (a per-marker tutor ratio was built and rejected as unreadable),
 and compatibility names appear only against times the family has actually chosen.
 
-THE NEXT TASK IS STEP 6, the cohesive visual-design pass — see the step 6 section. Styling
-is no longer deferred (§8.1): every UX step must reach a reviewable visual state before the
-next begins, so step 6 is a final consistency pass rather than the first time styling
-happens.
+THE NEXT TASK IS NOT STEP 6. Studdy is working against a launch-critical roadmap aimed at
+the first real paid lesson. Read docs/design/payments-and-first-paid-booking.md — it is the
+authority — and start with slice 1, feat/payment-window: the 60-minute payment window, the
+30-minute near-lesson cutoff, and the expiry-sweep guards. No Stripe surface is touched.
+
+Two things there are easy to get wrong and are already decided: the Tutor Request state
+machine does NOT gain a `confirmed` state (a paid booking is ILR fulfilled + reservation
+booking_confirmed + payment succeeded, and the sweep is guarded on the ILR's status), and no
+real money is accepted while expiry still depends on a manual endpoint.
 
 Then, in your own words rather than copying the handoff back to me, summarise:
 - why the shortlist is a saving-and-comparison surface rather than a way to book, and how
