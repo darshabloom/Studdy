@@ -1,5 +1,10 @@
 import { and, eq } from 'drizzle-orm';
 import { PROVISIONAL_REQUEST_RULES, RULE_KEYS, type RequestRules } from '@studdy/domain/bookings';
+import {
+  PAYMENT_RULE_KEYS,
+  PROVISIONAL_PAYMENT_WINDOW_RULES,
+  type PaymentWindowRules,
+} from '@studdy/domain/payments';
 import { createDatabaseClient } from '../client';
 import { ruleSettings } from '../schema/index';
 
@@ -69,6 +74,64 @@ export async function loadRequestRules(reader?: Reader): Promise<LoadedRequestRu
     return {
       rules,
       deadlineRuleVersion: byKey.get(RULE_KEYS.responseTiers)?.version ?? 0,
+    };
+  } finally {
+    if (client !== null) await client.sql.end();
+  }
+}
+
+export interface LoadedPaymentWindowRules {
+  readonly rules: PaymentWindowRules;
+  /**
+   * The version snapshotted onto a request whose payment deadline was
+   * calculated from these rules. Taken from the WINDOW setting, since that is
+   * the value which produces the deadline itself.
+   */
+  readonly paymentRuleVersion: number;
+}
+
+/**
+ * Load the payment window configuration.
+ *
+ * Separate from `loadRequestRules` rather than folded into it, because the two
+ * are snapshotted onto different columns at different moments — the response
+ * deadline at send, the payment deadline at selection — and one combined
+ * version number could not honestly describe either.
+ *
+ * Accepts a reader so selection can load inside its own transaction and see a
+ * consistent view of configuration.
+ */
+export async function loadPaymentWindowRules(reader?: Reader): Promise<LoadedPaymentWindowRules> {
+  const client = reader === undefined ? createDatabaseClient() : null;
+  const db = reader ?? client!.db;
+  try {
+    const rows = await db
+      .select({
+        key: ruleSettings.settingKey,
+        value: ruleSettings.value,
+        version: ruleSettings.versionNumber,
+      })
+      .from(ruleSettings)
+      .where(eq(ruleSettings.statusCode, 'current'));
+
+    const byKey = new Map(rows.map((row) => [row.key, row]));
+    const read = <T>(key: string, fallback: T): T => {
+      const row = byKey.get(key);
+      return row === undefined ? fallback : (row.value as T);
+    };
+
+    return {
+      rules: {
+        windowMinutes: read(
+          PAYMENT_RULE_KEYS.windowMinutes,
+          PROVISIONAL_PAYMENT_WINDOW_RULES.windowMinutes,
+        ),
+        nearLessonCutoffMinutes: read(
+          PAYMENT_RULE_KEYS.nearLessonCutoffMinutes,
+          PROVISIONAL_PAYMENT_WINDOW_RULES.nearLessonCutoffMinutes,
+        ),
+      },
+      paymentRuleVersion: byKey.get(PAYMENT_RULE_KEYS.windowMinutes)?.version ?? 0,
     };
   } finally {
     if (client !== null) await client.sql.end();

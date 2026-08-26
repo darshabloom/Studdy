@@ -337,9 +337,20 @@ test.describe('lesson requests', () => {
     await page.getByRole('button', { name: 'Choose this tutor' }).click();
 
     await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
+
+    /*
+     * THE FAMILY IS TOLD HOW LONG THEY HAVE, AND UNTIL WHEN.
+     *
+     * The heading quotes the window and the body quotes the actual deadline,
+     * both read from what was snapshotted onto the request at selection rather
+     * than recomputed for display — a screen that recalculated the deadline
+     * would drift from the sweep that enforces it.
+     */
+    await expect(page.getByText('You have 1 hour to pay')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/time is held until/)).toBeVisible();
     // Chosen, but explicitly NOT booked: nobody has paid.
-    await expect(page.getByText('You chose your tutor')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/not booked until that is done/)).toBeVisible();
+    await expect(page.getByText(/not booked until payment is complete/)).toBeVisible();
+    await expect(page.getByText(/released if it is not/)).toBeVisible();
     // The status says "Payment next", never "Booked": `fulfilled` is reserved
     // for a confirmed booking, and nobody has paid.
     await expect(page.getByText('Payment next')).toBeVisible();

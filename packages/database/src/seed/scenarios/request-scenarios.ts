@@ -92,6 +92,24 @@ export async function seedRequestRules(): Promise<void> {
     false,
     'Approved policy is TRUE, but DISABLED until the Stripe slice provides a real way to add and verify a payment method. Enabling it now would block every request with no way to satisfy it.',
   );
+  /*
+   * The payment window, as two independent rules.
+   *
+   * Kept apart because they answer different questions and will move
+   * separately: one is how long a person needs to find their card, the other is
+   * how little notice a tutor may be given. A single combined "minimum lead
+   * time" would make either change silently alter the other.
+   */
+  await setRuleSetting(
+    'payments.window_minutes',
+    60,
+    'Approved 2026-08-26: a family gets a full hour to pay after choosing. Never shortened for a near lesson — such a selection is refused instead.',
+  );
+  await setRuleSetting(
+    'payments.near_lesson_cutoff_minutes',
+    30,
+    'Approved 2026-08-26: the margin that must remain between the payment deadline and the lesson. With the 60-minute window this means a lesson must be at least 90 minutes away to be selectable.',
+  );
 }
 
 interface SeedTarget {

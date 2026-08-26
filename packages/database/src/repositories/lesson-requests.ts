@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lte, ne, or } from 'drizzle-orm';
 import {
   acceptanceHoldExpiry,
   assignPositions,
@@ -15,6 +15,7 @@ import {
   zonedClockTime,
   zonedDateOnly,
 } from '@studdy/domain/availability';
+import { paymentWindowFor, paymentWindowRefusalMessage } from '@studdy/domain/payments';
 import { createDatabaseClient } from '../client';
 import { formatsForCode } from './services';
 import {
@@ -34,7 +35,7 @@ import {
   tutorTimeReservations,
 } from '../schema/index';
 import { bookableSlotsForTutors } from './availability';
-import { loadRequestRules } from './rule-settings';
+import { loadPaymentWindowRules, loadRequestRules } from './rule-settings';
 
 /**
  * Commands for the Intended Lesson Request slice.
@@ -1093,34 +1094,96 @@ export async function expireOverdueRequests(options: {
         }
       }
 
-      // A SELECTED request whose hold has reached its natural expiry.
-      //
-      // Selection deliberately does not extend the hold. Payment is a later
-      // slice with its own window, and inventing one here would be inventing
-      // that slice's policy — but leaving the hold to sit `active` past its
-      // expiry would be worse: §12 forbids retaining a hold beyond its natural
-      // expiry, the tutor's own screen promises it is "released either way when
-      // it expires", and an expired-but-active row keeps blocking that slot for
-      // every other family because availability filters on status, not time.
-      //
-      // So the hold dies exactly when it said it would. Without payment the
-      // selection lapses, which is the truthful outcome: no payment, no
-      // booking. `payment_window_lapsed` already exists for precisely this.
-      const lapsedSelections = await tx
-        .update(tutorRequests)
-        .set({
-          statusCode: 'closed',
-          closedAt: now,
-          closeReasonCode: 'payment_window_lapsed',
-          updatedAt: now,
-        })
+      /*
+       * A SELECTED request whose PAYMENT WINDOW has run out.
+       *
+       * The deadline is `payment_deadline_at`, snapshotted at selection. Rows
+       * selected before the payment window existed have none, and fall back to
+       * `acceptance_hold_expires_at` — exactly the behaviour they have today,
+       * so this change cannot alter what happens to work already in flight.
+       *
+       * THE ILR GUARD IS LOAD-BEARING, AND IT IS WHY THE TUTOR REQUEST STATE
+       * MACHINE DOES NOT NEED A NEW STATE. A paid booking leaves its winning
+       * request `selected` forever, so status alone cannot distinguish "waiting
+       * to be paid for" from "paid for and confirmed" — and without this guard
+       * the next sweep would close a booking somebody had paid for. The ILR
+       * already records which it is: `awaiting_payment` while the window runs,
+       * `fulfilled` once payment succeeds. Reading it here is both the narrower
+       * change and the more honest one, because the ILR is where that fact
+       * genuinely lives.
+       *
+       * Payment status will add a second guard when the payments schema lands:
+       * a payment that is `processing` must not be swept out from under a
+       * webhook in flight. That table does not exist in this slice, so the
+       * guard is not written yet rather than faked.
+       *
+       * Leaving an expired hold `active` would be worse than closing it: §12
+       * forbids retaining a hold beyond its expiry, the tutor's own screen
+       * promises it is released when it expires, and an expired-but-active row
+       * keeps blocking that slot for every other family, because availability
+       * filters on status rather than on time.
+       */
+      const overdueSelections = await tx
+        .select({ id: tutorRequests.id, ilrId: tutorRequests.intendedLessonRequestId })
+        .from(tutorRequests)
+        .innerJoin(
+          intendedLessonRequests,
+          eq(tutorRequests.intendedLessonRequestId, intendedLessonRequests.id),
+        )
         .where(
           and(
             eq(tutorRequests.statusCode, 'selected'),
-            lte(tutorRequests.acceptanceHoldExpiresAt, now),
+            /*
+             * The payment deadline where there is one, the acceptance hold
+             * where there is not.
+             *
+             * Written as two guarded branches rather than a `coalesce`
+             * fragment: passing `now` into a raw SQL template hands the driver
+             * a Date it cannot bind, which fails at RUNTIME while typechecking
+             * perfectly. The operator form is also the one the rest of this
+             * file reads in.
+             *
+             * A row selected before the payment window existed has no deadline
+             * and must keep behaving exactly as it does today.
+             */
+            or(
+              and(
+                isNotNull(tutorRequests.paymentDeadlineAt),
+                lte(tutorRequests.paymentDeadlineAt, now),
+              ),
+              and(
+                isNull(tutorRequests.paymentDeadlineAt),
+                lte(tutorRequests.acceptanceHoldExpiresAt, now),
+              ),
+            ),
+            // Never a confirmed booking. `fulfilled` means somebody paid.
+            eq(intendedLessonRequests.statusCode, 'awaiting_payment'),
           ),
         )
-        .returning({ id: tutorRequests.id, ilrId: tutorRequests.intendedLessonRequestId });
+        .limit(batchSize);
+
+      const overdueIds = overdueSelections.map((row) => row.id);
+      const lapsedSelections =
+        overdueIds.length === 0
+          ? []
+          : await tx
+              .update(tutorRequests)
+              .set({
+                statusCode: 'closed',
+                closedAt: now,
+                closeReasonCode: 'payment_window_lapsed',
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  inArray(tutorRequests.id, overdueIds),
+                  // Re-guarded rather than trusted: the select above is not a
+                  // lock, so a concurrent selection or fulfilment between the
+                  // two statements must lose here rather than be overwritten.
+                  eq(tutorRequests.statusCode, 'selected'),
+                ),
+              )
+              .returning({ id: tutorRequests.id, ilrId: tutorRequests.intendedLessonRequestId });
 
       if (lapsedSelections.length > 0) {
         const releasedSelected = await tx
@@ -1610,6 +1673,25 @@ export class SelectionNoLongerAvailableError extends Error {
   }
 }
 
+/**
+ * The chosen lesson now starts too soon to arrange payment.
+ *
+ * A DISTINCT error rather than another `SelectionNoLongerAvailable`, because
+ * the two need different screens: the first means "pick again, this one is
+ * gone", and this one means "this one is still there but the clock beat you to
+ * it". Collapsing them would send a family to hunt for a time that is still
+ * visibly on their list.
+ *
+ * Carries the required lead time so the message can quote the enforced number
+ * rather than a copy of it.
+ */
+export class LessonTooCloseForPaymentError extends Error {
+  override name = 'LessonTooCloseForPaymentError';
+  constructor(readonly requiredLeadMinutes: number) {
+    super(paymentWindowRefusalMessage(requiredLeadMinutes));
+  }
+}
+
 export interface SelectAcceptedRequestInput {
   /** The family's LR- reference. */
   readonly reference: string;
@@ -1626,6 +1708,10 @@ export interface SelectionOutcome {
   readonly tutorFirstName: string;
   readonly startAt: Date;
   readonly closedCount: number;
+  /** When payment is due. Server-authoritative; the browser invents nothing. */
+  readonly paymentDeadlineAt: Date;
+  /** How long the family was given, for the copy that explains the deadline. */
+  readonly paymentWindowMinutes: number;
 }
 
 /**
@@ -1701,6 +1787,28 @@ export async function selectAcceptedTutorRequest(
         .where(eq(tutorRequestTimeOptions.id, winner.acceptedTimeOptionId!));
       if (claimed === undefined) throw new SelectionNoLongerAvailableError();
 
+      /*
+       * 1a. THE PAYMENT WINDOW, RE-EVALUATED AT SELECTION.
+       *
+       * Minimum notice was checked when the request was SENT, and selection can
+       * happen hours later — a family who takes their time over a lesson that
+       * was two hours away can arrive here with ninety minutes left. So the
+       * near-lesson rule is applied against `now`, not inherited.
+       *
+       * Refusal throws, and the transaction rolls back whole: the winner's
+       * `selected` update above is undone, no loser is closed, no hold is
+       * released. A refused selection writes NOTHING.
+       */
+      const { rules: paymentRules, paymentRuleVersion } = await loadPaymentWindowRules(tx);
+      const window = paymentWindowFor({
+        selectedAt: now,
+        lessonStartAt: claimed.startAt,
+        rules: paymentRules,
+      });
+      if (window.kind === 'refused') {
+        throw new LessonTooCloseForPaymentError(window.requiredLeadMinutes);
+      }
+
       const [tutor] = await tx
         .select({ firstName: tutorProfiles.publicFirstName })
         .from(tutorProfiles)
@@ -1760,7 +1868,45 @@ export async function selectAcceptedTutorRequest(
             ),
           );
       }
-      // The winner's reservation is deliberately left active and untouched.
+      /*
+       * The winner's hold now runs to the PAYMENT DEADLINE.
+       *
+       * Usually EARLIER than the acceptance hold it replaces — an hour rather
+       * than up to eight — because the family has stopped deciding and started
+       * paying, and holding a tutor's calendar longer than the thing it is
+       * protecting needs is exactly what §12 forbids. The tutor's screen must
+       * not present the earlier expiry as a penalty; it is the point at which
+       * they get their time back if nobody pays.
+       *
+       * Left `request_hold` and left `active`. It becomes `booking_confirmed`
+       * with no expiry when a payment succeeds, which is a later slice.
+       */
+      await tx
+        .update(tutorTimeReservations)
+        .set({ expiresAt: window.deadlineAt, updatedAt: now })
+        .where(
+          and(
+            eq(tutorTimeReservations.tutorRequestId, winner.id),
+            eq(tutorTimeReservations.statusCode, 'active'),
+          ),
+        );
+
+      /*
+       * Snapshot the deadline AND both inputs that produced it, with the rule
+       * version — the same discipline the response deadline and the acceptance
+       * hold already follow. Configuration may change tomorrow; what this
+       * family and this tutor were told does not.
+       */
+      await tx
+        .update(tutorRequests)
+        .set({
+          paymentDeadlineAt: window.deadlineAt,
+          paymentRuleVersion,
+          paymentWindowMinutes: window.windowMinutes,
+          nearLessonCutoffMinutes: window.nearLessonCutoffMinutes,
+          updatedAt: now,
+        })
+        .where(eq(tutorRequests.id, winner.id));
 
       // 4. Any option the family offered that nobody took is finished with.
       await tx
@@ -1842,15 +1988,30 @@ export async function selectAcceptedTutorRequest(
         eventType: 'intended_lesson_request.selected',
         entityType: 'intended_lesson_request',
         entityId: ilr.id,
-        payload: { startAt: claimed.startAt },
+        payload: { startAt: claimed.startAt, paymentDeadlineAt: window.deadlineAt },
         correlationId: input.correlationId,
         occurredAt: now,
+      });
+      /*
+       * Written now, consumed later. Nothing drains the outbox yet — that is
+       * the notifications slice — but the entry belongs to the transaction that
+       * created the obligation, not to whatever eventually sends the email.
+       * Emitting it here means the notification slice never has to reopen this
+       * transaction.
+       */
+      await tx.insert(outboxEntries).values({
+        eventType: 'payment.required',
+        payload: { tutorRequestId: winner.id, paymentDeadlineAt: window.deadlineAt },
+        idempotencyKey: `payment.required:${winner.id}`,
+        correlationId: input.correlationId,
       });
 
       return {
         tutorFirstName: tutor?.firstName ?? 'Your tutor',
         startAt: claimed.startAt,
         closedCount: losers.length,
+        paymentDeadlineAt: window.deadlineAt,
+        paymentWindowMinutes: window.windowMinutes,
       };
     });
   } catch (error) {

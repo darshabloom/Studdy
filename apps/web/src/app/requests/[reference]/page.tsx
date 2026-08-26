@@ -34,9 +34,36 @@ export default async function RequestDetailPage({
   ).length;
   const isOpen =
     request.statusCode === 'awaiting_responses' || request.statusCode === 'ready_for_selection';
+  /*
+   * NOT OPEN IS NOT THE SAME AS CLOSED, and this page used to treat it as a
+   * binary. A request awaiting payment offers no Withdraw — the repository
+   * refuses it, guarded on the open statuses — but it is very much alive, and
+   * telling a family "This request is closed" while they have an hour left to
+   * pay is the kind of thing that makes someone give up on a lesson they still
+   * want. `fulfilled` is excluded for the same reason: it is the successful
+   * ending, not a closure.
+   */
+  const isClosed = request.statusCode !== 'awaiting_payment' && request.statusCode !== 'fulfilled';
   const acceptedCount = request.tutorRequests.filter(
     (entry) => entry.statusCode === 'accepted',
   ).length;
+
+  /*
+   * The chosen tutor's request carries the payment deadline that was
+   * snapshotted when the family selected them. Null on a selection made before
+   * the payment window existed, in which case the screen says less rather than
+   * inventing a deadline nobody is enforcing.
+   */
+  const selected = request.tutorRequests.find((entry) => entry.statusCode === 'selected');
+  const paymentDeadlineAt = selected?.paymentDeadlineAt ?? null;
+  const selectedTutorFirstName = selected?.tutorFirstName ?? null;
+  const paymentWindowMinutes = selected?.paymentWindowMinutes ?? null;
+  const paymentWindowLabel =
+    paymentWindowMinutes === null
+      ? 'a short while'
+      : paymentWindowMinutes % 60 === 0
+        ? `${String(paymentWindowMinutes / 60)} hour${paymentWindowMinutes === 60 ? '' : 's'}`
+        : `${String(paymentWindowMinutes)} minutes`;
 
   return (
     <>
@@ -112,9 +139,44 @@ export default async function RequestDetailPage({
         </div>
       ) : request.statusCode === 'awaiting_payment' ? (
         <div className="mt-6">
-          <Alert tone="information" title="You chose your tutor">
-            Their time is held while payment is set up. The lesson is not booked until that is done,
-            and payment arrives in the next release.
+          {/*
+           * The deadline is READ, never recalculated.
+           *
+           * It was snapshotted onto the request at selection, so this renders
+           * the figure actually being enforced. A screen that recomputed
+           * "an hour from now" would drift from the sweep the moment
+           * configuration changed, and would quietly tell a family something
+           * the system did not intend to honour.
+           *
+           * Rendered as an absolute time rather than a live countdown: a
+           * ticking clock needs client state to stay honest, and this page is
+           * server-rendered. The absolute time is the thing a family can act
+           * on anyway — they can read it off and know.
+           */}
+          <Alert
+            tone="information"
+            title={
+              paymentDeadlineAt === null
+                ? 'You chose your tutor'
+                : `You have ${paymentWindowLabel} to pay`
+            }
+          >
+            {paymentDeadlineAt === null ? (
+              <>
+                Their time is held while payment is set up. The lesson is not booked until that is
+                done.
+              </>
+            ) : (
+              <>
+                {selectedTutorFirstName ?? 'Your tutor'}&rsquo;s time is held until{' '}
+                <strong className="font-semibold">
+                  {formatDeadline(paymentDeadlineAt, request.timeZone)}
+                </strong>
+                . The lesson is not booked until payment is complete, and the time is released if it
+                is not.
+              </>
+            )}
+            <span className="mt-2 block text-sm">Payment arrives in the next release.</span>
           </Alert>
         </div>
       ) : isOpen ? (
@@ -181,7 +243,7 @@ export default async function RequestDetailPage({
             </Button>
           </form>
         </Card>
-      ) : (
+      ) : isClosed ? (
         <div className="mt-8">
           <Alert tone="information" title="This request is closed">
             Your shortlist is still saved, so you can send a new request whenever you are ready.{' '}
@@ -190,7 +252,7 @@ export default async function RequestDetailPage({
             </Link>
           </Alert>
         </div>
-      )}
+      ) : null}
     </>
   );
 }

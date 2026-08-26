@@ -10,6 +10,7 @@ import {
   NoTutorAvailableError,
   RequestNotOpenError,
   RequestValidationError,
+  LessonTooCloseForPaymentError,
   selectAcceptedTutorRequest,
   SelectionNoLongerAvailableError,
   TimeNoLongerAvailableError,
@@ -1605,6 +1606,417 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
     });
   });
 
+  /**
+   * The payment window — the deadline a family is given once they have chosen,
+   * and the guard that stops the expiry sweep closing a booking somebody paid
+   * for.
+   *
+   * The sweep is where this slice earns its keep. A paid booking leaves its
+   * winning request `selected` forever, so status alone cannot tell "waiting to
+   * be paid for" from "paid for and confirmed" — the ILR is what distinguishes
+   * them, and these tests pin that from both sides.
+   */
+  describe('the payment window', () => {
+    /** The claimed start of the winner's time, and its request row. */
+    const winnerFacts = async (
+      reference: string,
+    ): Promise<{ id: string; startAt: Date; ilrId: string }> => {
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [row] = await db
+          .select({
+            id: tutorRequests.id,
+            ilrId: tutorRequests.intendedLessonRequestId,
+            startAt: tutorRequestTimeOptions.startsAt,
+          })
+          .from(tutorRequests)
+          .innerJoin(
+            tutorRequestTimeOptions,
+            eq(tutorRequests.acceptedTimeOptionId, tutorRequestTimeOptions.id),
+          )
+          .where(eq(tutorRequests.reference, reference));
+        return { id: row!.id, startAt: row!.startAt, ilrId: row!.ilrId };
+      } finally {
+        await sql.end();
+      }
+    };
+
+    const minutesBefore = (at: Date, minutes: number): Date =>
+      new Date(at.getTime() - minutes * 60_000);
+
+    it('snapshots the deadline and both rule inputs onto the winner', async () => {
+      const scenario = await twoAcceptances(`pay-snap-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      // Comfortably clear of the 90-minute boundary.
+      const selectedAt = minutesBefore(facts.startAt, 600);
+
+      const outcome = await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+
+      // The deadline is the window and nothing else — never clamped against
+      // the lesson, which is where zero and negative windows came from.
+      expect(outcome.paymentDeadlineAt.getTime()).toBe(selectedAt.getTime() + 60 * 60_000);
+      expect(outcome.paymentWindowMinutes).toBe(60);
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(won!.statusCode).toBe('selected');
+        expect(won!.paymentDeadlineAt?.getTime()).toBe(selectedAt.getTime() + 60 * 60_000);
+        expect(won!.paymentWindowMinutes).toBe(60);
+        expect(won!.nearLessonCutoffMinutes).toBe(30);
+        // The rule version, so a later configuration change stays explainable
+        // rather than rewriting what this family was told.
+        expect(won!.paymentRuleVersion).toBeGreaterThan(0);
+
+        // The winner's hold now runs to the payment deadline rather than to
+        // the acceptance hold it replaces.
+        const [hold] = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorRequestId, won!.id));
+        expect(hold!.statusCode).toBe('active');
+        expect(hold!.expiresAt?.getTime()).toBe(selectedAt.getTime() + 60 * 60_000);
+        // Still a request hold: it becomes a confirmed booking only when a
+        // payment succeeds, which is a later slice.
+        expect(hold!.reservationTypeCode).toBe('request_hold');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('allows a selection exactly on the 90-minute boundary', async () => {
+      const scenario = await twoAcceptances(`pay-edge-ok-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+
+      const outcome = await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: minutesBefore(facts.startAt, 90),
+      });
+      // A full hour even at the boundary — the cutoff is what protects the
+      // margin, so the window itself never has to be shortened.
+      expect(outcome.paymentDeadlineAt.getTime()).toBe(facts.startAt.getTime() - 30 * 60_000);
+    });
+
+    /**
+     * A REFUSED SELECTION WRITES NOTHING.
+     *
+     * The winner is claimed with an UPDATE before the lesson's start time is
+     * even known, so the refusal necessarily happens after that write. The
+     * whole thing is one transaction, and this proves the rollback rather than
+     * assuming it.
+     */
+    it('refuses one minute inside the boundary and writes nothing at all', async () => {
+      const scenario = await twoAcceptances(`pay-edge-no-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+
+      await expect(
+        selectAcceptedTutorRequest({
+          reference: scenario.ilrReference,
+          studentProfileIds: scenario.studentProfileIds,
+          tutorRequestReference: scenario.winner,
+          actorUserId: scenario.fixture.requesterUserId,
+          correlationId: `cor_${randomUUID()}`,
+          now: minutesBefore(facts.startAt, 89),
+        }),
+      ).rejects.toBeInstanceOf(LessonTooCloseForPaymentError);
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(won!.statusCode).toBe('accepted');
+        expect(won!.paymentDeadlineAt).toBeNull();
+
+        // The loser was not closed, and neither hold moved.
+        const [lost] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.loser));
+        expect(lost!.statusCode).toBe('accepted');
+
+        for (const id of [won!.id, lost!.id]) {
+          const [hold] = await db
+            .select()
+            .from(tutorTimeReservations)
+            .where(eq(tutorTimeReservations.tutorRequestId, id));
+          expect(hold!.statusCode).toBe('active');
+        }
+
+        const [ilr] = await db
+          .select()
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.reference, scenario.ilrReference));
+        expect(ilr!.statusCode).toBe('ready_for_selection');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('carries the enforced lead time in the refusal, rather than a copy of it', async () => {
+      const scenario = await twoAcceptances(`pay-msg-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+
+      const refusal = await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: minutesBefore(facts.startAt, 10),
+      }).catch((error: unknown) => error);
+
+      expect(refusal).toBeInstanceOf(LessonTooCloseForPaymentError);
+      expect((refusal as LessonTooCloseForPaymentError).requiredLeadMinutes).toBe(90);
+      expect((refusal as Error).message).toContain('90 minutes');
+      // About the lesson and what to do next — never about the tutor.
+      expect((refusal as Error).message.toLowerCase()).not.toContain('tutor');
+    });
+
+    it('lapses a selection whose payment window has run out', async () => {
+      const scenario = await twoAcceptances(`pay-lapse-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = minutesBefore(facts.startAt, 600);
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+
+      // One minute past the deadline. The acceptance hold still has hours to
+      // run, so this proves the sweep is reading the PAYMENT deadline.
+      await expireOverdueRequests({
+        correlationId: `cor_${randomUUID()}`,
+        now: new Date(selectedAt.getTime() + 61 * 60_000),
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(won!.statusCode).toBe('closed');
+        expect(won!.closeReasonCode).toBe('payment_window_lapsed');
+
+        const [hold] = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorRequestId, won!.id));
+        expect(hold!.statusCode).toBe('released');
+        expect(hold!.releaseReasonCode).toBe('payment_window_lapsed');
+
+        const [ilr] = await db
+          .select()
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.reference, scenario.ilrReference));
+        expect(ilr!.statusCode).toBe('closed');
+        expect(ilr!.closeReasonCode).toBe('payment_window_lapsed');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('leaves a selection alone while its window is still open', async () => {
+      const scenario = await twoAcceptances(`pay-open-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = minutesBefore(facts.startAt, 600);
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+
+      await expireOverdueRequests({
+        correlationId: `cor_${randomUUID()}`,
+        now: new Date(selectedAt.getTime() + 59 * 60_000),
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(won!.statusCode).toBe('selected');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /**
+     * THE GUARD THIS SLICE EXISTS FOR.
+     *
+     * A paid booking keeps its winning request `selected` — the Tutor Request
+     * state machine deliberately gained no new state — so without the ILR guard
+     * the very next sweep would close a lesson somebody had paid for and hand
+     * the tutor's time back. `fulfilled` is set directly here because nothing
+     * writes it until the Stripe slice; the point under test is the sweep, not
+     * the route into that state.
+     */
+    it('never expires a selection whose ILR is fulfilled, however old the deadline', async () => {
+      const scenario = await twoAcceptances(`pay-fulfilled-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = minutesBefore(facts.startAt, 600);
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        await db
+          .update(intendedLessonRequests)
+          .set({ statusCode: 'fulfilled' })
+          .where(eq(intendedLessonRequests.reference, scenario.ilrReference));
+        await db
+          .update(tutorTimeReservations)
+          .set({ reservationTypeCode: 'booking_confirmed', expiresAt: null })
+          .where(eq(tutorTimeReservations.tutorRequestId, facts.id));
+
+        // Long past the deadline, and past the acceptance hold too.
+        await expireOverdueRequests({
+          correlationId: `cor_${randomUUID()}`,
+          now: new Date(selectedAt.getTime() + 60 * 60 * 60_000),
+        });
+
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(won!.statusCode).toBe('selected');
+        expect(won!.closeReasonCode).toBeNull();
+
+        const [hold] = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorRequestId, facts.id));
+        expect(hold!.statusCode).toBe('active');
+        expect(hold!.reservationTypeCode).toBe('booking_confirmed');
+
+        const [ilr] = await db
+          .select()
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.reference, scenario.ilrReference));
+        expect(ilr!.statusCode).toBe('fulfilled');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /**
+     * A selection made before the payment window existed carries no deadline,
+     * and must keep behaving exactly as it does today — falling back to the
+     * acceptance hold. Proved by clearing the snapshot, which is precisely the
+     * shape of a row already in flight when this slice deploys.
+     */
+    it('falls back to the acceptance hold for a row selected before this slice', async () => {
+      const scenario = await twoAcceptances(`pay-legacy-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = minutesBefore(facts.startAt, 600);
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        await sql`update bookings.tutor_requests
+                     set payment_deadline_at = null,
+                         payment_rule_version = null,
+                         payment_window_minutes = null,
+                         near_lesson_cutoff_minutes = null,
+                         acceptance_hold_expires_at = now() - interval '1 minute'
+                   where reference = ${scenario.winner}`;
+
+        await expireOverdueRequests({ correlationId: `cor_${randomUUID()}` });
+
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(won!.statusCode).toBe('closed');
+        expect(won!.closeReasonCode).toBe('payment_window_lapsed');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /**
+     * Concurrency is unchanged by this slice, and that has to be shown rather
+     * than assumed: the window check sits inside the same transaction as the
+     * claim, so two guardians choosing at once must still produce exactly one
+     * winner and one honest refusal.
+     */
+    it('still admits exactly one winner when two selections race', async () => {
+      const scenario = await twoAcceptances(`pay-race-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = minutesBefore(facts.startAt, 600);
+
+      const attempt = () =>
+        selectAcceptedTutorRequest({
+          reference: scenario.ilrReference,
+          studentProfileIds: scenario.studentProfileIds,
+          tutorRequestReference: scenario.winner,
+          actorUserId: scenario.fixture.requesterUserId,
+          correlationId: `cor_${randomUUID()}`,
+          now: selectedAt,
+        });
+
+      const results = await Promise.allSettled([attempt(), attempt()]);
+      expect(results.filter((entry) => entry.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.find((entry) => entry.status === 'rejected');
+      expect((rejected as PromiseRejectedResult).reason).toBeInstanceOf(
+        SelectionNoLongerAvailableError,
+      );
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        // One deadline, written once.
+        expect(won!.paymentDeadlineAt?.getTime()).toBe(selectedAt.getTime() + 60 * 60_000);
+      } finally {
+        await sql.end();
+      }
+    });
+  });
+
   describe('holds die at their natural expiry', () => {
     /** Force a hold's expiry into the past, as the clock eventually would. */
     const expireHold = async (reference: string): Promise<void> => {
@@ -1612,6 +2024,25 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       try {
         await sql`update bookings.tutor_requests
                      set acceptance_hold_expires_at = now() - interval '1 minute'
+                   where reference = ${reference}`;
+      } finally {
+        await sql.end();
+      }
+    };
+
+    /**
+     * Force a SELECTED request's payment window into the past.
+     *
+     * Separate from `expireHold`, because after selection the acceptance hold
+     * is no longer what governs — the payment deadline is, and the sweep reads
+     * that. Ageing the acceptance hold on a selected row proves nothing, and
+     * before this helper existed it silently proved the opposite.
+     */
+    const expirePaymentWindow = async (reference: string): Promise<void> => {
+      const { sql } = createDatabaseClient();
+      try {
+        await sql`update bookings.tutor_requests
+                     set payment_deadline_at = now() - interval '1 minute'
                    where reference = ${reference}`;
       } finally {
         await sql.end();
@@ -1646,9 +2077,11 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
     });
 
     it('releases the winner hold when payment never happens', async () => {
-      // The hold the family won is NOT extended by selection, so it expires
-      // when it always said it would. §12 forbids retaining it beyond that,
-      // and the tutor's own screen promises it is released either way.
+      // Selection moves the winner's hold to the PAYMENT DEADLINE — usually
+      // sooner than the acceptance hold it replaces, never later. When that
+      // deadline passes with no payment, the hold goes: §12 forbids retaining
+      // it beyond its expiry, and the tutor's own screen promises it is
+      // released either way.
       const scenario = await twoAcceptances(`lapse-selected-${randomUUID().slice(0, 8)}`);
       await selectAcceptedTutorRequest({
         reference: scenario.ilrReference,
@@ -1657,7 +2090,7 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
         actorUserId: scenario.fixture.requesterUserId,
         correlationId: `cor_${randomUUID()}`,
       });
-      await expireHold(scenario.winner);
+      await expirePaymentWindow(scenario.winner);
 
       await expireOverdueRequests({ correlationId: `cor_${randomUUID()}`, now: new Date() });
 
