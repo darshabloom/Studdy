@@ -16,6 +16,7 @@ import {
   zonedDateOnly,
 } from '@studdy/domain/availability';
 import { createDatabaseClient } from '../client';
+import { formatsForCode } from './services';
 import {
   auditEvents,
   domainEvents,
@@ -174,6 +175,20 @@ export interface CreateIntendedLessonRequestInput {
    * not sent a request at all.
    */
   readonly proposedStarts: readonly Date[];
+  /**
+   * The single lesson length this request is for, when the caller is asserting
+   * one.
+   *
+   * ONE REQUEST MEANS ONE LESSON. A chosen start has to mean the same interval
+   * for every tutor who receives it — otherwise whichever tutor accepted, the
+   * family would have agreed to something they were never shown. Supplied, every
+   * resolved version must match it or the request is refused outright rather
+   * than reconciled.
+   *
+   * Optional only because the single-tutor journey has exactly one tutor and so
+   * cannot disagree with itself.
+   */
+  readonly requestedDurationMinutes?: number;
   readonly formatCode: string;
   readonly timeZone: string;
   readonly notesForTutors: string | null;
@@ -263,6 +278,8 @@ export async function createIntendedLessonRequest(
         serviceVersionId: serviceVersions.id,
         durationMinutes: serviceVersions.durationMinutes,
         priceAmountMinor: serviceVersions.priceAmountMinor,
+        // Needed to refuse a request for a format the tutor does not deliver.
+        formatCode: serviceVersions.formatCode,
         tutorFirstName: tutorProfiles.publicFirstName,
       })
       .from(serviceVersions)
@@ -328,6 +345,39 @@ export async function createIntendedLessonRequest(
         });
       }
 
+      /**
+       * THE LESSON HAS TO BE THE SAME LESSON FOR EVERYONE.
+       *
+       * Refused rather than reconciled. The caller decides who is eligible and
+       * tells the family who is left out and why; by the time it reaches here a
+       * mismatch means the shortlist or the tutor's services changed underneath
+       * the family, and quietly sending a 90-minute request to a tutor the
+       * family chose for 60 would be worse than asking them to look again.
+       */
+      if (
+        input.requestedDurationMinutes !== undefined &&
+        chosen.durationMinutes !== input.requestedDurationMinutes
+      ) {
+        throw new RequestValidationError({
+          targets: 'One of these tutors no longer offers that lesson length. Check and resend.',
+        });
+      }
+
+      /**
+       * AND IT HAS TO BE DELIVERABLE THE WAY THEY ASKED.
+       *
+       * Nothing above this checked it: the offerings query restricts to
+       * published, current versions of the right subject, and `validateFanOut`
+       * only checks the format is one of the two concrete values. So without
+       * this an online-only tutor could be sent an in-person request — a lesson
+       * they cannot teach, discovered by them rather than by us.
+       */
+      if (!formatsForCode(chosen.formatCode).some((format) => format === input.formatCode)) {
+        throw new RequestValidationError({
+          targets: 'One of these tutors does not teach this lesson that way. Check and resend.',
+        });
+      }
+
       versionByTutor.set(tutorProfileId, chosen.serviceVersionId);
       durationByTutor.set(tutorProfileId, chosen.durationMinutes);
     }
@@ -337,10 +387,37 @@ export async function createIntendedLessonRequest(
       serviceVersionId: versionByTutor.get(tutorProfileId)!,
     }));
 
-    // The family-side record needs one lesson length. Where invited tutors
-    // differ, take the longest: the family should plan for the longest lesson
-    // they might get, and each tutor's own option rows still snapshot their own
-    // length.
+    /**
+     * ONE REQUEST IS ONE LESSON, AND THIS IS WHERE THAT BECOMES TRUE.
+     *
+     * Unconditional, and deliberately not dependent on the caller having
+     * asserted `requestedDurationMinutes`: a mixed set is refused however it
+     * arrives. It used to be RECONCILED here — the longest length won, on the
+     * reasoning that a family should plan for the longest lesson they might get
+     * — and that is exactly the behaviour this now forbids. A chosen start has
+     * to mean the same interval for every tutor asked about it; otherwise
+     * whichever tutor accepted, the family agreed to something they were never
+     * shown, and no record anywhere would say which lesson they thought they
+     * were asking for.
+     *
+     * The caller decides eligibility and tells the family who is left out and
+     * why. Reaching here with a mix means the shortlist or a tutor's published
+     * services changed underneath them, which is a reason to look again rather
+     * than something to average.
+     */
+    const distinctDurations = new Set(durationByTutor.values());
+    if (distinctDurations.size > 1) {
+      throw new RequestValidationError({
+        targets:
+          'These tutors do not all offer the same lesson length. Choose a length and try again.',
+      });
+    }
+
+    /**
+     * Safe only because of the guard directly above: the set is now provably a
+     * single value, so this reads it rather than choosing between candidates.
+     * `groupByDuration` below likewise yields exactly one group.
+     */
     const familyDurationMinutes = Math.max(
       ...targets.map((target) => durationByTutor.get(target.tutorProfileId) ?? 60),
     );

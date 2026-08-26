@@ -5,6 +5,7 @@ import {
   type BookingParams,
   type BookingStep,
 } from './draft';
+import type { JourneySection, SectionState } from '@/lib/journey/section';
 import type { SummaryRow } from '@/components/booking/booking-summary';
 
 /**
@@ -21,7 +22,7 @@ import type { SummaryRow } from '@/components/booking/booking-summary';
  * links and reload all keep working.
  */
 
-export type SectionState = 'complete' | 'current' | 'upcoming';
+export type { SectionState };
 
 /**
  * Answered at all, in either shape.
@@ -34,21 +35,14 @@ export function rowIsAnswered(row: SummaryRow): boolean {
   return row.value !== null || (row.values !== undefined && row.values.length > 0);
 }
 
-export interface BookingSection {
+/**
+ * A journey section, plus the booking step it came from.
+ *
+ * Extending the shared shape rather than restating it: the chrome draws
+ * `JourneySection`, and this journey's own logic keys on `step`.
+ */
+export interface BookingSection extends JourneySection {
   readonly step: BookingStep;
-  readonly label: string;
-  readonly value: string | null;
-  /** An answer that is several things — the preferred times, one per entry. */
-  readonly values: readonly string[];
-  readonly note: string | null;
-  readonly state: SectionState;
-  /**
-   * Where tapping the section header goes, or null when it does not open.
-   *
-   * Null only for the section already open and for questions not yet reached.
-   * An answered section always reopens, however few options its question had.
-   */
-  readonly href: string | null;
 }
 
 export function bookingSections(
@@ -73,6 +67,9 @@ export function bookingSections(
     const canReopen = state === 'complete' && answered;
 
     return {
+      // `key` is what the shared journey chrome identifies a section by; `step`
+      // stays because the booking journey's own logic is keyed on it.
+      key: row.step,
       step: row.step,
       label: row.label,
       value: row.value,

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { listShortlist } from '@studdy/database';
-import { Alert, Button, Card, EmptyState, StatusBadge } from '@studdy/design-system';
+import { Button, Card, EmptyState, StatusBadge } from '@studdy/design-system';
 import { SHORTLIST_MAX_TUTORS, availabilityLabel, priceLabel } from '@studdy/domain/discovery';
 import { schoolYearLabel } from '@studdy/domain/students';
 import { removeFromShortlistAction } from '@/lib/discovery/actions';
@@ -69,13 +69,22 @@ export default async function ShortlistPage({
           </StatusBadge>
         </div>
 
-        <div className="mt-6">
-          <Alert tone="information" title="This is a saved shortlist, not a lesson request">
-            Nothing has been sent to these tutors and no lesson is booked. Your shortlist is saved
-            to this subject, so it will still be here when you come back. Sending requests opens in
-            the next release.
-          </Alert>
-        </div>
+        {/*
+         * A shortlist is somewhere to SAVE and COMPARE, and nothing more.
+         *
+         * It used to carry a notice saying sending requests opened "in the next
+         * release" — true when written, false from the moment the booking
+         * journey shipped, and the sort of stale promise a family has no way to
+         * check. It also led with "Choose times for N tutors", which presented
+         * asking everyone at once as the way to book. Booking is one tutor at a
+         * time; asking several is a power feature, and this now says so in that
+         * order.
+         */}
+        <p className="mt-4 max-w-2xl text-text-secondary">
+          Tutors you have saved for {section.subjectDisplayName}, to compare before you decide.
+          Nothing has been sent and no lesson is booked. Book one of them when you are ready — or
+          ask several at once if you would rather.
+        </p>
 
         <div className="mt-6">
           {entries.length === 0 ? (
@@ -109,6 +118,20 @@ export default async function ShortlistPage({
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      {/*
+                       * The normal way to book, one tutor at a time, straight
+                       * into the single-tutor journey. Shortlisting this tutor
+                       * was an explicit choice, so it prefills — and `/book`
+                       * still asks every remaining question rather than
+                       * inferring the rest from it.
+                       */}
+                      <Button size="sm" asChild>
+                        <Link
+                          href={`/book?child=${section.studentProfileId}&subject=${section.subjectId}&tutor=${entry.tutorReference}`}
+                        >
+                          Book a lesson
+                        </Link>
+                      </Button>
                       <Button variant="secondary" size="sm" asChild>
                         <Link href={`/tutors/${entry.tutorReference}?section=${subjectSectionId}`}>
                           View profile
@@ -136,11 +159,6 @@ export default async function ShortlistPage({
 
         {entries.length > 0 ? (
           <div className="mt-6 flex flex-wrap gap-2">
-            <Button asChild>
-              <Link href={`/shortlist/${section.subjectSectionId}/times`}>
-                Choose times for {entries.length} {entries.length === 1 ? 'tutor' : 'tutors'}
-              </Link>
-            </Button>
             <Button variant="secondary" asChild>
               <Link href={discoverHref}>
                 {entries.length >= SHORTLIST_MAX_TUTORS
@@ -151,6 +169,31 @@ export default async function ShortlistPage({
             <Button variant="quiet" asChild>
               <Link href={context.actsForOthers ? '/parent' : '/student'}>Done for now</Link>
             </Button>
+          </div>
+        ) : null}
+
+        {entries.length > 1 ? (
+          /*
+           * The optional power journey, deliberately at the BOTTOM and
+           * deliberately quiet.
+           *
+           * Offered only where there is more than one tutor, because "ask
+           * multiple tutors" with one saved is just the booking journey wearing
+           * a longer coat. It says what it does — one lesson, several tutors,
+           * one of whom may accept — so a family can tell it apart from booking
+           * several lessons, which is what it most easily looks like.
+           */
+          <div className="mt-8 rounded-[var(--radius-medium)] border border-dashed border-surface-border p-4">
+            <h2 className="text-sm font-semibold text-text-primary">Not sure which one to pick?</h2>
+            <p className="mt-1 max-w-xl text-sm text-text-secondary">
+              You can ask several of them about the same lesson at once, and go with whoever can do
+              it. It is one lesson either way — only one tutor takes it.
+            </p>
+            <div className="mt-3">
+              <Button variant="secondary" size="sm" asChild>
+                <Link href={`/shortlist/${section.subjectSectionId}/ask`}>Ask multiple tutors</Link>
+              </Button>
+            </div>
           </div>
         ) : null}
       </div>

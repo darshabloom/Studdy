@@ -119,8 +119,21 @@ export async function listBookableServices(input: {
  * tutor's permissive setting becomes the actual options on screen.
  */
 export function formatsForVersion(version: BookableServiceVersion): readonly LessonFormat[] {
-  if (version.formatCode === 'online') return ['online'];
-  if (version.formatCode === 'in_person') return ['in_person'];
+  return formatsForCode(version.formatCode);
+}
+
+/**
+ * The same rule, from a raw column value.
+ *
+ * The request path reads service versions straight out of its own query rather
+ * than through `listBookableServices`, and still has to answer "may this tutor
+ * teach it this way?". One rule, two callers — a second copy of the mapping is
+ * how an online-only tutor ends up sent an in-person lesson.
+ */
+export function formatsForCode(value: string): readonly LessonFormat[] {
+  const scope = asVersionFormat(value);
+  if (scope === 'online') return ['online'];
+  if (scope === 'in_person') return ['in_person'];
   return ['online', 'in_person'];
 }
 
