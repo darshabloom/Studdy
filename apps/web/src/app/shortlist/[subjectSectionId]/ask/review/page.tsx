@@ -112,9 +112,16 @@ export default async function AskReviewPage({
           />
         ) : (
           <>
+            {/*
+             * THE EXCLUSION JOURNEY CAN LEAVE EXACTLY ONE TUTOR. Choosing 90
+             * minutes where only one shortlisted tutor publishes it is an
+             * ordinary outcome, not an edge case, so the screen has to read
+             * naturally with a single tutor as well as with several.
+             */}
             <Alert tone="information" title="Nothing is held until a tutor accepts">
               Sending this asks {included.length === 1 ? 'this tutor' : 'these tutors'} about your
-              times. A time is only held once one of them accepts it.
+              times. A time is only held once{' '}
+              {included.length === 1 ? 'the tutor accepts' : 'one of them accepts'} it.
             </Alert>
 
             <AskReviewForm

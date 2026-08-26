@@ -173,12 +173,18 @@ async function askMultipleAndReview(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { level: 1, name: /When would suit/ })).toBeVisible({
     timeout: 15_000,
   });
-  const options = page.getByRole('checkbox');
-  await expect(options.first()).toBeVisible({ timeout: 15_000 });
-  await options.nth(0).check();
-  await options.nth(1).check();
+  /*
+   * THE SAME CALENDAR THE SINGLE-TUTOR JOURNEY USES. Starts are markers on a
+   * week grid rather than a chronological list of checkboxes, so a time is
+   * chosen exactly as it is in `/book`.
+   */
+  const slots = page.getByRole('group', { name: /Bookable times for/ }).getByRole('button');
+  await expect(slots.first()).toBeVisible({ timeout: 15_000 });
+  await slots.first().click();
+  await slots.nth(1).click();
+  await expect(page.getByText(/2 preferred times chosen/)).toBeVisible();
 
-  await page.getByRole('link', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { level: 1, name: /Check this over/ })).toBeVisible({
     timeout: 15_000,
   });

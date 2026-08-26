@@ -21,6 +21,8 @@ export interface AskParams {
   readonly format: LessonFormat | null;
   /** Chosen starts as ISO strings, in the order the URL carried them. */
   readonly times: readonly string[];
+  /** Which page of the availability horizon the times step is showing. */
+  readonly week: number;
 }
 
 export type RawSearchParams = Record<string, string | string[] | undefined>;
@@ -49,11 +51,16 @@ export function parseAskParams(raw: RawSearchParams): AskParams {
   const parsed =
     duration !== null && /^\d+$/.test(duration) ? Number.parseInt(duration, 10) : Number.NaN;
   const format = firstValue(raw['format']);
+  const week = Number(firstValue(raw['week']) ?? '1');
 
   return {
     duration: Number.isInteger(parsed) && parsed > 0 ? parsed : null,
     format: format === 'online' || format === 'in_person' ? format : null,
     times: manyValues(raw['time']),
+    // Not an answer, so it is not cleared and not carried backwards: it says
+    // which seven days the calendar is drawing. `availabilityView` clamps it
+    // into the published horizon, so junk lands on the first week.
+    week: Number.isFinite(week) ? Math.trunc(week) : 1,
   };
 }
 
@@ -66,6 +73,7 @@ export function askHref(
   if (params.duration != null) search.set('duration', String(params.duration));
   if (params.format != null) search.set('format', params.format);
   for (const time of params.times ?? []) search.append('time', time);
+  if (params.week != null && params.week > 1) search.set('week', String(params.week));
 
   const query = search.toString();
   return `/shortlist/${subjectSectionId}/ask/${step}${query === '' ? '' : `?${query}`}`;
@@ -86,6 +94,8 @@ export function askParamsUpTo(step: AskStep, params: AskParams): Partial<AskPara
     duration: index >= ASK_STEPS.indexOf('length') ? params.duration : null,
     format: index >= ASK_STEPS.indexOf('format') ? params.format : null,
     times: index >= ASK_STEPS.indexOf('times') ? params.times : [],
+    // Deliberately absent, so going back to a question lands on the first week
+    // rather than on whichever page the family happened to leave the calendar.
   };
 }
 

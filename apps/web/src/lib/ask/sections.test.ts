@@ -16,6 +16,7 @@ const PARAMS: AskParams = {
   duration: 60,
   format: 'online',
   times: ['2026-09-01T04:00:00.000Z'],
+  week: 1,
 };
 
 function rows(overrides: Partial<Record<string, Partial<AskRow>>> = {}): AskRow[] {
@@ -40,7 +41,20 @@ describe('parseAskParams', () => {
       duration: 90,
       format: 'in_person',
       times: ['a', 'b'],
+      week: 1,
     });
+  });
+
+  /**
+   * The week is not an answer — it says which seven days the times calendar is
+   * drawing — so it is read leniently and never cleared. `availabilityView`
+   * clamps it into the published horizon, so junk landing on week one is the
+   * honest outcome rather than an error screen.
+   */
+  it('reads the calendar page, defaulting to the first week', () => {
+    expect(parseAskParams({}).week).toBe(1);
+    expect(parseAskParams({ week: '2' }).week).toBe(2);
+    expect(parseAskParams({ week: 'later' }).week).toBe(1);
   });
 
   /**
@@ -89,9 +103,30 @@ describe('askParamsUpTo', () => {
       times: PARAMS.times,
     });
   });
+
+  /**
+   * Reopening a question lands on the FIRST week, not on whichever page the
+   * family happened to leave the calendar showing. The times drawn there were
+   * for a different lesson, so the page they were on says nothing useful about
+   * the one now being asked.
+   */
+  it('never carries the calendar page backwards', () => {
+    for (const step of ['length', 'format', 'times'] as const) {
+      expect(askParamsUpTo(step, { ...PARAMS, week: 2 })).not.toHaveProperty('week');
+    }
+  });
 });
 
 describe('askHref', () => {
+  /**
+   * The first week is the absence of a parameter, so an ordinary link into the
+   * times step is not silently different from the one the family lands on.
+   */
+  it('carries the calendar page only once it has moved off the first week', () => {
+    expect(askHref(SECTION, 'times', { ...PARAMS, week: 1 })).not.toContain('week=');
+    expect(askHref(SECTION, 'times', { ...PARAMS, week: 3 })).toContain('week=3');
+  });
+
   it('carries the answers in the URL, one entry per time', () => {
     expect(askHref(SECTION, 'times', PARAMS)).toBe(
       '/shortlist/sec-1/ask/times?duration=60&format=online&time=2026-09-01T04%3A00%3A00.000Z',

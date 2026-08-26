@@ -35,6 +35,14 @@ export function AskReviewForm({
 }: AskReviewFormProps): ReactNode {
   const [state, formAction, pending] = useActionState(sendAskRequestAction, initialState);
 
+  /*
+   * ONE TUTOR IS AN ORDINARY OUTCOME HERE, not an edge case: a length only one
+   * shortlisted tutor publishes leaves exactly one being asked, and the
+   * exclusion is shown right above this form. Plural copy on that screen reads
+   * as though the family were asking a group that does not exist.
+   */
+  const single = tutorCount === 1;
+
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="subjectSectionId" value={subjectSectionId} />
@@ -46,7 +54,7 @@ export function AskReviewForm({
 
       <div>
         <Label htmlFor="notesForTutors">
-          Anything you&rsquo;d like the tutors to know? (optional)
+          Anything you&rsquo;d like the {single ? 'tutor' : 'tutors'} to know? (optional)
         </Label>
         <textarea
           id="notesForTutors"
@@ -56,7 +64,9 @@ export function AskReviewForm({
           placeholder="What you are hoping to work on, or anything that would help them prepare."
           className="mt-1 w-full rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-purple"
         />
-        <p className="mt-1 text-xs text-text-muted">Every tutor you ask will see this.</p>
+        <p className="mt-1 text-xs text-text-muted">
+          {single ? 'The tutor you ask will see this.' : 'Every tutor you ask will see this.'}
+        </p>
       </div>
 
       {state.error !== null ? (
@@ -72,7 +82,8 @@ export function AskReviewForm({
             : `Send request to ${String(tutorCount)} ${tutorCount === 1 ? 'tutor' : 'tutors'}`}
         </Button>
         <p className="mt-2 text-xs text-text-muted">
-          Nothing is booked yet. Each tutor can accept one of your times or decline.
+          Nothing is booked yet. {single ? 'The tutor' : 'Each tutor'} can accept one of your times
+          or decline.
         </p>
       </div>
     </form>

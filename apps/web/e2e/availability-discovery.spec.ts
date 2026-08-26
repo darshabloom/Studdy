@@ -382,12 +382,21 @@ test.describe('availability in discovery', () => {
       await ensureShortlisted(page);
       await askTimes(page);
 
-      // Counts are scoped to the tutors this request actually reaches, never to
-      // the platform — and to the INCLUDED ones now, since a tutor who cannot
-      // take the chosen lesson is not offering times for it.
-      await expect(page.getByText(/of \d+ tutors? can do this/).first()).toBeVisible({
-        timeout: 15_000,
-      });
+      /*
+       * Counts are scoped to the tutors this request actually reaches, never to
+       * the platform — and to the INCLUDED ones, since a tutor who cannot take
+       * the chosen lesson is not offering times for it.
+       *
+       * The calendar names that scope in its own accessible name, so the claim
+       * is asserted where a screen reader would meet it rather than from a
+       * sentence that happens to appear somewhere on the page.
+       */
+      const calendar = page.getByRole('group', { name: /Bookable times for your \d+ tutors?/ });
+      await expect(calendar.getByRole('button').first()).toBeVisible({ timeout: 15_000 });
+
+      // A chosen time says which of the family's OWN included tutors can do it.
+      await calendar.getByRole('button').first().click();
+      await expect(page.getByText(/can do this/).first()).toBeVisible();
     });
 
     /**
@@ -402,16 +411,19 @@ test.describe('availability in discovery', () => {
       await ensureShortlisted(page);
       await askTimes(page);
 
-      const options = page.getByRole('checkbox');
-      await expect(options.first()).toBeVisible({ timeout: 15_000 });
+      const slots = page.getByRole('group', { name: /Bookable times for/ }).getByRole('button');
+      await expect(slots.first()).toBeVisible({ timeout: 15_000 });
 
-      // Nothing chosen is still nothing to ask about.
-      await expect(page.getByRole('link', { name: 'Continue' })).toHaveCount(0);
+      // Nothing chosen is still nothing to ask about, and the screen says why
+      // rather than hiding the way on.
+      const onwards = page.getByRole('button', { name: 'Continue' });
+      await expect(onwards).toBeDisabled();
+      await expect(page.getByText(/Choose at least/)).toBeVisible();
 
       // One is enough. The copy recommends more; the rule does not demand it.
-      await options.nth(0).check();
+      await slots.first().click();
       await expect(page.getByText(/Choose at least/)).toHaveCount(0);
-      await expect(page.getByRole('link', { name: 'Continue' })).toBeVisible();
+      await expect(onwards).toBeEnabled();
     });
   });
 });

@@ -11,10 +11,33 @@ const OUT = process.argv[3] ?? 'S:/Studdy/.review/step5';
 const PASSWORD = 'Studdy-local-only-1';
 const FAMILY = 'parent.one@local.studdy.test';
 
+/**
+ * Which shots to write, as `prefix-name` — everything when nothing is asked for.
+ *
+ * The WALK always runs in full, because a screen is only reachable through the
+ * ones before it. This filters what is SAVED, so a review of one corrected
+ * screen does not silently replace the shots the owner has already accepted.
+ *
+ *   node step5-review-shots.mjs <base> <out> desktop-4-times-empty desktop-6-review …
+ */
+const ONLY = new Set(process.argv.slice(4));
+
 async function shoot(page, prefix, name) {
+  if (ONLY.size > 0 && !ONLY.has(`${prefix}-${name}`)) return;
   await page.waitForLoadState('networkidle').catch(() => {});
   await page.screenshot({ path: `${OUT}/${prefix}-${name}.png`, fullPage: true });
   console.log(`wrote ${prefix}-${name}.png`);
+}
+
+/**
+ * The bookable starts on the week calendar.
+ *
+ * The times step used to be a chronological list of checkboxes across the whole
+ * fortnight; it is now the same `WeekCalendar` the single-tutor journey uses, so
+ * a start is a marker button inside the calendar's group.
+ */
+function startMarkers(page) {
+  return page.getByRole('group', { name: /Bookable times for/ }).getByRole('button');
 }
 
 async function signIn(page) {
@@ -128,16 +151,14 @@ async function walk(page, prefix) {
     .waitFor({ timeout: 30_000 });
   await shoot(page, prefix, '4-times-empty');
 
-  const boxes = page.getByRole('checkbox');
-  await boxes.first().waitFor({ timeout: 30_000 });
-  await boxes.first().check();
-  const count = await boxes.count();
-  if (count > 2) await boxes.nth(2).check();
+  const starts = startMarkers(page);
+  await starts.first().waitFor({ timeout: 30_000 });
+  await starts.first().click();
+  const count = await starts.count();
+  if (count > 2) await starts.nth(2).click();
   await shoot(page, prefix, '5-times-chosen');
-  await page.screenshot({ path: `${OUT}/${prefix}-5b-times-viewport.png` });
-  console.log(`wrote ${prefix}-5b-times-viewport.png`);
 
-  await page.getByRole('link', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
   await page
     .getByRole('heading', { level: 1, name: /Check this over/ })
     .waitFor({ timeout: 30_000 });
@@ -180,10 +201,10 @@ async function walkExclusion(page, prefix, section) {
     .getByRole('heading', { level: 1, name: /When would suit/ })
     .waitFor({ timeout: 30_000 });
 
-  const boxes = page.getByRole('checkbox');
-  await boxes.first().waitFor({ timeout: 30_000 });
-  await boxes.first().check();
-  await page.getByRole('link', { name: 'Continue' }).click();
+  const starts = startMarkers(page);
+  await starts.first().waitFor({ timeout: 30_000 });
+  await starts.first().click();
+  await page.getByRole('button', { name: 'Continue' }).click();
   await page
     .getByRole('heading', { level: 1, name: /Check this over/ })
     .waitFor({ timeout: 30_000 });

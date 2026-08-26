@@ -144,8 +144,10 @@ export async function resolveAsk(
     context,
     section,
     studentName: student?.preferredName ?? null,
-    // Cleared answers never travel forward in a link.
-    params: { duration, format, times: times.map((at) => at.toISOString()) },
+    // Cleared answers never travel forward in a link. `week` is not an answer
+    // — it is which seven days the times calendar is drawing — so it passes
+    // through untouched.
+    params: { duration, format, times: times.map((at) => at.toISOString()), week: params.week },
     candidates,
     durations,
     formats,
