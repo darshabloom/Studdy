@@ -78,9 +78,16 @@ test.describe('family, students and tutor discovery', () => {
     await expect(page).toHaveURL(/\/shortlist\//);
     await expect(page.getByRole('heading', { name: 'Your shortlist' })).toBeVisible();
 
-    // It must be unmistakably a saved shortlist, not a sent request.
-    await expect(page.getByText('This is a saved shortlist, not a lesson request')).toBeVisible();
-    await expect(page.getByText(/Nothing has been sent to these tutors/)).toBeVisible();
+    /*
+     * It must be unmistakably a saved shortlist, not a sent request.
+     *
+     * Asserted on the GUARANTEE rather than on one sentence's exact words. The
+     * shortlist was reframed as a place to save and compare, which reworded
+     * this from two sentences into one; what has to be on screen is that these
+     * tutors are saved for comparison and that nothing has been sent or booked.
+     */
+    await expect(page.getByText(/to compare before you decide/)).toBeVisible();
+    await expect(page.getByText(/Nothing has been sent and no lesson is booked/)).toBeVisible();
 
     const savedCount = await page.getByRole('button', { name: 'Remove' }).count();
     expect(savedCount).toBeGreaterThan(0);
