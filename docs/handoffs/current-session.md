@@ -32,35 +32,32 @@ current; they are not duplicates.
 
 ## 2. Where the work is
 
-**Branch:** `feat/optional-shortlist-and-fan-out`, branched from `main` at `7f9fd58`.
+**Branch:** `main`. Steps 1 to 5 are all merged; there is no feature branch in flight.
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
 > ### Checkpoint state, verified against git
 >
-> | Fact       | Value                                                        |
-> | ---------- | ------------------------------------------------------------ |
-> | Branch     | `feat/optional-shortlist-and-fan-out`                        |
-> | Base       | `origin/main` at `7f9fd58` (steps 1–4)                       |
-> | Divergence | ahead of `origin/main`, 0 behind — read the count out of git |
-> | Steps 1–4  | merged (PRs #17, #18, #19)                                   |
-> | Step 5     | **UX APPROVED BY THE OWNER.** Closeout in progress           |
-> | Step 6     | not started                                                  |
+> | Fact      | Value                                                |
+> | --------- | ---------------------------------------------------- |
+> | Branch    | `main`, level with `origin/main`                     |
+> | Steps 1–4 | merged (PRs #17, #18, #19)                           |
+> | Step 5    | **MERGED as `a738913` (PR #20, squash, 2026-08-26)** |
+> | Step 6    | **NOT STARTED — this is the next task**              |
 >
-> The step 5 commits, oldest first:
+> Step 5 merged with all four CI jobs and both Vercel checks green, after a full
+> sequential local verification from a fresh database. It was approved screen by
+> screen by the owner.
 >
-> | Commit    | What                                                                  |
-> | --------- | --------------------------------------------------------------------- |
-> | `fbc1757` | the shared-duration and format invariants, server-side                |
-> | `923b16e` | the optional multi-tutor journey and the reframed shortlist           |
-> | `7c90069` | the times action bar pinned back into view (found during screenshots) |
-> | `ab39367` | the times step rebuilt on the booking calendar; the picker shared     |
+> Read the CURRENT HEAD out of git rather than from this file — a document cannot
+> name the commit that contains it. `a738913` is the step 5 squash commit and
+> stays true; the branch commits behind it were `fbc1757`, `923b16e`, `7c90069`
+> and `ab39367`.
 >
-> Read the CURRENT HEAD and ahead count out of git rather than from this file —
-> a document cannot name the commit that contains it. The hashes above stay true.
->
-> Do not reuse the merged branches `feat/parent-booking-journey`,
+> Start step 6 on a NEW branch off `main`. Do not reuse the merged branches
+> `feat/optional-shortlist-and-fan-out`, `feat/parent-booking-journey`,
 > `feat/discovery-and-profile-availability-calendars` or
-> `feat/availability-and-multi-time-requests`.
+> `feat/availability-and-multi-time-requests` — they are kept on the remote, as
+> this repository keeps every merged branch, but nothing new belongs on them.
 
 ### What PR #17 delivered
 
@@ -310,8 +307,7 @@ click-to-create, snapping, window fitting and the family-safe refusal.
 
 ## 8. The exact next tasks, in order
 
-Steps 1 to 4 are merged to `main`. **Step 5's UX is approved by the owner; step 6 has not
-started.** Rewrite or update the end-to-end journey alongside each step rather than leaving
+Steps 1 to 5 are merged to `main`. **Step 6 has not started.** Rewrite or update the end-to-end journey alongside each step rather than leaving
 all test changes to the end; use targeted tests while building and the full suite at major
 boundaries and before PR readiness.
 
@@ -813,12 +809,35 @@ Calculus at Years 10–13, so a senior student), and the tutor's minimum-gap con
 > **THE FINAL PROGRESSIVE-SUMMARY AND MOBILE-ACCORDION SCREENSHOTS STILL NEED THE OWNER'S
 > REVIEW BEFORE ANY PR OR MERGE.** They changed after the last set the owner approved.
 
-### Step 5 — the optional multi-tutor journey — **UX APPROVED**
+### Step 5 — the optional multi-tutor journey — **COMPLETE AND MERGED**
 
-On `feat/optional-shortlist-and-fan-out`, branched from `main` at `7f9fd58`. The owner
-approved the shortlist, length, format, times and review screens after the times step was
-rebuilt on the booking calendar. This section records the APPROVED behaviour; do not change
-any of it without the owner asking.
+Approved by the owner and **merged as `a738913`** (PR #20, squash, 2026-08-26), from
+`feat/optional-shortlist-and-fan-out`. All four CI jobs and both Vercel checks were green on
+the merged commit. This section records the APPROVED behaviour; do not change any of it
+without the owner asking.
+
+**Verified gate state before merge**, run sequentially from a fresh database with nothing
+else on the machine:
+
+| Gate                                       | Result                                |
+| ------------------------------------------ | ------------------------------------- |
+| `pnpm typecheck`                           | green                                 |
+| `pnpm exec turbo run lint --concurrency=2` | green — 9/9                           |
+| `pnpm format`                              | green                                 |
+| `pnpm check:rls`                           | green — 28 tables classified          |
+| `pnpm check:boundaries`                    | green                                 |
+| `pnpm build`                               | green — clean rebuild, cache bypassed |
+| Unit                                       | **430 passing, 1 skipped** (was 389)  |
+| Integration                                | **115 passing, 1 skipped** (was 110)  |
+| End-to-end                                 | **98 passing in 2.4 minutes**         |
+
+> **THE FIRST FULL END-TO-END RUN CAUGHT SOMETHING TARGETED RUNS NEVER TOUCHED.**
+> `family-students-discovery` still looked for the shortlist's old two-sentence
+> reassurance, which the reframing had rewritten into one sentence several commits
+> earlier. The page still made the promise, so the spec now pins the GUARANTEE
+> rather than the phrasing — but the failure sat there undetected through every
+> targeted run of the slice. Targeted tests while building, the full suite before
+> a pull request: both halves of that rule earn their keep.
 
 #### The shape of the product, and why
 
@@ -1068,15 +1087,12 @@ Then confirm against the actual repo and git state, reading the CURRENT HEAD and
 ahead/behind counts out of git rather than from any number written in this prompt — a
 document cannot name the commit that contains it:
 - which branch you are on, and whether the working tree is clean
-- whether feat/optional-shortlist-and-fan-out has been pushed and merged
 - whether local main matches origin/main
-- UX steps 1, 2, 3 and 4 ARE merged to main; step 4 was merged as d676f13 (PR #19)
-- step 5's UX is APPROVED by the owner; check git for whether it has merged yet
-- step 6 has not started
+- UX steps 1 to 5 ARE ALL merged to main; step 4 was merged as d676f13 (PR #19) and
+  step 5 as a738913 (PR #20)
+- step 6 has not started, and needs a NEW branch off main
 
-fbc1757, 923b16e, 7c90069 and ab39367 are the four step 5 commits and stay true.
-
-Then confirm step 5 is implemented, by checking the code rather than trusting this list:
+Then confirm step 5 is on main, by checking the code rather than trusting this list:
 - apps/web/src/app/shortlist/[subjectSectionId]/ask/ holds length, format, times, review
   and an entry redirect
 - apps/web/src/lib/ask/ holds draft.ts, resolve.ts, sections.ts, summary.ts, actions.ts
