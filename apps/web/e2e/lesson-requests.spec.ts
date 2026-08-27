@@ -348,9 +348,10 @@ test.describe('lesson requests', () => {
      */
     await expect(page.getByText('You have 1 hour to pay')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/time is held until/)).toBeVisible();
-    // Chosen, but explicitly NOT booked: nobody has paid.
-    await expect(page.getByText(/not booked until payment is complete/)).toBeVisible();
-    await expect(page.getByText(/released if it is not/)).toBeVisible();
+    // Chosen, but explicitly NOT booked: nobody has paid, and the consequence
+    // of not paying is spelled out rather than implied.
+    await expect(page.getByText(/isn.t booked until payment is complete/)).toBeVisible();
+    await expect(page.getByText(/the time will be released/)).toBeVisible();
     // The status says "Payment next", never "Booked": `fulfilled` is reserved
     // for a confirmed booking, and nobody has paid.
     await expect(page.getByText('Payment next')).toBeVisible();

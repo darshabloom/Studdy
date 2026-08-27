@@ -1,5 +1,5 @@
 {
-  "id": "cfc83c70-8e58-48bd-8e14-3cdf056bd365",
+  "id": "80dc16fc-2f4e-4cba-a7ef-a7c9f7db2914",
   "prevId": "ac300603-4a39-4605-a327-47210ed57e72",
   "version": "7",
   "dialect": "postgresql",
@@ -3477,20 +3477,26 @@
           "primaryKey": false,
           "notNull": false
         },
-        "payment_rule_version": {
-          "name": "payment_rule_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "payment_window_minutes": {
           "name": "payment_window_minutes",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
+        "payment_window_rule_version": {
+          "name": "payment_window_rule_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "near_lesson_cutoff_minutes": {
           "name": "near_lesson_cutoff_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "near_lesson_cutoff_rule_version": {
+          "name": "near_lesson_cutoff_rule_version",
           "type": "integer",
           "primaryKey": false,
           "notNull": false

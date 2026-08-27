@@ -1674,9 +1674,14 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
         expect(won!.paymentDeadlineAt?.getTime()).toBe(selectedAt.getTime() + 60 * 60_000);
         expect(won!.paymentWindowMinutes).toBe(60);
         expect(won!.nearLessonCutoffMinutes).toBe(30);
-        // The rule version, so a later configuration change stays explainable
-        // rather than rewriting what this family was told.
-        expect(won!.paymentRuleVersion).toBeGreaterThan(0);
+        /*
+         * ONE VERSION PER RULE. `rule_settings` versions per key, so the two
+         * move independently and a single column could not say which cutoff
+         * was in force. Both are recorded, so the decision is reconstructable
+         * from this row alone months later.
+         */
+        expect(won!.paymentWindowRuleVersion).toBeGreaterThan(0);
+        expect(won!.nearLessonCutoffRuleVersion).toBeGreaterThan(0);
 
         // The winner's hold now runs to the payment deadline rather than to
         // the acceptance hold it replaces.
@@ -1956,9 +1961,10 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       try {
         await sql`update bookings.tutor_requests
                      set payment_deadline_at = null,
-                         payment_rule_version = null,
                          payment_window_minutes = null,
+                         payment_window_rule_version = null,
                          near_lesson_cutoff_minutes = null,
+                         near_lesson_cutoff_rule_version = null,
                          acceptance_hold_expires_at = now() - interval '1 minute'
                    where reference = ${scenario.winner}`;
 

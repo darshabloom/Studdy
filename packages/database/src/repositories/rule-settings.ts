@@ -83,11 +83,18 @@ export async function loadRequestRules(reader?: Reader): Promise<LoadedRequestRu
 export interface LoadedPaymentWindowRules {
   readonly rules: PaymentWindowRules;
   /**
-   * The version snapshotted onto a request whose payment deadline was
-   * calculated from these rules. Taken from the WINDOW setting, since that is
-   * the value which produces the deadline itself.
+   * ONE VERSION PER RULE, not one for the pair.
+   *
+   * `rule_settings` versions PER KEY: `setRuleSetting` increments from that
+   * key's own current row, and uniqueness is `(setting_key, version_number)`.
+   * Nothing in the model ties two keys to a shared ruleset version, so the
+   * window can sit at v3 while the cutoff is still v1. A single number taken
+   * from either key would silently claim to describe a decision that half of
+   * it had no part in — and a support question months later would get a
+   * confident wrong answer rather than no answer.
    */
-  readonly paymentRuleVersion: number;
+  readonly windowRuleVersion: number;
+  readonly nearLessonCutoffRuleVersion: number;
 }
 
 /**
@@ -131,7 +138,9 @@ export async function loadPaymentWindowRules(reader?: Reader): Promise<LoadedPay
           PROVISIONAL_PAYMENT_WINDOW_RULES.nearLessonCutoffMinutes,
         ),
       },
-      paymentRuleVersion: byKey.get(PAYMENT_RULE_KEYS.windowMinutes)?.version ?? 0,
+      windowRuleVersion: byKey.get(PAYMENT_RULE_KEYS.windowMinutes)?.version ?? 0,
+      nearLessonCutoffRuleVersion:
+        byKey.get(PAYMENT_RULE_KEYS.nearLessonCutoffMinutes)?.version ?? 0,
     };
   } finally {
     if (client !== null) await client.sql.end();

@@ -107,12 +107,23 @@ export const tutorRequests = bookingsSchema.table(
      * is unchanged.
      */
     paymentDeadlineAt: timestamp('payment_deadline_at', { withTimezone: true }),
-    /** The rule_settings version the payment window was calculated from. */
-    paymentRuleVersion: integer('payment_rule_version'),
     /** How long the family was given, in minutes. */
     paymentWindowMinutes: integer('payment_window_minutes'),
+    /**
+     * The `payments.window_minutes` version that produced it.
+     *
+     * ONE VERSION PER RULE, because `platform.rule_settings` versions PER KEY:
+     * `setRuleSetting` increments from that key's own current row, and
+     * uniqueness is `(setting_key, version_number)`. There is no shared ruleset
+     * version anywhere in the model, so an admin can move the cutoff while the
+     * window stays at v1 — and a single column taken from either key would then
+     * claim to describe a decision half of which it cannot account for.
+     */
+    paymentWindowRuleVersion: integer('payment_window_rule_version'),
     /** The margin required between the deadline and the lesson, in minutes. */
     nearLessonCutoffMinutes: integer('near_lesson_cutoff_minutes'),
+    /** The `payments.near_lesson_cutoff_minutes` version that produced it. */
+    nearLessonCutoffRuleVersion: integer('near_lesson_cutoff_rule_version'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, {
       onDelete: 'restrict',
     }),

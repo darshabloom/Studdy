@@ -1799,7 +1799,11 @@ export async function selectAcceptedTutorRequest(
        * `selected` update above is undone, no loser is closed, no hold is
        * released. A refused selection writes NOTHING.
        */
-      const { rules: paymentRules, paymentRuleVersion } = await loadPaymentWindowRules(tx);
+      const {
+        rules: paymentRules,
+        windowRuleVersion,
+        nearLessonCutoffRuleVersion,
+      } = await loadPaymentWindowRules(tx);
       const window = paymentWindowFor({
         selectedAt: now,
         lessonStartAt: claimed.startAt,
@@ -1892,18 +1896,23 @@ export async function selectAcceptedTutorRequest(
         );
 
       /*
-       * Snapshot the deadline AND both inputs that produced it, with the rule
-       * version — the same discipline the response deadline and the acceptance
-       * hold already follow. Configuration may change tomorrow; what this
-       * family and this tutor were told does not.
+       * Snapshot the deadline, both inputs that produced it, and ONE RULE
+       * VERSION PER INPUT — the same discipline the response deadline and the
+       * acceptance hold already follow, but with the versions kept apart.
+       *
+       * `rule_settings` versions per key, so the window and the cutoff move
+       * independently: a single `payment_rule_version` would be unable to say
+       * which cutoff was in force when the window was last changed. Both
+       * columns together make the decision reconstructable from the row alone.
        */
       await tx
         .update(tutorRequests)
         .set({
           paymentDeadlineAt: window.deadlineAt,
-          paymentRuleVersion,
           paymentWindowMinutes: window.windowMinutes,
+          paymentWindowRuleVersion: windowRuleVersion,
           nearLessonCutoffMinutes: window.nearLessonCutoffMinutes,
+          nearLessonCutoffRuleVersion,
           updatedAt: now,
         })
         .where(eq(tutorRequests.id, winner.id));

@@ -172,8 +172,8 @@ export default async function RequestDetailPage({
                 <strong className="font-semibold">
                   {formatDeadline(paymentDeadlineAt, request.timeZone)}
                 </strong>
-                . The lesson is not booked until payment is complete, and the time is released if it
-                is not.
+                . The lesson isn&rsquo;t booked until payment is complete. If you don&rsquo;t pay by
+                then, the time will be released.
               </>
             )}
             <span className="mt-2 block text-sm">Payment arrives in the next release.</span>

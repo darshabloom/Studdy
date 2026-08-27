@@ -149,11 +149,26 @@ settlement is manual (decision 11).
 exactly as `acceptance_hold_expires_at` + `hold_rule_version` already do:
 
 ```
-payment_deadline_at        timestamptz null
-payment_rule_version       integer null
-payment_window_minutes     integer null
-near_lesson_cutoff_minutes integer null
+payment_deadline_at             timestamptz null
+payment_window_minutes          integer null
+payment_window_rule_version     integer null
+near_lesson_cutoff_minutes      integer null
+near_lesson_cutoff_rule_version integer null
 ```
+
+**ONE RULE VERSION PER RULE, not one for the pair.** `platform.rule_settings` versions PER
+KEY — `setRuleSetting` increments from that key's own current row, and uniqueness is
+`(setting_key, version_number)`. Nothing in the model ties two keys to a shared ruleset
+version, so an admin can move the cutoff while the window stays at v1. A single
+`payment_rule_version` would claim to describe a decision half of which it could not account
+for, and a support question months later would get a confident wrong answer rather than no
+answer.
+
+> Worth knowing, and NOT fixed here: the existing `deadline_rule_version` on both the ILR and
+> the Tutor Request has the same ambiguity. It is taken from `requests.response_deadline_tiers`
+> alone, while `calculateDeadlines` also reads `requests.decision_grace_hours` and
+> `requests.minimum_notice_hours`, each versioned independently. Pre-existing, out of scope for
+> the payment slices, and worth a small follow-up of its own.
 
 Nullable because rows created before this slice have none; the sweep coalesces (§6).
 
