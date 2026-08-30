@@ -60,6 +60,16 @@ export interface FamilyTutorRequestView {
   /** Family-only: why it closed. Never present in the tutor projection. */
   readonly closeReasonCode: string | null;
   readonly respondByAt: Date;
+  /**
+   * When payment is due, once this tutor has been chosen. Null otherwise.
+   *
+   * Read from the request row rather than recomputed for display: it was
+   * snapshotted at selection, and a screen that recalculated it could quietly
+   * show a family a different deadline from the one being enforced.
+   */
+  readonly paymentDeadlineAt: Date | null;
+  /** How long the family was given, so the copy can say it without guessing. */
+  readonly paymentWindowMinutes: number | null;
   readonly tutorFirstName: string;
   readonly tutorReference: string;
   readonly priceAmountMinor: bigint;
@@ -126,6 +136,8 @@ export async function listRequestsForStudents(
         statusCode: tutorRequests.statusCode,
         closeReasonCode: tutorRequests.closeReasonCode,
         respondByAt: tutorRequests.respondByAt,
+        paymentDeadlineAt: tutorRequests.paymentDeadlineAt,
+        paymentWindowMinutes: tutorRequests.paymentWindowMinutes,
         tutorFirstName: tutorProfiles.publicFirstName,
         tutorReference: tutorProfiles.reference,
         priceAmountMinor: serviceVersions.priceAmountMinor,
@@ -208,6 +220,8 @@ export async function listRequestsForStudents(
           statusCode: child.statusCode,
           closeReasonCode: child.closeReasonCode,
           respondByAt: child.respondByAt,
+          paymentDeadlineAt: child.paymentDeadlineAt,
+          paymentWindowMinutes: child.paymentWindowMinutes,
           tutorFirstName: child.tutorFirstName,
           tutorReference: child.tutorReference,
           priceAmountMinor: child.priceAmountMinor,

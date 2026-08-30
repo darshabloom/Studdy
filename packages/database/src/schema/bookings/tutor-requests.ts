@@ -88,6 +88,42 @@ export const tutorRequests = bookingsSchema.table(
     acceptanceHoldExpiresAt: timestamp('acceptance_hold_expires_at', { withTimezone: true }),
     /** The rule version that produced the hold expiry above. */
     holdRuleVersion: integer('hold_rule_version'),
+    /**
+     * When payment is due, once the family has chosen this tutor and time.
+     *
+     * Snapshotted at selection with the rule version and BOTH inputs that
+     * produced it, exactly as the response deadline and the acceptance hold
+     * are. A family and a tutor are each told a time; changing configuration
+     * afterwards must never move it.
+     *
+     * Both inputs are stored rather than only the deadline because the deadline
+     * alone cannot be re-derived: `payment_deadline_at - payment_window_minutes`
+     * recovers the moment of selection, and `near_lesson_cutoff_minutes` records
+     * the margin that was required for the selection to be allowed at all.
+     * Without them a support question a month later has no answer.
+     *
+     * Null on rows selected before the payment window existed. The expiry sweep
+     * falls back to `acceptance_hold_expires_at` for those, so their behaviour
+     * is unchanged.
+     */
+    paymentDeadlineAt: timestamp('payment_deadline_at', { withTimezone: true }),
+    /** How long the family was given, in minutes. */
+    paymentWindowMinutes: integer('payment_window_minutes'),
+    /**
+     * The `payments.window_minutes` version that produced it.
+     *
+     * ONE VERSION PER RULE, because `platform.rule_settings` versions PER KEY:
+     * `setRuleSetting` increments from that key's own current row, and
+     * uniqueness is `(setting_key, version_number)`. There is no shared ruleset
+     * version anywhere in the model, so an admin can move the cutoff while the
+     * window stays at v1 — and a single column taken from either key would then
+     * claim to describe a decision half of which it cannot account for.
+     */
+    paymentWindowRuleVersion: integer('payment_window_rule_version'),
+    /** The margin required between the deadline and the lesson, in minutes. */
+    nearLessonCutoffMinutes: integer('near_lesson_cutoff_minutes'),
+    /** The `payments.near_lesson_cutoff_minutes` version that produced it. */
+    nearLessonCutoffRuleVersion: integer('near_lesson_cutoff_rule_version'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, {
       onDelete: 'restrict',
     }),
@@ -114,5 +150,21 @@ export const tutorRequests = bookingsSchema.table(
     index('tutor_request_open_deadline_idx')
       .on(table.respondByAt)
       .where(sql`${table.statusCode} = 'sent'`),
+    // The payment sweep scans selected requests by their payment deadline, the
+    // same shape as the response sweep above.
+    index('tutor_request_payment_deadline_idx')
+      .on(table.paymentDeadlineAt)
+      .where(sql`${table.statusCode} = 'selected'`),
+    // A window is a positive number of minutes or it is absent. The domain
+    // refuses to calculate one otherwise; this makes a bad row unwritable by
+    // any path, including a hand-run UPDATE.
+    check(
+      'tutor_request_payment_window_positive_check',
+      sql`${table.paymentWindowMinutes} is null or ${table.paymentWindowMinutes} > 0`,
+    ),
+    check(
+      'tutor_request_near_lesson_cutoff_check',
+      sql`${table.nearLessonCutoffMinutes} is null or ${table.nearLessonCutoffMinutes} >= 0`,
+    ),
   ],
 );

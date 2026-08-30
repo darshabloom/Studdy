@@ -8,6 +8,7 @@ import {
   findRequestForStudents,
   NoTutorAvailableError,
   RequestValidationError,
+  LessonTooCloseForPaymentError,
   selectAcceptedTutorRequest,
   SelectionNoLongerAvailableError,
   SlotUnavailableError,
@@ -157,6 +158,20 @@ export async function selectTutorAction(
         error:
           'That tutor and time is no longer available to choose. Refresh to see what is still open.',
       };
+    }
+    /*
+     * A DIFFERENT ANSWER, because it is a different situation. The time is
+     * still there and still accepted — the clock simply moved while the family
+     * was deciding, and there is no longer room to arrange payment before the
+     * lesson starts. Telling them it is "no longer available" would send them
+     * hunting for something they can still see on the page.
+     *
+     * The message comes from the domain so it quotes the enforced number rather
+     * than a copy of it, and the family stays on the selection screen with
+     * their other accepted times in front of them.
+     */
+    if (error instanceof LessonTooCloseForPaymentError) {
+      return { error: error.message };
     }
     throw error;
   }

@@ -50,6 +50,7 @@ export {
   NoTutorAvailableError,
   RequestNotOpenError,
   selectAcceptedTutorRequest,
+  LessonTooCloseForPaymentError,
   SelectionNoLongerAvailableError,
   SlotUnavailableError,
   TimeNoLongerAvailableError,
@@ -76,8 +77,10 @@ export {
   type TutorRequestView,
 } from './repositories/request-projections';
 export {
+  loadPaymentWindowRules,
   loadRequestRules,
   setRuleSetting,
+  type LoadedPaymentWindowRules,
   type LoadedRequestRules,
 } from './repositories/rule-settings';
 export {
