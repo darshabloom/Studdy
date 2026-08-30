@@ -40,16 +40,25 @@ current; they are not duplicates.
 
 > ### Checkpoint state, verified against git
 >
-> | Fact      | Value                                                |
-> | --------- | ---------------------------------------------------- |
-> | Branch    | `main`, level with `origin/main`                     |
-> | Steps 1–4 | merged (PRs #17, #18, #19)                           |
-> | Step 5    | **MERGED as `a738913` (PR #20, squash, 2026-08-26)** |
-> | Step 6    | **NOT STARTED — this is the next task**              |
+> | Fact            | Value                                                |
+> | --------------- | ---------------------------------------------------- |
+> | Branch          | `main`, level with `origin/main`                     |
+> | UX steps 1–4    | merged (PRs #17, #18, #19)                           |
+> | UX step 5       | merged as `a738913` (PR #20, squash, 2026-08-26)     |
+> | UX step 6       | **DEFERRED** — replaced by the launch-critical path  |
+> | Payment slice 1 | **MERGED as `8fa6051` (PR #21, squash, 2026-08-30)** |
+> | Payment slice 2 | **NOT STARTED — this is the next task**              |
 >
 > Step 5 merged with all four CI jobs and both Vercel checks green, after a full
 > sequential local verification from a fresh database. It was approved screen by
 > screen by the owner.
+>
+> Payment slice 1 merged the same way. **One CI failure on the way, and it was not
+> real:** `supabase/setup-cli@v1` died in 11 seconds with
+> `Failed to resolve latest Supabase CLI release: rate limit exceeded` — a GitHub API
+> rate limit in a third-party setup action, before migrations, seeds or any test ran.
+> Re-running the job passed in 2m32s. If it recurs, re-run before investigating the
+> diff, but confirm the failure is in the setup step first.
 >
 > Read the CURRENT HEAD out of git rather than from this file — a document cannot
 > name the commit that contains it. `a738913` is the step 5 squash commit and
@@ -333,9 +342,10 @@ confirmed booking`
 > `claude/studdy-implementation-plan.md` or with the step 6 section below, that document
 > wins.
 >
-> **The immediate next task is slice 1, `feat/payment-window`** — the 60-minute payment
-> window, the 30-minute near-lesson cutoff, and the expiry-sweep guards. It touches no
-> Stripe surface.
+> **Slice 1 is merged (`8fa6051`, PR #21).** The immediate next task is **slice 2,
+> `feat/inngest-scheduler`** — Inngest invoking the existing `expireOverdueRequests`
+> command, so expiry stops depending on someone calling an endpoint by hand. No real
+> money may be accepted before this lands. It touches no Stripe surface either.
 >
 > Do not reopen any step 5 behaviour: it was reviewed screen by screen and approved, and the
 > decisions that look arbitrary are recorded with their reasons in the step 5 section above.
@@ -345,16 +355,16 @@ confirmed booking`
 Full detail, including every schema column and the reasoning behind each choice, is in
 `docs/design/payments-and-first-paid-booking.md`. The sequence, in order:
 
-| #   | Branch                                | What                                                       |
-| --- | ------------------------------------- | ---------------------------------------------------------- |
-| 1   | `feat/payment-window`                 | Window + cutoff rules, near-lesson refusal, sweep guards   |
-| 2   | `feat/inngest-scheduler`              | Expiry automated BEFORE any money can be taken             |
-| 3   | `feat/payments-schema-and-pricing`    | `payments` tables, pure pricing domain, RLS classification |
-| 4   | `feat/stripe-connect-onboarding`      | Express accounts, `account.updated`                        |
-| 5   | `feat/stripe-payment-intent`          | Payment Element, server-authoritative pricing              |
-| 6   | `feat/stripe-webhooks-and-fulfilment` | **First real paid booking possible here**                  |
-| 7   | `feat/resend-outbox-notifications`    | Outbox drain, the seven launch-critical emails             |
-| 8   | `feat/admin-settlement`               | Weekly manual tutor settlement                             |
+| #   | Branch                                | What                                                          |
+| --- | ------------------------------------- | ------------------------------------------------------------- |
+| 1   | ~~`feat/payment-window`~~             | **MERGED `8fa6051` (PR #21)** — window, refusal, sweep guards |
+| 2   | `feat/inngest-scheduler`              | Expiry automated BEFORE any money can be taken                |
+| 3   | `feat/payments-schema-and-pricing`    | `payments` tables, pure pricing domain, RLS classification    |
+| 4   | `feat/stripe-connect-onboarding`      | Express accounts, `account.updated`                           |
+| 5   | `feat/stripe-payment-intent`          | Payment Element, server-authoritative pricing                 |
+| 6   | `feat/stripe-webhooks-and-fulfilment` | **First real paid booking possible here**                     |
+| 7   | `feat/resend-outbox-notifications`    | Outbox drain, the seven launch-critical emails                |
+| 8   | `feat/admin-settlement`               | Weekly manual tutor settlement                                |
 
 Two rules from that document are worth repeating here, because both are easy to get wrong:
 
@@ -363,6 +373,45 @@ Two rules from that document are worth repeating here, because both are easy to 
   request staying `selected`. The expiry sweep is guarded on the ILR's status instead.
 - **No real money is accepted while expiry depends on a manual endpoint.** That is why
   Inngest lands at slice 2 rather than later.
+
+#### Payment slice 1 — **COMPLETE AND MERGED**
+
+Merged as `8fa6051` (PR #21, squash, 2026-08-30). All four CI jobs and both Vercel checks
+green, after a full sequential local verification from a fresh database. What it
+established, and what must not be undone:
+
+- **A 60-minute payment window and a 30-minute near-lesson cutoff**, as two INDEPENDENT
+  versioned rules (`payments.window_minutes`, `payments.near_lesson_cutoff_minutes`).
+  Selection needs the lesson at least 90 minutes away.
+- **Nothing clamps.** The deadline is `selectedAt + windowMinutes`, never `min()`'d against
+  the lesson start — clamping is exactly what produced zero and negative windows. A lesson
+  too close is REFUSED at selection with `LessonTooCloseForPaymentError`, and the
+  transaction rolls back, so a refusal writes nothing.
+- **Five nullable snapshot columns** on `bookings.tutor_requests`: the deadline, both
+  inputs, and ONE RULE VERSION PER INPUT.
+- **The expiry sweep is guarded on `ilr.status_code = 'awaiting_payment'`**, which is what
+  lets a paid booking keep its winning request `selected` without a new Tutor Request
+  state. Rows with no deadline fall back to `acceptance_hold_expires_at`, so nothing in
+  flight changed behaviour.
+- **The winner's hold moves to the payment deadline** — usually sooner than the acceptance
+  hold it replaces, never later. Still `request_hold` until a payment succeeds.
+- Slice 3 adds the second sweep guard: a payment that is `processing` or `succeeded` must
+  not be swept out from under a webhook in flight. That table does not exist yet, so the
+  guard is deliberately unwritten rather than faked.
+
+> ### STANDING TECHNICAL DEBT: `deadline_rule_version` is ambiguous
+>
+> Carried forward deliberately, and not fixed by slice 1. `deadline_rule_version` on both
+> the ILR and the Tutor Request is taken from `requests.response_deadline_tiers` alone,
+> while `calculateDeadlines` also reads `requests.decision_grace_hours` and
+> `requests.minimum_notice_hours` — each versioned independently, because
+> `platform.rule_settings` versions PER KEY. That column therefore cannot say which grace
+> or notice value produced a given deadline.
+>
+> It is the same class of ambiguity the owner caught in slice 1's payment snapshot, where
+> it was fixed by splitting the version columns. This one is PRE-EXISTING, touches no
+> money, and was left alone rather than widening a payment slice. Worth a small follow-up
+> of its own; also recorded in `docs/design/payments-and-first-paid-booking.md`.
 
 ### Step 2 — calendar-first `/tutor/availability` — **COMPLETE**
 
@@ -1171,13 +1220,19 @@ and compatibility names appear only against times the family has actually chosen
 
 THE NEXT TASK IS NOT STEP 6. Studdy is working against a launch-critical roadmap aimed at
 the first real paid lesson. Read docs/design/payments-and-first-paid-booking.md — it is the
-authority — and start with slice 1, feat/payment-window: the 60-minute payment window, the
-30-minute near-lesson cutoff, and the expiry-sweep guards. No Stripe surface is touched.
+authority.
 
-Two things there are easy to get wrong and are already decided: the Tutor Request state
-machine does NOT gain a `confirmed` state (a paid booking is ILR fulfilled + reservation
-booking_confirmed + payment succeeded, and the sweep is guarded on the ILR's status), and no
-real money is accepted while expiry still depends on a manual endpoint.
+Payment slice 1 is MERGED (8fa6051, PR #21): the 60-minute window, the 30-minute
+near-lesson cutoff, the five snapshot columns and the expiry-sweep guard. THE NEXT TASK IS
+SLICE 2, feat/inngest-scheduler, on a NEW branch off main — Inngest invoking the existing
+expireOverdueRequests command rather than restating any expiry rule. No real money may be
+accepted while expiry still depends on someone calling an endpoint by hand, which is why
+this lands before any Stripe work.
+
+Two things are already decided and easy to get wrong: the Tutor Request state machine does
+NOT gain a `confirmed` state (a paid booking is ILR fulfilled + reservation
+booking_confirmed + payment succeeded, and the sweep is guarded on the ILR's status), and
+Inngest holds no rules — it authenticates and calls a domain command that already exists.
 
 Then, in your own words rather than copying the handoff back to me, summarise:
 - why the shortlist is a saving-and-comparison surface rather than a way to book, and how
