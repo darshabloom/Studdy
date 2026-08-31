@@ -110,6 +110,30 @@ export async function seedRequestRules(): Promise<void> {
     30,
     'Approved 2026-08-26: the margin that must remain between the payment deadline and the lesson. With the 60-minute window this means a lesson must be at least 90 minutes away to be selectable.',
   );
+  /*
+   * Pricing, as two independently versioned rules.
+   *
+   * The rate and the payer policy move separately — the commission may change
+   * without the policy changing, and the policy will be tested with parents
+   * before launch without touching the commission. Every payment snapshots one
+   * version per key for exactly that reason.
+   *
+   * `payments.disclosed_processing_fee_minor` is DELIBERATELY NOT SEEDED. It
+   * has no meaning while Studdy absorbs the cost, and inventing a percentage
+   * now would bake a guess about a provider's pricing into the product. The
+   * pricing domain refuses to charge a parent-paid fee that has not been
+   * configured, so the policy cannot be switched on without setting a real one.
+   */
+  await setRuleSetting(
+    'payments.platform_fee_rate_bps',
+    1000,
+    "Approved 2026-08-26: Studdy's commission is 10% of the tutor's listed price. Basis points so the rate is an integer. The parent pays the listed price; nothing is added on top.",
+  );
+  await setRuleSetting(
+    'payments.processing_fee_payer',
+    'platform',
+    'Approved 2026-08-26: for private alpha Studdy absorbs payment-processing costs. Configurable and versioned because the public policy is validated with parents before launch — neither policy may be hard-coded.',
+  );
 }
 
 interface SeedTarget {
