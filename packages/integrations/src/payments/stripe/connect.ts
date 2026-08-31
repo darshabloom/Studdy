@@ -373,3 +373,82 @@ export function verifyConnectEvent(
     relatedAccountId: typeof related?.id === 'string' ? related.id : null,
   };
 }
+
+/**
+ * A PaymentIntent on the PLATFORM account.
+ *
+ * SEPARATE CHARGES AND TRANSFERS, which is a set of deliberate omissions as
+ * much as anything present:
+ *
+ *   - **No `transfer_data.destination`.** A destination charge would land the
+ *     tutor's share in their balance at capture — days before the lesson — and
+ *     admin-assisted refunds before public launch would then mean clawing money
+ *     back out of a connected account rather than never having sent it.
+ *   - **No `application_fee_amount`.** Under this pattern Studdy's fee is not an
+ *     application fee; it is simply the part of the charge Studdy does not
+ *     transfer.
+ *   - **No `on_behalf_of`.** Not set in V1, which keeps disputes and refunds on
+ *     the platform where the admin tooling will be. An operational choice,
+ *     deliberately not a legal assertion about merchant of record.
+ *
+ * Nothing here moves money to the tutor. Transfers are slice 6 and later.
+ */
+export interface PaymentIntentInput {
+  /** The server-computed total. NEVER a number that came from a browser. */
+  readonly amountMinor: bigint;
+  readonly currencyCode: string;
+  /** Studdy's `PAY-` reference, for correlation in the Stripe dashboard. */
+  readonly paymentReference: string;
+  /**
+   * Deterministic, derived from Studdy's own payment id. A retried request
+   * therefore reaches the SAME PaymentIntent rather than creating a second one
+   * a parent could also pay.
+   */
+  readonly idempotencyKey: string;
+  /** Correlation only. Ids, never names, emails or amounts a human would read. */
+  readonly metadata: Readonly<Record<string, string>>;
+}
+
+export interface PaymentIntentResult {
+  readonly providerPaymentIntentId: string;
+  /** Handed to the Payment Element. Owning family only — never logged. */
+  readonly clientSecret: string;
+  readonly status: string;
+}
+
+export async function createPlatformPaymentIntent(
+  stripe: Stripe,
+  input: PaymentIntentInput,
+): Promise<PaymentIntentResult> {
+  const intent = await stripe.paymentIntents.create(
+    {
+      // Stripe takes a number; the ledger keeps bigint. Converted at this
+      // boundary, where the value is known to be within a card-payment range.
+      amount: Number(input.amountMinor),
+      currency: input.currencyCode.toLowerCase(),
+      // Lets Stripe decide which methods to offer rather than Studdy hard-coding
+      // a list that would go stale.
+      automatic_payment_methods: { enabled: true },
+      description: `Studdy lesson ${input.paymentReference}`,
+      metadata: { ...input.metadata },
+    },
+    { idempotencyKey: input.idempotencyKey },
+  );
+  if (intent.client_secret === null) {
+    throw new StripeConfigurationError('Stripe returned a PaymentIntent with no client secret.');
+  }
+  return {
+    providerPaymentIntentId: intent.id,
+    clientSecret: intent.client_secret,
+    status: intent.status,
+  };
+}
+
+/** Read a PaymentIntent's current state. Never trusts the browser's word for it. */
+export async function retrievePaymentIntent(
+  stripe: Stripe,
+  providerPaymentIntentId: string,
+): Promise<{ readonly status: string; readonly clientSecret: string | null }> {
+  const intent = await stripe.paymentIntents.retrieve(providerPaymentIntentId);
+  return { status: intent.status, clientSecret: intent.client_secret };
+}

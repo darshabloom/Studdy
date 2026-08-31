@@ -134,3 +134,14 @@ export {
   type ProviderAccountSnapshot,
   type ProviderEventOutcome,
 } from './repositories/connected-accounts';
+
+// Parent payment creation (feat/stripe-payment-intent)
+export {
+  createPaymentForRequest,
+  attachProviderPaymentIntent,
+  livePaymentForRequest,
+  paymentIsRetryable,
+  PaymentRefusedError,
+  type PaymentRefusalReason,
+  type PreparedPayment,
+} from './repositories/payments';
