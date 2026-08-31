@@ -35,29 +35,29 @@ current; they are not duplicates.
 
 ## 2. Where the work is
 
-**Branch:** `feat/payments-schema-and-pricing`, branched from `main` at `cfc288c`.
+**Branch:** `main`, level with `origin/main`.
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
-> **SLICE 3 IS IN FLIGHT.** Payment slices 1 and 2 are merged; slice 3 is implemented on
-> this branch, is NOT pushed and has NO pull request. **Both review items are now SETTLED**
-> — the zero-price boundary (a `lesson_amount_minor > 0` CHECK was added) and the expiry
-> guard's ownership (assigned to slice 5, not implemented here). See the slice 3 section in
-> §8. What remains before closeout is the OWNER'S APPROVAL, then full sequential
-> verification. Read the CURRENT HEAD and ahead count out of git; `9cadce3` is the slice 3
-> implementation commit and stays true.
+> **SLICE 3 IS MERGED. NOTHING IS IN FLIGHT.** Payment slices 1, 2 and 3 are all on `main`.
+> Slice 3 merged as **`daaba6c` (PR #24, squash, 2026-08-31)**, with all four CI jobs and
+> both Vercel checks green, after a full sequential local verification from a fresh
+> database. Both review items were settled before the merge — the zero-price boundary (a
+> `lesson_amount_minor > 0` CHECK was added) and the expiry guard's ownership (assigned to
+> slice 5, deliberately not implemented). **Launch slice 4, `feat/stripe-connect-onboarding`,
+> is next and NOT STARTED.** Read the current HEAD out of git rather than from this file.
 
 > ### Checkpoint state, verified against git
 >
-> | Fact            | Value                                                   |
-> | --------------- | ------------------------------------------------------- |
-> | Branch          | `main`, level with `origin/main`                        |
-> | UX steps 1–4    | merged (PRs #17, #18, #19)                              |
-> | UX step 5       | merged as `a738913` (PR #20, squash, 2026-08-26)        |
-> | UX step 6       | **DEFERRED** — replaced by the launch-critical path     |
-> | Payment slice 1 | merged as `8fa6051` (PR #21, squash, 2026-08-30)        |
-> | Payment slice 2 | merged as `3eaddf3` (PR #22, squash, 2026-08-31)        |
-> | Payment slice 3 | **IMPLEMENTED, NOT MERGED** — both review items settled |
-> | Payment slice 4 | not started                                             |
+> | Fact            | Value                                               |
+> | --------------- | --------------------------------------------------- |
+> | Branch          | `main`, level with `origin/main`                    |
+> | UX steps 1–4    | merged (PRs #17, #18, #19)                          |
+> | UX step 5       | merged as `a738913` (PR #20, squash, 2026-08-26)    |
+> | UX step 6       | **DEFERRED** — replaced by the launch-critical path |
+> | Payment slice 1 | merged as `8fa6051` (PR #21, squash, 2026-08-30)    |
+> | Payment slice 2 | merged as `3eaddf3` (PR #22, squash, 2026-08-31)    |
+> | Payment slice 3 | merged as `daaba6c` (PR #24, squash, 2026-08-31)    |
+> | Payment slice 4 | **NEXT — not started**                              |
 >
 > Step 5 merged with all four CI jobs and both Vercel checks green, after a full
 > sequential local verification from a fresh database. It was approved screen by
@@ -352,32 +352,38 @@ confirmed booking`
 > `claude/studdy-implementation-plan.md` or with the step 6 section below, that document
 > wins.
 >
-> **Slices 1 and 2 are merged** (`8fa6051` PR #21, `3eaddf3` PR #22). **Slice 3 is
-> IMPLEMENTED on `feat/payments-schema-and-pricing` and not merged.** The immediate next
-> task is no longer the two review items: **both are settled** (see the slice 3 section
-> below — the zero-price boundary resolved with a `lesson_amount_minor > 0` CHECK, and the
-> expiry guard's ownership assigned to slice 5 without implementing it). The next step is
-> the **owner's approval**, then full sequential verification, then the pull request. Do not
-> start slice 4 before slice 3 closes.
+> **Slices 1, 2 and 3 are merged** (`8fa6051` PR #21, `3eaddf3` PR #22, `daaba6c` PR #24).
+> Both of slice 3's review items were settled before it merged: the zero-price boundary
+> resolved with a `lesson_amount_minor > 0` CHECK, and the expiry guard's ownership assigned
+> to slice 5 without implementing it.
+>
+> **THE IMMEDIATE NEXT TASK IS LAUNCH SLICE 4 — `feat/stripe-connect-onboarding`, NOT
+> STARTED.** Express account creation, the onboarding link, the `account.updated` webhook and
+> the `payments.connected_accounts` table that slice 3 deliberately deferred. A tutor must be
+> payable before anyone can pay, and it proves webhook verification end to end on a low-risk
+> event before any money depends on it.
+>
+> **Slice 4 must NOT pick up the expiry sweep's payment guard.** That belongs to slice 5 —
+> see §8 of the design document and the slice 3 section below.
 >
 > Do not reopen any step 5 behaviour: it was reviewed screen by screen and approved, and the
 > decisions that look arbitrary are recorded with their reasons in the step 5 section above.
 
-### THE LAUNCH-CRITICAL PAYMENT SLICES — **NOT STARTED**
+### THE LAUNCH-CRITICAL PAYMENT SLICES — **SLICES 1–3 MERGED, SLICE 4 NEXT**
 
 Full detail, including every schema column and the reasoning behind each choice, is in
 `docs/design/payments-and-first-paid-booking.md`. The sequence, in order:
 
-| #   | Branch                                | What                                                          |
-| --- | ------------------------------------- | ------------------------------------------------------------- |
-| 1   | ~~`feat/payment-window`~~             | **MERGED `8fa6051` (PR #21)** — window, refusal, sweep guards |
-| 2   | ~~`feat/inngest-scheduler`~~          | **MERGED `3eaddf3` (PR #22)** — Inngest, every minute         |
-| 3   | `feat/payments-schema-and-pricing`    | **IMPLEMENTED, NOT MERGED** — both review items settled       |
-| 4   | `feat/stripe-connect-onboarding`      | Express accounts, `account.updated`                           |
-| 5   | `feat/stripe-payment-intent`          | Payment Element, server-authoritative pricing                 |
-| 6   | `feat/stripe-webhooks-and-fulfilment` | **First real paid booking possible here**                     |
-| 7   | `feat/resend-outbox-notifications`    | Outbox drain, the seven launch-critical emails                |
-| 8   | `feat/admin-settlement`               | Weekly manual tutor settlement                                |
+| #   | Branch                                 | What                                                          |
+| --- | -------------------------------------- | ------------------------------------------------------------- |
+| 1   | ~~`feat/payment-window`~~              | **MERGED `8fa6051` (PR #21)** — window, refusal, sweep guards |
+| 2   | ~~`feat/inngest-scheduler`~~           | **MERGED `3eaddf3` (PR #22)** — Inngest, every minute         |
+| 3   | ~~`feat/payments-schema-and-pricing`~~ | **MERGED `daaba6c` (PR #24)** — ledger, pricing, RLS          |
+| 4   | `feat/stripe-connect-onboarding`       | Express accounts, `account.updated`                           |
+| 5   | `feat/stripe-payment-intent`           | Payment Element, server-authoritative pricing                 |
+| 6   | `feat/stripe-webhooks-and-fulfilment`  | **First real paid booking possible here**                     |
+| 7   | `feat/resend-outbox-notifications`     | Outbox drain, the seven launch-critical emails                |
+| 8   | `feat/admin-settlement`                | Weekly manual tutor settlement                                |
 
 Two rules from that document are worth repeating here, because both are easy to get wrong:
 
@@ -387,11 +393,16 @@ Two rules from that document are worth repeating here, because both are easy to 
 - **No real money is accepted while expiry depends on a manual endpoint.** That is why
   Inngest lands at slice 2 rather than later.
 
-#### Payment slice 3 — **IMPLEMENTED, NOT MERGED. TWO REVIEW ITEMS OPEN.**
+#### Payment slice 3 — **COMPLETE AND MERGED**
 
-On `feat/payments-schema-and-pricing`, branched from `main` at `cfc288c`. Implementation
-commit `9cadce3`. **Not pushed. No pull request. Nothing merged.** Read the current HEAD and
-ahead count out of git rather than from this file.
+Merged as **`daaba6c` (PR #24, squash, 2026-08-31)**, from
+`feat/payments-schema-and-pricing`, which was branched from `main` at `cfc288c`. All four CI
+jobs and both Vercel checks green, after a full sequential local verification from a fresh
+database. **The feature branch is retained on the remote** at `0079795`, per this
+repository's convention of not deleting merged slice branches.
+
+Both review items were settled on the branch before the merge, in commit `0079795`, on top
+of the implementation commit `9cadce3`.
 
 The durable, provider-neutral payment ledger and pricing model, built BEFORE any Stripe
 integration. No Stripe SDK, no PaymentIntent, no webhook route, no Connect account, no card
@@ -567,10 +578,14 @@ full unit suite, the build or the end-to-end suite since this branch began.
 > whose predicate no test can make true is indistinguishable from one that does not work.
 >
 > Recorded in `docs/design/payments-and-first-paid-booking.md` §8 (ownership callout, plus
-> corrected PR-sequence rows 3 and 5) and here. The stale comment in
-> `expireOverdueRequests` that claimed the `payments` table "does not exist in this slice"
-> was corrected — on this branch it does exist; what is deferred is the guard, to slice 5.
-> **The guard was not implemented in slice 3.**
+> corrected PR-sequence rows 3 and 5), in the comment at the guard site in
+> `expireOverdueRequests`, and here. That comment previously claimed the `payments` table
+> "does not exist in this slice"; the table exists on `main` now, and what is deferred is the
+> guard, not the schema.
+>
+> **STILL TRUE ON `main` AFTER THE MERGE: the guard is not implemented.** Verify it in git
+> before writing it — `expireOverdueRequests`'s `selected` branch has no `payments`
+> predicate. It is slice 5's to write, and slice 4 must not pick it up.
 
 #### Payment slice 2 — **COMPLETE AND MERGED**
 
@@ -644,9 +659,13 @@ established, and what must not be undone:
   flight changed behaviour.
 - **The winner's hold moves to the payment deadline** — usually sooner than the acceptance
   hold it replaces, never later. Still `request_hold` until a payment succeeds.
-- Slice 3 adds the second sweep guard: a payment that is `processing` or `succeeded` must
-  not be swept out from under a webhook in flight. That table does not exist yet, so the
-  guard is deliberately unwritten rather than faked.
+- The second sweep guard — a payment that is `processing` or `succeeded` must not be swept
+  out from under a webhook in flight — was expected here to land in slice 3. **It did not,
+  and that was the right call.** Slice 3 created `payments.payments` but deliberately left
+  the guard unwritten; **it is assigned to LAUNCH SLICE 5, `feat/stripe-payment-intent`**,
+  the first branch that writes operational payment rows and so the first where a test can
+  exercise the predicate. Nothing is at risk meanwhile: no operational payment rows exist
+  until slice 5 creates them.
 
 > ### STANDING TECHNICAL DEBT: `deadline_rule_version` is ambiguous
 >
@@ -1471,34 +1490,39 @@ THE NEXT TASK IS NOT STEP 6. Studdy is working against a launch-critical roadmap
 the first real paid lesson. Read docs/design/payments-and-first-paid-booking.md — it is the
 authority.
 
-Payment slices 1 and 2 are MERGED (8fa6051 PR #21, 3eaddf3 PR #22). SLICE 3 IS IMPLEMENTED
-BUT NOT MERGED, on the branch feat/payments-schema-and-pricing. You are NOT starting new
-implementation.
+Payment slices 1, 2 and 3 are ALL MERGED (8fa6051 PR #21, 3eaddf3 PR #22, daaba6c PR #24).
+Nothing is in flight and there is no open branch of work.
 
-Confirm from git, not from this prompt: the branch, the current HEAD, that it is ahead of
-origin/main and 0 behind, that the working tree is clean, that the branch has NOT been
-pushed (no remote ref), and that there is NO pull request. 9cadce3 is the slice 3
-implementation commit and stays true; a handoff commit may sit on top of it.
+Confirm from git, not from this prompt: that you are on main, that main is level with
+origin/main, that the working tree is clean, and that daaba6c is on main. The merged branch
+feat/payments-schema-and-pricing is RETAINED on the remote by convention — do not delete it,
+and do not continue work on it.
 
 Then read the "Payment slice 3" section in §8. It records the three payment tables, the
 deliberate deferral of payments.connected_accounts to slice 4, the money rules, the status
-model, migration 0007, the RLS classification and the targeted results.
+model, migration 0007, the RLS classification, the lesson_amount_minor > 0 invariant and the
+full verification.
 
-YOUR FIRST TASK IS THE TWO REVIEW ITEMS RECORDED THERE, AND NOTHING ELSE:
+YOUR NEXT TASK IS LAUNCH SLICE 4 — feat/stripe-connect-onboarding, NOT STARTED. Express
+account creation, the onboarding link, the account.updated webhook, and the
+payments.connected_accounts table slice 3 deferred to it. A tutor must be payable before
+anyone can pay, and it proves webhook verification end to end on a low-risk event. Get the
+owner's approval on the approach before implementing.
 
-  1. The zero-price / payment boundary. The pure pricing function intentionally supports
-     arithmetic at zero. Decide whether payments.payments needs a lesson_amount_minor > 0
-     CHECK, or whether existing service-version constraints plus server-side pricing already
-     make a zero-price payment structurally impossible. INSPECT BEFORE CHANGING — the honest
-     answer may be that no constraint is needed. DO NOT invent free-lesson support.
+TWO THINGS SLICE 4 MUST NOT DO:
 
-  2. The missing expiry guard. expireOverdueRequests still needs the guard that a payment in
-     `processing` or `succeeded` cannot have its request lapsed. It is ASSIGNED TO SLICE 5,
-     feat/stripe-payment-intent — record that assignment, and do NOT implement it now. Slice
-     4 (Connect onboarding) must not own it, because onboarding creates no payment rows.
+  1. It must NOT implement the expiry sweep's payment guard. expireOverdueRequests still
+     needs the guard that a payment in `processing` or `succeeded` cannot have its request
+     lapsed out from under a webhook in flight. It is ASSIGNED TO SLICE 5,
+     feat/stripe-payment-intent, and must land before any operational PaymentIntent is
+     processed. Slice 4 must not own it, because onboarding creates no payment rows and the
+     guard would sit there unexercised. Verify in git that it is still missing rather than
+     assuming either way.
 
-THEN STOP AND WAIT FOR APPROVAL. Do not run the full sequential verification, do not push,
-do not open a pull request, do not merge, and do not start slice 4.
+  2. It must NOT weaken the zero-price invariant. payments.payments enforces
+     lesson_amount_minor > 0, because services.service_versions has NO price constraint of
+     its own and slice 5 prices server-side straight from that column. This is not
+     free-lesson support and the pure pricing function stays defined at zero.
 
 Three things are already decided and easy to get wrong: the Tutor Request state machine does
 NOT gain a `confirmed` state (a paid booking is ILR fulfilled + reservation
