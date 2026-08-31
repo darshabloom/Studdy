@@ -683,6 +683,15 @@ Only genuinely open items. Everything in §1 is settled.
    moves. Intent recorded in §3: commission GST-inclusive so the tutor's 10% stays 10%. No
    tax logic is built until confirmed
 2. **Legal supplier / merchant of record** — professional confirmation required (§5)
+   2b. **Connect account responsibilities — `losses_collector: 'application'`.** Approved for
+   the sandbox implementation and **explicitly NOT approved for live money.** Stripe Accounts
+   v2 requires `defaults.responsibilities` on any recipient holding the transfers capability,
+   and Studdy sets both collectors to `application`: Studdy collects Stripe's fees, and
+   **Studdy carries unresolved negative balances a tutor cannot pay back.** The fee half
+   follows from the approved money model. The LOSSES half is a genuine liability position and
+   needs professional confirmation before production, alongside item 2 — it is the same
+   question wearing a different hat, and the two should be answered together. Changeable
+   while no production account exists and no money has moved.
 3. **The disclosed processing fee model**, if Policy B is ever adopted — its shape only,
    since the structure already supports it
 4. **Alpha settlement cadence** — weekly review is approved; the specific day and who runs it
