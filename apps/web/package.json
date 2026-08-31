@@ -18,8 +18,8 @@
     "@studdy/domain": "workspace:*",
     "@studdy/observability": "workspace:*",
     "@studdy/permissions": "workspace:*",
-    "@supabase/ssr": "^0.6.1",
-    "@supabase/supabase-js": "^2.50.0",
+    "@supabase/ssr": "^0.12.5",
+    "@supabase/supabase-js": "^2.112.4",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
@@ -30,11 +30,11 @@
     "@tailwindcss/postcss": "^4.1.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.0",
-    "@types/react-dom": "^19.1.0",
+    "@types/react-dom": "^19.2.5",
     "eslint": "^9.30.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.9.0",
-    "typescript-eslint": "^8.35.0",
+    "typescript-eslint": "^8.68.0",
     "vitest": "^3.2.0"
   }
 }
