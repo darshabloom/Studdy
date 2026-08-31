@@ -119,3 +119,18 @@ export {
   type BookableServiceVersion,
   type BookableTutorServices,
 } from './repositories/services';
+
+// Stripe Connect onboarding (feat/stripe-connect-onboarding)
+export {
+  connectedAccountForTutor,
+  connectedAccountExists,
+  tutorPayoutStatus,
+  canTutorReceivePaymentsById,
+  recordConnectedAccount,
+  applyProviderAccountState,
+  recordProviderEvent,
+  type ConnectedAccountRecord,
+  type TutorPayoutStatusView,
+  type ProviderAccountSnapshot,
+  type ProviderEventOutcome,
+} from './repositories/connected-accounts';

@@ -12,6 +12,7 @@ import {
 import { standardColumns } from '../shared/columns';
 import { paymentsSchema } from '../shared/schemas';
 import { tutorProfiles } from '../tutors/tutor-profiles';
+import { connectedAccounts } from './connected-accounts';
 import { payments } from './payments';
 
 /**
@@ -43,6 +44,34 @@ export const tutorTransfers = paymentsSchema.table(
     tutorProfileId: uuid('tutor_profile_id')
       .notNull()
       .references(() => tutorProfiles.id, { onDelete: 'restrict' }),
+    /*
+     * WHERE THE MONEY ACTUALLY WENT. Added in the Connect slice, once there was
+     * a real account to point at.
+     *
+     * NOT added to `payments`, and the asymmetry is the whole justification.
+     * Studdy uses separate charges and transfers: the parent's charge is created
+     * on the PLATFORM account, so no connected account is party to it and a
+     * column there would record a participant that did not participate. A
+     * transfer is the opposite — the connected account is its destination, and
+     * that is the fact this row exists to remember.
+     *
+     * It earns its place on durable integrity rather than convenience.
+     * `tutor_profile_id` says who was owed; only this says which provider
+     * account was actually paid. If a tutor's account is ever replaced — closed,
+     * restricted, re-onboarded — the profile link would silently start pointing
+     * at the new one, and a settled transfer would appear to have gone somewhere
+     * it never went. `ON DELETE restrict` for the same reason as the other nine.
+     *
+     * NOT NULL, deliberately: a transfer with no destination is not an
+     * incomplete record, it is a meaningless one. The table is empty and
+     * unwritten, so there is nothing to backfill, and by the time slice 6 writes
+     * a row the tutor has necessarily been payable — which requires this account
+     * to exist. Failing loudly there is better than recording a payment to
+     * nobody.
+     */
+    connectedAccountId: uuid('connected_account_id')
+      .notNull()
+      .references(() => connectedAccounts.id, { onDelete: 'restrict' }),
     /** The tutor's entitlement, copied from the payment at the time it succeeded. */
     amountMinor: bigint('amount_minor', { mode: 'bigint' }).notNull(),
     currencyCode: char('currency_code', { length: 3 }).notNull(),
@@ -78,5 +107,6 @@ export const tutorTransfers = paymentsSchema.table(
       .on(table.statusCode, table.createdAt)
       .where(sql`${table.statusCode} = 'pending'`),
     index('tutor_transfer_tutor_idx').on(table.tutorProfileId),
+    index('tutor_transfer_connected_account_idx').on(table.connectedAccountId),
   ],
 );
