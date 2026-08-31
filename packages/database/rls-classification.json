@@ -144,7 +144,7 @@
     "payments.connected_accounts": {
       "classification": "server_only",
       "policy": null,
-      "notes": "A tutor's Stripe Connect account and payability state. Server-only: no anon/authenticated grant and no browser policy. provider_account_id is the identifier a tutor must never see even for their own account — Studdy talks to Stripe on their behalf, and their screen shows a status, not an acct_ id. Requirement identifiers are stored so a tutor can be told what is outstanding; identity and KYC values never reach Studdy at all. Tutor-facing status is served by an explicit projection."
+      "notes": "A tutor's Stripe Connect (Accounts v2) recipient account and payability state. Server-only: no anon/authenticated grant and no browser policy. provider_account_id is the identifier a tutor must never see even for their own account — Studdy talks to Stripe on their behalf, and their screen shows a status, not an acct_ id. Only capability statuses and Stripe's machine-readable reason codes are stored; identity and KYC values never reach Studdy at all. Tutor-facing status is served by an explicit projection."
     },
     "payments.payments": {
       "classification": "server_only",

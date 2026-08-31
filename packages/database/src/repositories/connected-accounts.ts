@@ -1,9 +1,12 @@
 import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import {
+  asCapabilityStatus,
   canTutorReceivePayments,
   connectedAccountStatusFor,
   NO_CONNECTED_ACCOUNT,
+  tutorCanResolveByOnboarding,
   type CapabilityStatus,
+  type CapabilityStatusDetail,
   type ConnectedAccountState,
   type ConnectedAccountStatus,
 } from '@studdy/domain/payments';
@@ -30,12 +33,10 @@ import { connectedAccounts, paymentEvents } from '../schema/index';
 export interface TutorPayoutStatusView {
   readonly status: ConnectedAccountStatus;
   readonly canReceivePayments: boolean;
-  readonly detailsSubmitted: boolean;
-  /** Requirement identifiers, so the tutor can be told what is outstanding. */
-  readonly currentlyDue: readonly string[];
-  readonly pastDue: readonly string[];
-  readonly disabledReason: string | null;
-  readonly currentDeadline: Date | null;
+  /** Stripe's reason codes, so the tutor can be told what is happening. */
+  readonly statusDetails: readonly CapabilityStatusDetail[];
+  /** Whether another trip through hosted onboarding can actually help. */
+  readonly canResolveByOnboarding: boolean;
   readonly onboardedAt: Date | null;
   readonly providerSyncedAt: Date | null;
 }
@@ -46,7 +47,9 @@ export interface ConnectedAccountRecord extends TutorPayoutStatusView {
   readonly tutorProfileId: string;
   readonly provider: string;
   readonly providerAccountId: string;
-  readonly accountTypeCode: string;
+  readonly dashboardCode: string;
+  readonly configurationCode: string;
+  readonly countryCode: string | null;
 }
 
 interface Row {
@@ -54,34 +57,41 @@ interface Row {
   tutorProfileId: string;
   provider: string;
   providerAccountId: string;
-  accountTypeCode: string;
+  dashboardCode: string;
+  configurationCode: string;
+  countryCode: string | null;
   statusCode: string;
-  chargesEnabled: boolean;
-  payoutsEnabled: boolean;
   transfersCapabilityCode: string;
-  detailsSubmitted: boolean;
-  requirementsCurrentlyDue: unknown;
-  requirementsPastDue: unknown;
-  requirementsDisabledReason: string | null;
-  requirementsCurrentDeadline: Date | null;
+  payoutsCapabilityCode: string;
+  capabilityStatusDetails: unknown;
   onboardedAt: Date | null;
   providerSyncedAt: Date | null;
 }
 
-function identifiers(value: unknown): readonly string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+function statusDetails(value: unknown): readonly CapabilityStatusDetail[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return [];
+    const { capability, code, resolution } = entry as Record<string, unknown>;
+    if (typeof capability !== 'string' || typeof code !== 'string') return [];
+    return [
+      {
+        capability,
+        code,
+        resolution: typeof resolution === 'string' ? resolution : 'no_resolution',
+      },
+    ];
+  });
 }
 
 /** Rebuild the domain state from a row, so readiness has ONE definition. */
 export function stateFromRow(row: Row): ConnectedAccountState {
   return {
-    chargesEnabled: row.chargesEnabled,
-    payoutsEnabled: row.payoutsEnabled,
-    transfersCapability: row.transfersCapabilityCode as CapabilityStatus,
-    detailsSubmitted: row.detailsSubmitted,
-    currentlyDue: identifiers(row.requirementsCurrentlyDue),
-    pastDue: identifiers(row.requirementsPastDue),
-    disabledReason: row.requirementsDisabledReason,
+    // Re-coerced rather than cast: a value that somehow reached the column
+    // outside the CHECK must still fail closed here.
+    transfersCapability: asCapabilityStatus(row.transfersCapabilityCode),
+    payoutsCapability: asCapabilityStatus(row.payoutsCapabilityCode),
+    statusDetails: statusDetails(row.capabilityStatusDetails),
   };
 }
 
@@ -92,17 +102,16 @@ function toRecord(row: Row): ConnectedAccountRecord {
     tutorProfileId: row.tutorProfileId,
     provider: row.provider,
     providerAccountId: row.providerAccountId,
-    accountTypeCode: row.accountTypeCode,
+    dashboardCode: row.dashboardCode,
+    configurationCode: row.configurationCode,
+    countryCode: row.countryCode,
     status: row.statusCode as ConnectedAccountStatus,
-    // Recomputed from the stored provider fields rather than read from
+    // Recomputed from the stored capability statuses rather than read from
     // status_code. The stored status is a denormalisation for filtering; the
     // rule is the source of truth, and if they ever disagree the rule wins.
     canReceivePayments: canTutorReceivePayments(state),
-    detailsSubmitted: row.detailsSubmitted,
-    currentlyDue: state.currentlyDue,
-    pastDue: state.pastDue,
-    disabledReason: state.disabledReason,
-    currentDeadline: row.requirementsCurrentDeadline,
+    statusDetails: state.statusDetails,
+    canResolveByOnboarding: tutorCanResolveByOnboarding(state),
     onboardedAt: row.onboardedAt,
     providerSyncedAt: row.providerSyncedAt,
   };
@@ -113,16 +122,13 @@ const columns = {
   tutorProfileId: connectedAccounts.tutorProfileId,
   provider: connectedAccounts.provider,
   providerAccountId: connectedAccounts.providerAccountId,
-  accountTypeCode: connectedAccounts.accountTypeCode,
+  dashboardCode: connectedAccounts.dashboardCode,
+  configurationCode: connectedAccounts.configurationCode,
+  countryCode: connectedAccounts.countryCode,
   statusCode: connectedAccounts.statusCode,
-  chargesEnabled: connectedAccounts.chargesEnabled,
-  payoutsEnabled: connectedAccounts.payoutsEnabled,
   transfersCapabilityCode: connectedAccounts.transfersCapabilityCode,
-  detailsSubmitted: connectedAccounts.detailsSubmitted,
-  requirementsCurrentlyDue: connectedAccounts.requirementsCurrentlyDue,
-  requirementsPastDue: connectedAccounts.requirementsPastDue,
-  requirementsDisabledReason: connectedAccounts.requirementsDisabledReason,
-  requirementsCurrentDeadline: connectedAccounts.requirementsCurrentDeadline,
+  payoutsCapabilityCode: connectedAccounts.payoutsCapabilityCode,
+  capabilityStatusDetails: connectedAccounts.capabilityStatusDetails,
   onboardedAt: connectedAccounts.onboardedAt,
   providerSyncedAt: connectedAccounts.providerSyncedAt,
 };
@@ -163,11 +169,8 @@ export async function tutorPayoutStatus(tutorProfileId: string): Promise<TutorPa
     return {
       status: 'not_onboarded',
       canReceivePayments: false,
-      detailsSubmitted: false,
-      currentlyDue: [],
-      pastDue: [],
-      disabledReason: null,
-      currentDeadline: null,
+      statusDetails: [],
+      canResolveByOnboarding: false,
       onboardedAt: null,
       providerSyncedAt: null,
     };
@@ -177,7 +180,9 @@ export async function tutorPayoutStatus(tutorProfileId: string): Promise<TutorPa
     tutorProfileId: _tutor,
     provider: _provider,
     providerAccountId: _accountId,
-    accountTypeCode: _type,
+    dashboardCode: _dashboard,
+    configurationCode: _configuration,
+    countryCode: _country,
     ...view
   } = record;
   return view;
@@ -197,26 +202,23 @@ export async function canTutorReceivePaymentsById(tutorProfileId: string): Promi
 
 export interface ProviderAccountSnapshot {
   readonly providerAccountId: string;
-  readonly chargesEnabled: boolean;
-  readonly payoutsEnabled: boolean;
   readonly transfersCapability: CapabilityStatus;
-  readonly detailsSubmitted: boolean;
-  readonly currentlyDue: readonly string[];
-  readonly pastDue: readonly string[];
-  readonly disabledReason: string | null;
-  readonly currentDeadline: Date | null;
+  readonly payoutsCapability: CapabilityStatus;
+  readonly statusDetails: readonly CapabilityStatusDetail[];
+  readonly countryCode: string | null;
+}
+
+/** The domain state a snapshot describes. One place, so nothing re-derives it. */
+function stateOf(snapshot: ProviderAccountSnapshot): ConnectedAccountState {
+  return {
+    transfersCapability: snapshot.transfersCapability,
+    payoutsCapability: snapshot.payoutsCapability,
+    statusDetails: snapshot.statusDetails,
+  };
 }
 
 function statusFor(snapshot: ProviderAccountSnapshot): ConnectedAccountStatus {
-  return connectedAccountStatusFor({
-    chargesEnabled: snapshot.chargesEnabled,
-    payoutsEnabled: snapshot.payoutsEnabled,
-    transfersCapability: snapshot.transfersCapability,
-    detailsSubmitted: snapshot.detailsSubmitted,
-    currentlyDue: snapshot.currentlyDue,
-    pastDue: snapshot.pastDue,
-    disabledReason: snapshot.disabledReason,
-  });
+  return connectedAccountStatusFor(stateOf(snapshot));
 }
 
 /**
@@ -231,38 +233,28 @@ function statusFor(snapshot: ProviderAccountSnapshot): ConnectedAccountStatus {
 export async function recordConnectedAccount(input: {
   readonly tutorProfileId: string;
   readonly provider: string;
-  readonly accountTypeCode: string;
+  readonly dashboardCode: string;
+  readonly configurationCode: string;
   readonly snapshot: ProviderAccountSnapshot;
   readonly now?: Date;
 }): Promise<ConnectedAccountRecord> {
   const { sql: client, db } = createDatabaseClient();
   const now = input.now ?? new Date();
   try {
-    const payable = canTutorReceivePayments({
-      chargesEnabled: input.snapshot.chargesEnabled,
-      payoutsEnabled: input.snapshot.payoutsEnabled,
-      transfersCapability: input.snapshot.transfersCapability,
-      detailsSubmitted: input.snapshot.detailsSubmitted,
-      currentlyDue: input.snapshot.currentlyDue,
-      pastDue: input.snapshot.pastDue,
-      disabledReason: input.snapshot.disabledReason,
-    });
+    const payable = canTutorReceivePayments(stateOf(input.snapshot));
     await db
       .insert(connectedAccounts)
       .values({
         tutorProfileId: input.tutorProfileId,
         provider: input.provider,
         providerAccountId: input.snapshot.providerAccountId,
-        accountTypeCode: input.accountTypeCode,
+        dashboardCode: input.dashboardCode,
+        configurationCode: input.configurationCode,
+        countryCode: input.snapshot.countryCode,
         statusCode: statusFor(input.snapshot),
-        chargesEnabled: input.snapshot.chargesEnabled,
-        payoutsEnabled: input.snapshot.payoutsEnabled,
         transfersCapabilityCode: input.snapshot.transfersCapability,
-        detailsSubmitted: input.snapshot.detailsSubmitted,
-        requirementsCurrentlyDue: [...input.snapshot.currentlyDue],
-        requirementsPastDue: [...input.snapshot.pastDue],
-        requirementsDisabledReason: input.snapshot.disabledReason,
-        requirementsCurrentDeadline: input.snapshot.currentDeadline,
+        payoutsCapabilityCode: input.snapshot.payoutsCapability,
+        capabilityStatusDetails: [...input.snapshot.statusDetails],
         onboardingStartedAt: now,
         onboardedAt: payable ? now : null,
         providerSyncedAt: now,
@@ -314,15 +306,7 @@ export async function applyProviderAccountState(input: {
   const { sql: client, db } = createDatabaseClient();
   const now = input.now ?? new Date();
   try {
-    const payable = canTutorReceivePayments({
-      chargesEnabled: input.snapshot.chargesEnabled,
-      payoutsEnabled: input.snapshot.payoutsEnabled,
-      transfersCapability: input.snapshot.transfersCapability,
-      detailsSubmitted: input.snapshot.detailsSubmitted,
-      currentlyDue: input.snapshot.currentlyDue,
-      pastDue: input.snapshot.pastDue,
-      disabledReason: input.snapshot.disabledReason,
-    });
+    const payable = canTutorReceivePayments(stateOf(input.snapshot));
     const eventAt = input.eventCreatedAt;
 
     /*
@@ -343,14 +327,10 @@ export async function applyProviderAccountState(input: {
       .update(connectedAccounts)
       .set({
         statusCode: statusFor(input.snapshot),
-        chargesEnabled: input.snapshot.chargesEnabled,
-        payoutsEnabled: input.snapshot.payoutsEnabled,
         transfersCapabilityCode: input.snapshot.transfersCapability,
-        detailsSubmitted: input.snapshot.detailsSubmitted,
-        requirementsCurrentlyDue: [...input.snapshot.currentlyDue],
-        requirementsPastDue: [...input.snapshot.pastDue],
-        requirementsDisabledReason: input.snapshot.disabledReason,
-        requirementsCurrentDeadline: input.snapshot.currentDeadline,
+        payoutsCapabilityCode: input.snapshot.payoutsCapability,
+        capabilityStatusDetails: [...input.snapshot.statusDetails],
+        countryCode: input.snapshot.countryCode,
         /*
          * Set once and never cleared: the first time a tutor became payable is
          * a historical fact, and a later restriction does not unmake it. The

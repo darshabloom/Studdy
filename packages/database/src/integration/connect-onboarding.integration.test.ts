@@ -40,18 +40,20 @@ async function databaseAvailable(): Promise<boolean> {
 
 const available = await databaseAvailable();
 
-/** A not-yet-verified Stripe account, as the adapter would report it. */
+/** A not-yet-verified v2 account, as the adapter would report it. */
 function pendingSnapshot(providerAccountId: string): ProviderAccountSnapshot {
   return {
     providerAccountId,
-    chargesEnabled: false,
-    payoutsEnabled: false,
     transfersCapability: 'pending',
-    detailsSubmitted: false,
-    currentlyDue: ['individual.id_number'],
-    pastDue: [],
-    disabledReason: null,
-    currentDeadline: null,
+    payoutsCapability: 'pending',
+    statusDetails: [
+      {
+        capability: 'stripe_balance.stripe_transfers',
+        code: 'requirements_pending_verification',
+        resolution: 'provide_info',
+      },
+    ],
+    countryCode: 'NZ',
   };
 }
 
@@ -59,14 +61,10 @@ function pendingSnapshot(providerAccountId: string): ProviderAccountSnapshot {
 function readySnapshot(providerAccountId: string): ProviderAccountSnapshot {
   return {
     providerAccountId,
-    chargesEnabled: true,
-    payoutsEnabled: true,
     transfersCapability: 'active',
-    detailsSubmitted: true,
-    currentlyDue: [],
-    pastDue: [],
-    disabledReason: null,
-    currentDeadline: null,
+    payoutsCapability: 'active',
+    statusDetails: [],
+    countryCode: 'NZ',
   };
 }
 
@@ -117,12 +115,15 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
       const record = await recordConnectedAccount({
         tutorProfileId: tutorA,
         provider: 'stripe',
-        accountTypeCode: 'express',
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
         snapshot: pendingSnapshot('acct_first'),
       });
 
       expect(record.providerAccountId).toBe('acct_first');
-      expect(record.accountTypeCode).toBe('express');
+      expect(record.dashboardCode).toBe('express');
+      expect(record.configurationCode).toBe('recipient');
+      expect(record.countryCode).toBe('NZ');
       expect(record.status).toBe('pending');
       expect(record.canReceivePayments).toBe(false);
 
@@ -142,7 +143,8 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
       await recordConnectedAccount({
         tutorProfileId: tutorA,
         provider: 'stripe',
-        accountTypeCode: 'express',
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
         snapshot: pendingSnapshot('acct_started'),
       });
       const record = await connectedAccountForTutor(tutorA);
@@ -159,13 +161,15 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
       const first = await recordConnectedAccount({
         tutorProfileId: tutorA,
         provider: 'stripe',
-        accountTypeCode: 'express',
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
         snapshot: pendingSnapshot('acct_reuse'),
       });
       const second = await recordConnectedAccount({
         tutorProfileId: tutorA,
         provider: 'stripe',
-        accountTypeCode: 'express',
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
         snapshot: pendingSnapshot('acct_would_be_duplicate'),
       });
 
@@ -189,13 +193,15 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
         recordConnectedAccount({
           tutorProfileId: tutorA,
           provider: 'stripe',
-          accountTypeCode: 'express',
+          dashboardCode: 'express',
+          configurationCode: 'recipient',
           snapshot: pendingSnapshot('acct_race_one'),
         }),
         recordConnectedAccount({
           tutorProfileId: tutorA,
           provider: 'stripe',
-          accountTypeCode: 'express',
+          dashboardCode: 'express',
+          configurationCode: 'recipient',
           snapshot: pendingSnapshot('acct_race_two'),
         }),
       ]);
@@ -219,7 +225,8 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
       await recordConnectedAccount({
         tutorProfileId: tutorA,
         provider: 'stripe',
-        accountTypeCode: 'express',
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
         snapshot: pendingSnapshot('acct_pending'),
       });
       expect(await canTutorReceivePaymentsById(tutorA)).toBe(false);
@@ -229,7 +236,8 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
       await recordConnectedAccount({
         tutorProfileId: tutorA,
         provider: 'stripe',
-        accountTypeCode: 'express',
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
         snapshot: pendingSnapshot('acct_becomes_ready'),
       });
       await applyProviderAccountState({
@@ -244,19 +252,27 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
     });
 
     /**
-     * Studdy uses separate charges and transfers, so the connected account
-     * never creates a charge. Refusing a tutor because `charges_enabled` is
-     * false would block a perfectly payable person for a capability Studdy
-     * does not use.
+     * Readiness depends on the two RECIPIENT capabilities and nothing else.
+     * Accounts v2 has no `charges_enabled`, and under separate charges and
+     * transfers the connected account never creates the parent's charge — so
+     * there is no card-payments signal to consult even in principle.
      */
-    it('does not require charges_enabled on the connected account', async () => {
+    it('depends on transfers and payouts alone', async () => {
       await recordConnectedAccount({
         tutorProfileId: tutorA,
         provider: 'stripe',
-        accountTypeCode: 'express',
-        snapshot: { ...readySnapshot('acct_no_charges'), chargesEnabled: false },
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
+        snapshot: readySnapshot('acct_two_caps'),
       });
       expect(await canTutorReceivePaymentsById(tutorA)).toBe(true);
+
+      await applyProviderAccountState({
+        providerAccountId: 'acct_two_caps',
+        snapshot: { ...readySnapshot('acct_two_caps'), payoutsCapability: 'pending' },
+        eventCreatedAt: null,
+      });
+      expect(await canTutorReceivePaymentsById(tutorA)).toBe(false);
     });
 
     it('reports a tutor with no account as not payable', async () => {
@@ -270,7 +286,8 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
       await recordConnectedAccount({
         tutorProfileId: tutorA,
         provider: 'stripe',
-        accountTypeCode: 'express',
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
         snapshot: readySnapshot('acct_secret_id'),
       });
       const view = await tutorPayoutStatus(tutorA);
@@ -294,7 +311,8 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
       await recordConnectedAccount({
         tutorProfileId: tutorA,
         provider: 'stripe',
-        accountTypeCode: 'express',
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
         snapshot: pendingSnapshot('acct_events'),
       });
     });
@@ -332,7 +350,8 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
       await recordConnectedAccount({
         tutorProfileId: tutorB,
         provider: 'stripe',
-        accountTypeCode: 'express',
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
         snapshot: pendingSnapshot('acct_tutor_b'),
       });
 
@@ -350,7 +369,8 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
       await recordConnectedAccount({
         tutorProfileId: tutorB,
         provider: 'stripe',
-        accountTypeCode: 'express',
+        dashboardCode: 'express',
+        configurationCode: 'recipient',
         snapshot: pendingSnapshot('acct_tutor_b_iso'),
       });
 
@@ -411,10 +431,15 @@ describe.skipIf(!available)('stripe connect onboarding (integration)', () => {
         ...eventFor('acct_events', 'evt_restricted', new Date(Date.now() + 60_000)),
         snapshot: {
           ...readySnapshot('acct_events'),
-          payoutsEnabled: false,
-          transfersCapability: 'inactive',
-          disabledReason: 'requirements.past_due',
-          pastDue: ['individual.verification.document'],
+          transfersCapability: 'restricted',
+          payoutsCapability: 'restricted',
+          statusDetails: [
+            {
+              capability: 'stripe_balance.payouts',
+              code: 'requirements_past_due',
+              resolution: 'provide_info',
+            },
+          ],
         },
       });
 

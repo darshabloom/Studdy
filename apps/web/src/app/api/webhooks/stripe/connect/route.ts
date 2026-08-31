@@ -1,41 +1,50 @@
 import { NextResponse } from 'next/server';
-import { recordProviderEvent } from '@studdy/database';
+import { connectedAccountExists, recordProviderEvent } from '@studdy/database';
 import {
-  snapshotFromAccount,
+  HANDLED_CONNECT_EVENT_TYPES,
+  retrieveConnectAccount,
   STRIPE_PROVIDER,
   stripeClient,
   StripeConfigurationError,
   StripeSignatureError,
-  verifyWebhookEvent,
+  verifyConnectEvent,
 } from '@studdy/integrations/payments/stripe';
 import { createLogger } from '@studdy/observability';
 
 /**
- * Stripe Connect webhooks. `account.updated` only, in this slice.
+ * Stripe Connect webhooks — Accounts v2 recipient events.
  *
  * THE ORDER OF OPERATIONS IS THE SECURITY MODEL, and it is strict:
  *
  *   1. read the RAW body — never a parsed-and-restringified one, because the
  *      signature covers the exact bytes Stripe sent;
  *   2. verify the signature against the server-only secret;
- *   3. only then touch the database.
+ *   3. only then touch the database or call Stripe.
  *
  * There is no branch in which an unverified request reaches a write. A caller
  * who cannot produce a valid signature cannot move a single row, which is what
  * makes it safe for this route to be unauthenticated in the ordinary sense.
  *
- * PAYMENT FULFILMENT IS NOT HERE. No `payment_intent.*` handling, no
+ * V2 EVENTS ARE THIN, and that changes the shape of this handler. A v1
+ * `account.updated` embedded the whole account; a v2 notification carries a
+ * `related_object` REFERENCE, so the authoritative state is fetched afterwards.
+ * Two consequences worth stating:
+ *
+ *   - The fetch is the authority, not the event. Studdy always reads current
+ *     state rather than trusting a payload, which also makes a replayed or
+ *     out-of-order event harmless by construction.
+ *   - The request body cannot contain KYC data, because it contains almost
+ *     nothing. v1 required redacting the payload; v2 gives that for free.
+ *
+ * PAYMENT FULFILMENT IS NOT HERE. No PaymentIntent handling, no
  * `awaiting_payment → fulfilled`, no transfers. Those belong to slices 5 and 6.
  * This route exists now to prove signature verification and idempotency end to
- * end on an event that cannot move money.
+ * end on events that cannot move money.
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const logger = createLogger({ job: 'stripe-connect-webhook' });
-
-/** Events this route acts on. Anything else is acknowledged and dropped. */
-const HANDLED_EVENT_TYPES = new Set(['account.updated']);
 
 export async function POST(request: Request): Promise<NextResponse> {
   const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -45,10 +54,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   const rawBody = await request.text();
   const signature = request.headers.get('stripe-signature');
 
+  let stripe;
   let event;
   try {
-    const stripe = stripeClient(secretKey);
-    event = await verifyWebhookEvent(stripe, rawBody, signature, webhookSecret);
+    stripe = stripeClient(secretKey);
+    event = verifyConnectEvent(stripe, rawBody, signature, webhookSecret);
   } catch (error) {
     if (error instanceof StripeSignatureError) {
       // 400 so Stripe stops retrying: a bad signature will never become good.
@@ -66,52 +76,62 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'unhandled' }, { status: 500 });
   }
 
-  if (!HANDLED_EVENT_TYPES.has(event.type)) {
+  if (!HANDLED_CONNECT_EVENT_TYPES.includes(event.type)) {
     // 200, deliberately. A Connect endpoint receives events Studdy has no
     // opinion on; retrying them forever would be noise, not safety.
     logger.info('stripe webhook ignored', { eventType: event.type });
     return NextResponse.json({ received: true, handled: false });
   }
 
-  const account = event.data.object as { id?: unknown };
-  if (typeof account.id !== 'string') {
-    logger.warn('stripe account.updated carried no account id');
+  if (event.relatedAccountId === null) {
+    logger.warn('stripe connect event carried no related account');
     return NextResponse.json({ received: true, handled: false });
   }
 
-  const snapshot = snapshotFromAccount(event.data.object as never);
+  /*
+   * IS THIS OUR ACCOUNT? Checked BEFORE fetching, so an event for an account
+   * Studdy does not hold costs one indexed lookup rather than a Stripe round
+   * trip. It is also the isolation boundary: routing is by provider account id
+   * alone, so an event naming somebody else's account can never reach another
+   * tutor's row.
+   */
+  if (!(await connectedAccountExists(event.relatedAccountId))) {
+    logger.info('stripe connect event for an unknown account', { eventType: event.type });
+    return NextResponse.json({ received: true, handled: false });
+  }
 
   try {
+    // THE FETCH IS THE AUTHORITY. The event said something changed; Stripe says
+    // what the state now is.
+    const snapshot = await retrieveConnectAccount(stripe, event.relatedAccountId);
+
     const outcome = await recordProviderEvent({
       provider: STRIPE_PROVIDER,
       providerEventId: event.id,
       eventType: event.type,
       /*
-       * REDACTED, NOT RAW. A full `account.updated` carries the tutor's name,
-       * date of birth, address and document details. Studdy reads none of it,
-       * so storing it would create a liability in exchange for nothing. What
-       * is kept is what a later reviewer would actually need: the capability
-       * and payability flags, and requirement IDENTIFIERS — never their values.
+       * The capability projection, not a provider payload. v2 notifications
+       * carry no account data to begin with, and what is stored here is the
+       * state Studdy acted on — capability statuses and machine-readable reason
+       * codes, never requirement values or identity.
        */
       redactedPayload: {
         providerAccountId: snapshot.providerAccountId,
-        chargesEnabled: snapshot.chargesEnabled,
-        payoutsEnabled: snapshot.payoutsEnabled,
         transfersCapability: snapshot.transfersCapability,
-        detailsSubmitted: snapshot.detailsSubmitted,
-        currentlyDue: snapshot.currentlyDue,
-        pastDue: snapshot.pastDue,
-        disabledReason: snapshot.disabledReason,
+        payoutsCapability: snapshot.payoutsCapability,
+        statusDetails: snapshot.statusDetails,
+        countryCode: snapshot.countryCode,
       },
       providerAccountId: snapshot.providerAccountId,
       snapshot,
-      eventCreatedAt: new Date(event.created * 1000),
+      eventCreatedAt: event.createdAt,
     });
 
     /*
-     * Counts and outcomes only. NEVER the account id, the tutor, or a
-     * requirement list — a requirements array names what identity evidence a
-     * specific person still owes, which is not something to leave in a log.
+     * Counts and outcomes only. NEVER the account id, the tutor, or a reason
+     * list — a reason code attached to a specific person is still a statement
+     * about that person's verification, which is not something to leave in a
+     * log.
      */
     logger.info('stripe connect webhook processed', { eventType: event.type, outcome });
     return NextResponse.json({ received: true, handled: outcome === 'applied' });

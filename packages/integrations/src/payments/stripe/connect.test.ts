@@ -2,79 +2,99 @@ import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type Stripe from 'stripe';
 import {
+  HANDLED_CONNECT_EVENT_TYPES,
+  PAYOUTS_CAPABILITY,
   snapshotFromAccount,
   stripeClient,
   StripeConfigurationError,
   StripeSignatureError,
-  verifyWebhookEvent,
+  TRANSFERS_CAPABILITY,
+  verifyConnectEvent,
 } from './connect';
 
 /**
- * The Stripe adapter's own guarantees, with no network and no Stripe account.
+ * The Stripe Accounts v2 adapter's guarantees, with no network and no account.
  *
  * Signature verification is tested against a REAL signature computed the way
  * Stripe computes one, rather than a mocked verifier — the whole value of the
  * check is that it rejects things, and a stubbed verifier would prove nothing.
  */
 
-/** A Stripe Account as the API returns it, trimmed to what the adapter reads. */
-function account(overrides: Record<string, unknown> = {}): Stripe.Account {
+/** A v2 Account as the API returns it, trimmed to what the adapter reads. */
+function account(overrides: Record<string, unknown> = {}): Stripe.V2.Core.Account {
   return {
     id: 'acct_test',
-    object: 'account',
-    charges_enabled: false,
-    payouts_enabled: false,
-    details_submitted: false,
-    capabilities: { transfers: 'inactive' },
-    requirements: {
-      currently_due: [],
-      past_due: [],
-      eventually_due: [],
-      pending_verification: [],
-      disabled_reason: null,
-      current_deadline: null,
-      errors: [],
-      alternatives: [],
+    object: 'v2.core.account',
+    livemode: false,
+    applied_configurations: ['recipient'],
+    identity: { country: 'NZ' },
+    configuration: {
+      recipient: {
+        applied: true,
+        capabilities: {
+          stripe_balance: {
+            stripe_transfers: { status: 'pending', status_details: [] },
+            payouts: { status: 'pending', status_details: [] },
+          },
+        },
+      },
     },
     ...overrides,
-  } as unknown as Stripe.Account;
+  } as unknown as Stripe.V2.Core.Account;
+}
+
+/** Build the recipient capability hash without repeating five levels of nesting. */
+function withCapabilities(
+  transfers: { status: string; status_details?: unknown[] },
+  payouts: { status: string; status_details?: unknown[] },
+): Stripe.V2.Core.Account {
+  return account({
+    configuration: {
+      recipient: {
+        applied: true,
+        capabilities: {
+          stripe_balance: {
+            stripe_transfers: { status_details: [], ...transfers },
+            payouts: { status_details: [], ...payouts },
+          },
+        },
+      },
+    },
+  });
 }
 
 describe('snapshotFromAccount', () => {
-  it('reads the payability fields Studdy decides with', () => {
+  it('reads the v2 recipient capability statuses Studdy decides with', () => {
     const snapshot = snapshotFromAccount(
-      account({
-        charges_enabled: true,
-        payouts_enabled: true,
-        details_submitted: true,
-        capabilities: { transfers: 'active' },
-      }),
+      withCapabilities({ status: 'active' }, { status: 'active' }),
     );
     expect(snapshot.providerAccountId).toBe('acct_test');
-    expect(snapshot.chargesEnabled).toBe(true);
-    expect(snapshot.payoutsEnabled).toBe(true);
     expect(snapshot.transfersCapability).toBe('active');
-    expect(snapshot.detailsSubmitted).toBe(true);
+    expect(snapshot.payoutsCapability).toBe('active');
+    expect(snapshot.countryCode).toBe('NZ');
   });
 
   /**
-   * THE DATA-MINIMISATION BOUNDARY. Stripe's Account carries the tutor's name,
-   * date of birth, address and document details for an Express account. None of
-   * it is read here, so none of it can be stored or logged downstream.
+   * THE DATA-MINIMISATION BOUNDARY. A v2 Account can carry the tutor's name,
+   * date of birth, address and document details under `identity`. Only the
+   * country is read, so nothing else can be stored or logged downstream.
    */
-  it('copies no identity or KYC data out of the account', () => {
+  it('copies no identity or KYC data beyond the country', () => {
     const snapshot = snapshotFromAccount(
       account({
-        individual: {
-          first_name: 'Ada',
-          last_name: 'Lovelace',
-          dob: { day: 10, month: 12, year: 1815 },
-          address: { line1: '12 Analytical Way', city: 'Auckland' },
-          id_number_provided: true,
-          ssn_last_4_provided: true,
+        identity: {
+          country: 'NZ',
+          entity_type: 'individual',
+          individual: {
+            given_name: 'Ada',
+            surname: 'Lovelace',
+            date_of_birth: { day: 10, month: 12, year: 1815 },
+            address: { line1: '12 Analytical Way', city: 'Auckland' },
+            id_numbers: [{ type: 'nz_ird', registrar: 'IRD' }],
+          },
         },
-        business_profile: { name: 'Ada Tutoring' },
-        email: 'ada@example.test',
+        contact_email: 'ada@example.test',
+        display_name: 'Ada Tutoring',
       }),
     );
     const serialised = JSON.stringify(snapshot);
@@ -84,54 +104,83 @@ describe('snapshotFromAccount', () => {
     expect(serialised).not.toContain('ada@example.test');
     expect(Object.keys(snapshot).sort()).toEqual(
       [
-        'chargesEnabled',
-        'currentDeadline',
-        'currentlyDue',
-        'detailsSubmitted',
-        'disabledReason',
-        'pastDue',
-        'payoutsEnabled',
+        'countryCode',
+        'payoutsCapability',
         'providerAccountId',
+        'statusDetails',
         'transfersCapability',
       ].sort(),
     );
   });
 
-  it('keeps requirement identifiers, which are field names rather than values', () => {
+  /**
+   * v2 replaces v1's requirement identifiers with machine-readable reason
+   * codes, which is a privacy improvement: the reason is recorded without
+   * naming which identity document is outstanding.
+   */
+  it('keeps capability status details as reason codes, tagged by capability', () => {
     const snapshot = snapshotFromAccount(
-      account({
-        requirements: {
-          currently_due: ['individual.id_number'],
-          past_due: ['individual.verification.document'],
-          disabled_reason: 'requirements.past_due',
-          current_deadline: 1_800_000_000,
+      withCapabilities(
+        {
+          status: 'restricted',
+          status_details: [{ code: 'requirements_past_due', resolution: 'provide_info' }],
         },
-      }),
+        {
+          status: 'unsupported',
+          status_details: [{ code: 'unsupported_country', resolution: 'contact_stripe' }],
+        },
+      ),
     );
-    expect(snapshot.currentlyDue).toEqual(['individual.id_number']);
-    expect(snapshot.pastDue).toEqual(['individual.verification.document']);
-    expect(snapshot.disabledReason).toBe('requirements.past_due');
-    expect(snapshot.currentDeadline).toEqual(new Date(1_800_000_000 * 1000));
+    expect(snapshot.transfersCapability).toBe('restricted');
+    expect(snapshot.payoutsCapability).toBe('unsupported');
+    expect(snapshot.statusDetails).toEqual([
+      {
+        capability: TRANSFERS_CAPABILITY,
+        code: 'requirements_past_due',
+        resolution: 'provide_info',
+      },
+      { capability: PAYOUTS_CAPABILITY, code: 'unsupported_country', resolution: 'contact_stripe' },
+    ]);
   });
 
   /**
-   * Stripe types capability status as an open string for forward
-   * compatibility. Anything unrecognised must fail CLOSED — an unknown state
-   * read as "active" would mark a tutor payable on a guess.
+   * Fails CLOSED. An unrecognised status read as active would mark a tutor
+   * payable on a guess, and v1's `inactive` must not sneak through either.
    */
-  it('treats an unrecognised capability status as not active', () => {
+  it('treats an unrecognised capability status as unsupported', () => {
     const snapshot = snapshotFromAccount(
-      account({ capabilities: { transfers: 'some_future_state' } }),
+      withCapabilities({ status: 'some_future_state' }, { status: 'inactive' }),
     );
-    expect(snapshot.transfersCapability).toBe('inactive');
+    expect(snapshot.transfersCapability).toBe('unsupported');
+    expect(snapshot.payoutsCapability).toBe('unsupported');
   });
 
-  it('survives an account with no requirements hash at all', () => {
-    const snapshot = snapshotFromAccount(account({ requirements: null }));
-    expect(snapshot.currentlyDue).toEqual([]);
-    expect(snapshot.pastDue).toEqual([]);
-    expect(snapshot.disabledReason).toBeNull();
-    expect(snapshot.currentDeadline).toBeNull();
+  /**
+   * When `include` is omitted the configuration is absent. That must read as
+   * not payable rather than throwing — failing closed, not failing over.
+   */
+  it('survives an account returned without its recipient configuration', () => {
+    const snapshot = snapshotFromAccount(account({ configuration: undefined }));
+    expect(snapshot.transfersCapability).toBe('unsupported');
+    expect(snapshot.payoutsCapability).toBe('unsupported');
+    expect(snapshot.statusDetails).toEqual([]);
+  });
+});
+
+describe('handled event types', () => {
+  /**
+   * v1's `account.updated` is NOT the v2 event. Naming it here would be a
+   * silent no-op in production: Stripe would deliver v2 events forever and
+   * Studdy would ignore every one.
+   */
+  it('targets the v2 recipient events and not the v1 name', () => {
+    expect(HANDLED_CONNECT_EVENT_TYPES).toContain(
+      'v2.core.account[configuration.recipient].capability_status_updated',
+    );
+    expect(HANDLED_CONNECT_EVENT_TYPES).toContain(
+      'v2.core.account[configuration.recipient].updated',
+    );
+    expect(HANDLED_CONNECT_EVENT_TYPES).not.toContain('account.updated');
   });
 });
 
@@ -142,7 +191,7 @@ describe('stripeClient', () => {
   });
 });
 
-describe('verifyWebhookEvent', () => {
+describe('verifyConnectEvent', () => {
   const secret = 'whsec_test_secret';
   const stripe = stripeClient('sk_test_not_a_real_key');
 
@@ -154,72 +203,74 @@ describe('verifyWebhookEvent', () => {
     return `t=${timestamp},v1=${digest}`;
   }
 
+  /** A THIN v2 notification: a reference, not the account. */
   const payload = JSON.stringify({
     id: 'evt_test',
-    object: 'event',
-    type: 'account.updated',
-    created: 1_800_000_000,
-    data: { object: { id: 'acct_test', object: 'account' } },
+    object: 'v2.core.event',
+    type: 'v2.core.account[configuration.recipient].capability_status_updated',
+    created: '2026-08-31T00:00:00.000Z',
+    livemode: false,
+    related_object: {
+      id: 'acct_test',
+      type: 'v2.core.account',
+      url: '/v2/core/accounts/acct_test',
+    },
   });
 
-  it('accepts a correctly signed payload', async () => {
+  it('accepts a correctly signed notification and extracts the account reference', () => {
     const timestamp = Math.floor(Date.now() / 1000);
-    const event = await verifyWebhookEvent(stripe, payload, signature(payload, timestamp), secret);
+    const event = verifyConnectEvent(stripe, payload, signature(payload, timestamp), secret);
     expect(event.id).toBe('evt_test');
-    expect(event.type).toBe('account.updated');
+    expect(event.type).toBe('v2.core.account[configuration.recipient].capability_status_updated');
+    expect(event.relatedAccountId).toBe('acct_test');
+    // v2 timestamps are ISO strings, not unix integers.
+    expect(event.createdAt.toISOString()).toBe('2026-08-31T00:00:00.000Z');
   });
 
-  it('rejects a payload signed with the wrong secret', async () => {
+  it('rejects a payload signed with the wrong secret', () => {
     const timestamp = Math.floor(Date.now() / 1000);
-    await expect(
-      verifyWebhookEvent(stripe, payload, signature(payload, timestamp, 'whsec_wrong'), secret),
-    ).rejects.toThrow(StripeSignatureError);
+    expect(() =>
+      verifyConnectEvent(stripe, payload, signature(payload, timestamp, 'whsec_wrong'), secret),
+    ).toThrow(StripeSignatureError);
   });
 
   /** The signature covers the exact bytes. A tampered body must not verify. */
-  it('rejects a body altered after signing', async () => {
+  it('rejects a body altered after signing', () => {
     const timestamp = Math.floor(Date.now() / 1000);
     const header = signature(payload, timestamp);
     const tampered = payload.replace('acct_test', 'acct_attacker');
-    await expect(verifyWebhookEvent(stripe, tampered, header, secret)).rejects.toThrow(
+    expect(() => verifyConnectEvent(stripe, tampered, header, secret)).toThrow(
       StripeSignatureError,
     );
   });
 
-  it('rejects a missing signature header', async () => {
-    await expect(verifyWebhookEvent(stripe, payload, null, secret)).rejects.toThrow(
-      StripeSignatureError,
-    );
+  it('rejects a missing signature header', () => {
+    expect(() => verifyConnectEvent(stripe, payload, null, secret)).toThrow(StripeSignatureError);
   });
 
   /** Replay protection: Stripe's default tolerance rejects an old timestamp. */
-  it('rejects a signature far outside the timestamp tolerance', async () => {
+  it('rejects a signature far outside the timestamp tolerance', () => {
     const old = Math.floor(Date.now() / 1000) - 60 * 60;
-    await expect(
-      verifyWebhookEvent(stripe, payload, signature(payload, old), secret),
-    ).rejects.toThrow(StripeSignatureError);
+    expect(() => verifyConnectEvent(stripe, payload, signature(payload, old), secret)).toThrow(
+      StripeSignatureError,
+    );
   });
 
   /**
    * Refuses rather than accepting anything when unconfigured. A missing secret
    * must never degrade into "process it unverified".
    */
-  it('refuses to verify when no webhook secret is configured', async () => {
+  it('refuses to verify when no webhook secret is configured', () => {
     const timestamp = Math.floor(Date.now() / 1000);
-    await expect(
-      verifyWebhookEvent(stripe, payload, signature(payload, timestamp), undefined),
-    ).rejects.toThrow(StripeConfigurationError);
+    expect(() =>
+      verifyConnectEvent(stripe, payload, signature(payload, timestamp), undefined),
+    ).toThrow(StripeConfigurationError);
   });
 
-  it('never leaks the provider message or the secret in the error', async () => {
+  it('never leaks the provider message or the secret in the error', () => {
     const timestamp = Math.floor(Date.now() / 1000);
     try {
-      await verifyWebhookEvent(
-        stripe,
-        payload,
-        signature(payload, timestamp, 'whsec_wrong'),
-        secret,
-      );
+      verifyConnectEvent(stripe, payload, signature(payload, timestamp, 'whsec_wrong'), secret);
       expect.unreachable('verification should have failed');
     } catch (error) {
       expect(String((error as Error).message)).not.toContain(secret);

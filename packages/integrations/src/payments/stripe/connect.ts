@@ -1,5 +1,9 @@
 import Stripe from 'stripe';
-import type { CapabilityStatus, ConnectedAccountState } from '@studdy/domain/payments';
+import {
+  asCapabilityStatus,
+  type CapabilityStatusDetail,
+  type ConnectedAccountState,
+} from '@studdy/domain/payments';
 
 /**
  * The Stripe Connect adapter — the ONLY file in Studdy that knows Stripe exists.
@@ -9,25 +13,56 @@ import type { CapabilityStatus, ConnectedAccountState } from '@studdy/domain/pay
  * stay provider-neutral and a second provider would be a sibling of this file
  * rather than a rewrite.
  *
- * ACCOUNT TYPE: EXPRESS, as approved in design §5 and re-checked against the
- * installed SDK rather than assumed — `'express'` is still a valid
- * `AccountCreateParams.Type` in v22, so nothing in current Stripe contradicts
- * the decision. Express keeps KYC and its screens on Stripe (Custom would put
- * compliance on Studdy) while leaving Studdy in control of the charge and the
- * customer relationship (Standard hands the tutor a full dashboard and takes
- * that away).
+ * ACCOUNTS V2, NOT V1. Stripe refuses `POST /v1/accounts` for new Connect
+ * platforms — "Stripe no longer recommends Accounts v1 for new Connect
+ * integrations" — and Studdy is a new platform with no production accounts and
+ * no money moved. The v1 compatibility flag exists but was deliberately not
+ * enabled: starting on an API Stripe already discourages, then scheduling a
+ * migration into the slice that carries real money, is the more expensive path.
  *
- * CAPABILITIES REQUESTED: `transfers` only. Under separate charges and
- * transfers the parent's PaymentIntent is created on the PLATFORM account, so
- * the connected account never creates a charge and `card_payments` would be a
- * capability Studdy asks a tutor to be verified for and then never uses. Asking
- * for less means less KYC friction for the tutor, for no lost function.
+ * WHAT SURVIVED THE MIGRATION, and why the product architecture is unchanged:
+ *
+ *   - Stripe-hosted onboarding — still an account link, still Stripe's screens.
+ *   - The Express DASHBOARD EXPERIENCE — `dashboard: 'express'`. In v2 this is
+ *     a property of the account rather than an account "type", which is a
+ *     renaming rather than a loss.
+ *   - Separate charges and transfers — expressed by the RECIPIENT
+ *     configuration. Stripe's own v2 documentation describes recipient as the
+ *     configuration to use "if the Account will not be the Merchant of Record,
+ *     like with Separate Charges & Transfers", which is exactly Studdy.
+ *
+ * WHAT CHANGED, and could not be preserved:
+ *
+ *   - `charges_enabled` / `payouts_enabled` booleans do not exist in v2. They
+ *     are capability STATUSES now. Nothing is wrapped to fake the old shape.
+ *   - The capability status enum is `active | pending | restricted |
+ *     unsupported`. v1's `inactive` is gone.
+ *   - Events are THIN: they carry a reference, not the account. See below.
+ *
+ * NO MERCHANT CONFIGURATION IS REQUESTED. A merchant configuration would make
+ * the tutor the merchant of record, which is the opposite of Studdy's approved
+ * money flow. Requesting only `recipient` is also what keeps KYC friction on a
+ * tutor to the minimum their actual role requires.
  */
 
-/** Studdy's Connect account type. One value, stored rather than assumed. */
-export const STUDDY_CONNECT_ACCOUNT_TYPE = 'express' as const;
+/** Studdy's Connect dashboard experience. Express, as approved. */
+export const STUDDY_CONNECT_DASHBOARD = 'express' as const;
+
+/** The v2 configuration Studdy puts a tutor under. */
+export const STUDDY_CONNECT_CONFIGURATION = 'recipient' as const;
 
 export const STRIPE_PROVIDER = 'stripe' as const;
+
+/** Capability paths Studdy reads. Named once so nothing re-spells them. */
+export const TRANSFERS_CAPABILITY = 'stripe_balance.stripe_transfers';
+export const PAYOUTS_CAPABILITY = 'stripe_balance.payouts';
+
+/**
+ * What Studdy asks Stripe to return. Without `include`, the configuration is
+ * absent from the response and every capability would read as unsupported —
+ * failing closed, but for the wrong reason.
+ */
+const ACCOUNT_INCLUDE = ['configuration.recipient', 'identity'] as const;
 
 export class StripeConfigurationError extends Error {
   override name = 'StripeConfigurationError';
@@ -47,56 +82,64 @@ export function stripeClient(secretKey: string | undefined): Stripe {
     );
   }
   // The SDK pins its own API version; not overriding it keeps the types and the
-  // wire format in agreement, which is the failure a hand-written version string
-  // eventually causes.
+  // wire format in agreement, which is the failure a hand-written version
+  // string eventually causes.
   return new Stripe(secretKey);
 }
 
 /**
- * The Studdy-shaped view of a Stripe account.
+ * The Studdy-shaped view of a Stripe v2 account.
  *
- * `requirements` arrays are IDENTIFIERS ONLY — `individual.id_number` and the
- * like. Stripe's Account object also carries the tutor's name, date of birth
- * and address; none of that is read here, so it cannot be stored or logged by
- * accident later.
+ * `statusDetails` are Stripe's machine-readable REASON CODES, which is a
+ * privacy improvement v2 hands Studdy for free: `requirements_past_due` says
+ * something is outstanding without naming which identity document it is. v1
+ * required storing requirement identifiers to say anything useful at all.
  */
 export interface StripeAccountSnapshot extends ConnectedAccountState {
   readonly providerAccountId: string;
-  /** Stripe's `created`-equivalent for ordering; null when not from an event. */
-  readonly currentDeadline: Date | null;
+  /** ISO 3166-1 alpha-2, as Stripe holds it. Recorded, never decided on. */
+  readonly countryCode: string | null;
 }
 
-function capabilityStatus(value: string | undefined): CapabilityStatus {
-  // Stripe's types allow an open string for forward compatibility. Anything
-  // unrecognised is treated as NOT active, which fails closed: an unknown
-  // capability state must never be read as "this tutor can be paid".
-  return value === 'active' || value === 'pending' ? value : 'inactive';
+interface CapabilityEntry {
+  readonly status?: string;
+  readonly status_details?: ReadonlyArray<{ code: string; resolution: string }>;
 }
 
-function requirementIdentifiers(value: readonly string[] | null | undefined): readonly string[] {
-  return value === null || value === undefined ? [] : [...value];
+function detailsFor(
+  capability: string,
+  entry: CapabilityEntry | undefined,
+): CapabilityStatusDetail[] {
+  if (entry?.status_details === undefined) return [];
+  return entry.status_details.map((detail) => ({
+    capability,
+    code: detail.code,
+    resolution: detail.resolution,
+  }));
 }
 
 /**
- * Project a Stripe Account onto exactly what Studdy stores and decides with.
+ * Project a Stripe v2 Account onto exactly what Studdy stores and decides with.
  *
- * This is the data-minimisation boundary. Everything Studdy holds about a
+ * THIS IS THE DATA-MINIMISATION BOUNDARY. Everything Studdy holds about a
  * tutor's Stripe account passes through this function, so the set of fields
- * below is the complete answer to "what did we copy out of Stripe".
+ * below is the complete answer to "what did we copy out of Stripe". Identity —
+ * names, dates of birth, addresses, documents — is read for nothing but the
+ * country code, which is a jurisdiction rather than a personal detail.
  */
-export function snapshotFromAccount(account: Stripe.Account): StripeAccountSnapshot {
-  const requirements = account.requirements ?? null;
-  const deadline = requirements?.current_deadline ?? null;
+export function snapshotFromAccount(account: Stripe.V2.Core.Account): StripeAccountSnapshot {
+  const balance = account.configuration?.recipient?.capabilities?.stripe_balance as
+    { stripe_transfers?: CapabilityEntry; payouts?: CapabilityEntry } | undefined;
+
   return {
     providerAccountId: account.id,
-    chargesEnabled: account.charges_enabled === true,
-    payoutsEnabled: account.payouts_enabled === true,
-    transfersCapability: capabilityStatus(account.capabilities?.transfers),
-    detailsSubmitted: account.details_submitted === true,
-    currentlyDue: requirementIdentifiers(requirements?.currently_due),
-    pastDue: requirementIdentifiers(requirements?.past_due),
-    disabledReason: requirements?.disabled_reason ?? null,
-    currentDeadline: deadline === null ? null : new Date(deadline * 1000),
+    transfersCapability: asCapabilityStatus(balance?.stripe_transfers?.status),
+    payoutsCapability: asCapabilityStatus(balance?.payouts?.status),
+    statusDetails: [
+      ...detailsFor(TRANSFERS_CAPABILITY, balance?.stripe_transfers),
+      ...detailsFor(PAYOUTS_CAPABILITY, balance?.payouts),
+    ],
+    countryCode: account.identity?.country ?? null,
   };
 }
 
@@ -114,28 +157,63 @@ export interface CreateConnectAccountInput {
 }
 
 /**
- * Create an Express account for a tutor.
+ * Create a recipient account for a tutor.
  *
- * NZ is hard-coded as the country because both parties are New Zealand and the
- * same-country requirement for separate charges and transfers depends on it.
- * A tutor elsewhere is a product decision, not a configuration change.
+ * NZ is the country because both parties are New Zealand and the same-country
+ * requirement for separate charges and transfers depends on it. A tutor
+ * elsewhere is a product decision, not a configuration change.
+ *
+ * ONLY `stripe_transfers` IS REQUESTED. `payouts` becomes available through the
+ * recipient configuration as onboarding completes; asking for capabilities
+ * Studdy does not use — card payments above all — would put a tutor through
+ * verification for a role they do not have.
  */
 export async function createConnectAccount(
   stripe: Stripe,
   input: CreateConnectAccountInput,
 ): Promise<StripeAccountSnapshot> {
-  const account = await stripe.accounts.create(
+  const account = await stripe.v2.core.accounts.create(
     {
-      type: STUDDY_CONNECT_ACCOUNT_TYPE,
-      country: 'NZ',
-      // Spread rather than `email: undefined`: the repo runs
+      dashboard: STUDDY_CONNECT_DASHBOARD,
+      // Spread rather than `contact_email: undefined`: the repo runs
       // `exactOptionalPropertyTypes`, so an explicitly-undefined optional is a
       // type error rather than an omitted field.
-      ...(input.email === null ? {} : { email: input.email }),
-      capabilities: {
-        // Only what the charge pattern actually needs. See the header.
-        transfers: { requested: true },
+      ...(input.email === null ? {} : { contact_email: input.email }),
+      identity: { country: 'NZ' },
+      /*
+       * REQUIRED BY STRIPE for a recipient holding `stripe_transfers`, and a
+       * LIABILITY DECISION rather than a formality. Stripe refuses account
+       * creation without both.
+       *
+       * `fees_collector: 'application_express'` — Studdy collects Stripe's
+       * fees, which is the arrangement the approved money model already
+       * assumes: Studdy absorbs the processing cost and the parent is charged
+       * exactly the tutor's listed price. The `_express` variant is the one
+       * consistent with `dashboard: 'express'`.
+       *
+       * `losses_collector: 'application'` — Studdy carries a negative balance
+       * a tutor cannot pay back. This is the conservative reading of the
+       * approved architecture: the platform takes the parent's money, holds it,
+       * and keeps disputes and refunds operationally on its own side. Handing
+       * losses to Stripe would be claiming a protection Studdy has not
+       * negotiated.
+       *
+       * NEITHER IS A LEGAL OR TAX ASSERTION. Merchant-of-record treatment is
+       * still unconfirmed (design §5) and both values are changeable while no
+       * production account exists and no money has moved.
+       */
+      defaults: {
+        responsibilities: {
+          fees_collector: 'application_express',
+          losses_collector: 'application',
+        },
       },
+      configuration: {
+        recipient: {
+          capabilities: { stripe_balance: { stripe_transfers: { requested: true } } },
+        },
+      },
+      include: [...ACCOUNT_INCLUDE],
       // Studdy's own id, so an account found in the Stripe dashboard can be
       // traced back. A profile id, never a name or an email in metadata.
       metadata: { studdy_tutor_profile_id: input.tutorProfileId },
@@ -150,7 +228,9 @@ export async function retrieveConnectAccount(
   stripe: Stripe,
   providerAccountId: string,
 ): Promise<StripeAccountSnapshot> {
-  const account = await stripe.accounts.retrieve(providerAccountId);
+  const account = await stripe.v2.core.accounts.retrieve(providerAccountId, {
+    include: [...ACCOUNT_INCLUDE],
+  });
   return snapshotFromAccount(account);
 }
 
@@ -166,9 +246,12 @@ export interface AccountLinkInput {
  * A Stripe-hosted onboarding link.
  *
  * `account_onboarding` is correct for both the first run and a resume: Stripe
- * shows whatever is still outstanding. `account_update` is not usable here —
- * the SDK's own documentation restricts it to accounts where the platform
- * collects requirements, which excludes Express accounts with dashboard access.
+ * shows whatever is still outstanding, which is what makes "start" and
+ * "continue" one code path in Studdy.
+ *
+ * `configurations: ['recipient']` scopes the collected requirements to the only
+ * role the tutor has. Collecting merchant requirements would ask a tutor to be
+ * verified as something Studdy will never make them.
  *
  * Links are SINGLE-USE and short-lived by Stripe's design, which is why Studdy
  * generates one per click rather than storing it.
@@ -177,17 +260,24 @@ export async function createAccountLink(
   stripe: Stripe,
   input: AccountLinkInput,
 ): Promise<{ readonly url: string; readonly expiresAt: Date }> {
-  const link = await stripe.accountLinks.create({
+  const link = await stripe.v2.core.accountLinks.create({
     account: input.providerAccountId,
-    type: 'account_onboarding',
-    refresh_url: input.refreshUrl,
-    return_url: input.returnUrl,
-    // Collect everything Stripe will eventually want, rather than the minimum
-    // for today. A tutor sent back a second time for a threshold they were
-    // always going to cross is a worse experience than one longer form.
-    collection_options: { fields: 'eventually_due' },
+    use_case: {
+      type: 'account_onboarding',
+      account_onboarding: {
+        configurations: [STUDDY_CONNECT_CONFIGURATION],
+        refresh_url: input.refreshUrl,
+        return_url: input.returnUrl,
+        // Collect everything Stripe will eventually want, rather than the
+        // minimum for today. A tutor sent back a second time for a threshold
+        // they were always going to cross is a worse experience than one
+        // longer form.
+        collection_options: { fields: 'eventually_due' },
+      },
+    },
   });
-  return { url: link.url, expiresAt: new Date(link.expires_at * 1000) };
+  // v2 timestamps are ISO strings, not the unix integers v1 used.
+  return { url: link.url, expiresAt: new Date(link.expires_at) };
 }
 
 export class StripeSignatureError extends Error {
@@ -195,22 +285,52 @@ export class StripeSignatureError extends Error {
 }
 
 /**
+ * A verified v2 event notification, reduced to what the webhook route needs.
+ *
+ * V2 EVENTS ARE THIN. Unlike v1, the payload does NOT contain the account — it
+ * carries a `related_object` reference, and the current state is fetched
+ * afterwards. That is more work, and it is also strictly better here: the
+ * webhook body cannot contain KYC data, because it contains almost nothing.
+ */
+export interface VerifiedConnectEvent {
+  readonly id: string;
+  readonly type: string;
+  /** Event creation time, for the out-of-order guard. */
+  readonly createdAt: Date;
+  /** The account the event concerns, when it names one. */
+  readonly relatedAccountId: string | null;
+}
+
+/**
+ * Connect events Studdy acts on.
+ *
+ * The recipient events are the ones that move payability.
+ * `v2.core.account.updated` is included because an account-level change can
+ * carry a capability change with it, and re-reading authoritative state is
+ * cheap and idempotent.
+ */
+export const HANDLED_CONNECT_EVENT_TYPES: readonly string[] = [
+  'v2.core.account[configuration.recipient].capability_status_updated',
+  'v2.core.account[configuration.recipient].updated',
+  'v2.core.account.updated',
+];
+
+/**
  * Verify a webhook signature and parse the event. NOTHING is written before
  * this succeeds.
  *
- * Takes the RAW body as a string or Buffer. A parsed-and-restringified body
- * will not verify, because the signature covers the exact bytes Stripe sent.
+ * Takes the RAW body as a string. A parsed-and-restringified body will not
+ * verify, because the signature covers the exact bytes Stripe sent.
  *
- * `constructEventAsync` rather than the sync form: the async variant uses the
- * SubtleCrypto provider where one exists, which is what keeps this route usable
- * outside a Node runtime later.
+ * `parseEventNotification` is the v2 equivalent of v1's `constructEvent`, and
+ * verifies the same signature scheme over the same header.
  */
-export async function verifyWebhookEvent(
+export function verifyConnectEvent(
   stripe: Stripe,
-  rawBody: string | Buffer,
+  rawBody: string,
   signatureHeader: string | null,
   webhookSecret: string | undefined,
-): Promise<Stripe.Event> {
+): VerifiedConnectEvent {
   if (webhookSecret === undefined || webhookSecret.trim() === '') {
     throw new StripeConfigurationError(
       'STRIPE_CONNECT_WEBHOOK_SECRET is not set. Refusing to process an unverifiable webhook.',
@@ -219,12 +339,20 @@ export async function verifyWebhookEvent(
   if (signatureHeader === null || signatureHeader === '') {
     throw new StripeSignatureError('Missing Stripe-Signature header.');
   }
+  let notification;
   try {
-    return await stripe.webhooks.constructEventAsync(rawBody, signatureHeader, webhookSecret);
+    notification = stripe.parseEventNotification(rawBody, signatureHeader, webhookSecret);
   } catch {
     // The provider's message can name the secret's shape; never surface it,
     // and never chain the cause — an error chain is a log line waiting to
     // happen.
     throw new StripeSignatureError('Stripe webhook signature verification failed.');
   }
+  const related = (notification as { related_object?: { id?: unknown } }).related_object;
+  return {
+    id: notification.id,
+    type: notification.type,
+    createdAt: new Date(notification.created),
+    relatedAccountId: typeof related?.id === 'string' ? related.id : null,
+  };
 }

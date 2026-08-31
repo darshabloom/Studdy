@@ -14,7 +14,8 @@ import {
   retrieveConnectAccount,
   STRIPE_PROVIDER,
   stripeClient,
-  STUDDY_CONNECT_ACCOUNT_TYPE,
+  STUDDY_CONNECT_CONFIGURATION,
+  STUDDY_CONNECT_DASHBOARD,
 } from '@studdy/integrations/payments/stripe';
 import { createLogger } from '@studdy/observability';
 import { resolveIdentity } from '../identity/resolve';
@@ -105,7 +106,8 @@ export async function startConnectOnboarding(): Promise<void> {
     account = await recordConnectedAccount({
       tutorProfileId,
       provider: STRIPE_PROVIDER,
-      accountTypeCode: STUDDY_CONNECT_ACCOUNT_TYPE,
+      dashboardCode: STUDDY_CONNECT_DASHBOARD,
+      configurationCode: STUDDY_CONNECT_CONFIGURATION,
       snapshot,
     });
     logger.info('connect account created');
@@ -121,18 +123,24 @@ export async function startConnectOnboarding(): Promise<void> {
 }
 
 /**
- * Refresh a tutor's account state from Stripe.
+ * Read a tutor's account state from Stripe and store it.
  *
  * CALLED ON RETURN FROM ONBOARDING, because arriving at the return URL proves
  * only that the tutor closed the Stripe tab. It is not evidence that Stripe
  * accepted them, and treating it as such is exactly how a platform ends up
  * telling somebody they are ready to be paid when they are not.
  *
- * `account.updated` is the authoritative long-run channel; this read covers the
- * gap between the tutor returning and the webhook arriving, so the page they
- * land on is truthful immediately rather than a few seconds stale.
+ * The v2 recipient events are the authoritative long-run channel; this read
+ * covers the gap between the tutor returning and an event arriving, so the page
+ * they land on is truthful immediately rather than a few seconds stale.
+ *
+ * DELIBERATELY DOES NOT REVALIDATE. This runs during the payments page's own
+ * render, and Next.js refuses `revalidatePath` there — revalidating a route
+ * while rendering it is both unsupported and pointless, since the render is
+ * already about to produce fresh output. The revalidation belongs to the form
+ * action below, which mutates and then needs the page rebuilt.
  */
-export async function refreshConnectStatus(): Promise<void> {
+export async function syncConnectStatusFromProvider(): Promise<void> {
   const tutorProfileId = await requireTutorProfileId();
   const account = await connectedAccountForTutor(tutorProfileId);
   if (account === null) return;
@@ -144,8 +152,18 @@ export async function refreshConnectStatus(): Promise<void> {
     providerAccountId: account.providerAccountId,
     snapshot,
     // A direct read is by definition current, so it does not compete with the
-    // webhook ordering guard — it neither advances nor is blocked by it.
+    // event ordering guard — it neither advances nor is blocked by it.
     eventCreatedAt: null,
   });
+}
+
+/**
+ * The same refresh, as a form action.
+ *
+ * Separate from the render-time path ONLY because of where revalidation is
+ * legal, not because the two do different work.
+ */
+export async function refreshConnectStatus(): Promise<void> {
+  await syncConnectStatusFromProvider();
   revalidatePath(PAYMENTS_PATH);
 }

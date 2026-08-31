@@ -1,5 +1,5 @@
 {
-  "id": "91105fc6-f941-42d9-bd57-f16127ee5148",
+  "id": "44cab369-d4be-424a-8e2f-be8938735b97",
   "prevId": "2af9d0fe-bfb8-4e99-b129-c331e74420e5",
   "version": "7",
   "dialect": "postgresql",
@@ -817,11 +817,23 @@
           "primaryKey": false,
           "notNull": true
         },
-        "account_type_code": {
-          "name": "account_type_code",
+        "dashboard_code": {
+          "name": "dashboard_code",
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "configuration_code": {
+          "name": "configuration_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "country_code": {
+          "name": "country_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "status_code": {
           "name": "status_code",
@@ -830,59 +842,26 @@
           "notNull": true,
           "default": "'not_onboarded'"
         },
-        "charges_enabled": {
-          "name": "charges_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "payouts_enabled": {
-          "name": "payouts_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "transfers_capability_code": {
           "name": "transfers_capability_code",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'inactive'"
+          "default": "'unsupported'"
         },
-        "details_submitted": {
-          "name": "details_submitted",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "requirements_currently_due": {
-          "name": "requirements_currently_due",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "requirements_past_due": {
-          "name": "requirements_past_due",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "requirements_disabled_reason": {
-          "name": "requirements_disabled_reason",
+        "payouts_capability_code": {
+          "name": "payouts_capability_code",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "'unsupported'"
         },
-        "requirements_current_deadline": {
-          "name": "requirements_current_deadline",
-          "type": "timestamp with time zone",
+        "capability_status_details": {
+          "name": "capability_status_details",
+          "type": "jsonb",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "onboarding_started_at": {
           "name": "onboarding_started_at",
@@ -990,13 +969,21 @@
           "name": "connected_account_status_check",
           "value": "\"payments\".\"connected_accounts\".\"status_code\" in ('not_onboarded', 'pending', 'complete', 'restricted')"
         },
-        "connected_account_type_check": {
-          "name": "connected_account_type_check",
-          "value": "\"payments\".\"connected_accounts\".\"account_type_code\" in ('express')"
+        "connected_account_dashboard_check": {
+          "name": "connected_account_dashboard_check",
+          "value": "\"payments\".\"connected_accounts\".\"dashboard_code\" in ('express')"
+        },
+        "connected_account_configuration_check": {
+          "name": "connected_account_configuration_check",
+          "value": "\"payments\".\"connected_accounts\".\"configuration_code\" in ('recipient')"
         },
         "connected_account_transfers_capability_check": {
           "name": "connected_account_transfers_capability_check",
-          "value": "\"payments\".\"connected_accounts\".\"transfers_capability_code\" in ('active', 'inactive', 'pending')"
+          "value": "\"payments\".\"connected_accounts\".\"transfers_capability_code\" in ('active', 'pending', 'restricted', 'unsupported')"
+        },
+        "connected_account_payouts_capability_check": {
+          "name": "connected_account_payouts_capability_check",
+          "value": "\"payments\".\"connected_accounts\".\"payouts_capability_code\" in ('active', 'pending', 'restricted', 'unsupported')"
         }
       },
       "isRLSEnabled": false
