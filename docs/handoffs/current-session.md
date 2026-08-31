@@ -35,20 +35,26 @@ current; they are not duplicates.
 
 ## 2. Where the work is
 
-**Branch:** `main`. Steps 1 to 5 are all merged; there is no feature branch in flight.
+**Branch:** `feat/payments-schema-and-pricing`, branched from `main` at `cfc288c`.
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
+
+> **SLICE 3 IS IN FLIGHT.** Payment slices 1 and 2 are merged; slice 3 is implemented on
+> this branch, is NOT pushed, has NO pull request, and has **two review items to settle
+> before closeout** — see the slice 3 section in §8. Read the CURRENT HEAD and ahead count
+> out of git; `9cadce3` is the slice 3 implementation commit and stays true.
 
 > ### Checkpoint state, verified against git
 >
-> | Fact            | Value                                                |
-> | --------------- | ---------------------------------------------------- |
-> | Branch          | `main`, level with `origin/main`                     |
-> | UX steps 1–4    | merged (PRs #17, #18, #19)                           |
-> | UX step 5       | merged as `a738913` (PR #20, squash, 2026-08-26)     |
-> | UX step 6       | **DEFERRED** — replaced by the launch-critical path  |
-> | Payment slice 1 | merged as `8fa6051` (PR #21, squash, 2026-08-30)     |
-> | Payment slice 2 | **MERGED as `3eaddf3` (PR #22, squash, 2026-08-31)** |
-> | Payment slice 3 | **NOT STARTED — this is the next task**              |
+> | Fact            | Value                                               |
+> | --------------- | --------------------------------------------------- |
+> | Branch          | `main`, level with `origin/main`                    |
+> | UX steps 1–4    | merged (PRs #17, #18, #19)                          |
+> | UX step 5       | merged as `a738913` (PR #20, squash, 2026-08-26)    |
+> | UX step 6       | **DEFERRED** — replaced by the launch-critical path |
+> | Payment slice 1 | merged as `8fa6051` (PR #21, squash, 2026-08-30)    |
+> | Payment slice 2 | merged as `3eaddf3` (PR #22, squash, 2026-08-31)    |
+> | Payment slice 3 | **IMPLEMENTED, NOT MERGED** — two review items open |
+> | Payment slice 4 | not started                                         |
 >
 > Step 5 merged with all four CI jobs and both Vercel checks green, after a full
 > sequential local verification from a fresh database. It was approved screen by
@@ -343,11 +349,12 @@ confirmed booking`
 > `claude/studdy-implementation-plan.md` or with the step 6 section below, that document
 > wins.
 >
-> **Slices 1 and 2 are merged** (`8fa6051` PR #21, `3eaddf3` PR #22). Expiry is now
-> automatic, which was the precondition for accepting real money. The immediate next task
-> is **slice 3, `feat/payments-schema-and-pricing`** — the `payments` tables and the pure
-> pricing domain, with a Fable security review on the migration before it is finalised.
-> Still no Stripe integration: slice 3 is schema and pure logic only.
+> **Slices 1 and 2 are merged** (`8fa6051` PR #21, `3eaddf3` PR #22). **Slice 3 is
+> IMPLEMENTED on `feat/payments-schema-and-pricing` and not merged.** The immediate next
+> task is not new implementation: it is the **two open review items** recorded in the slice
+> 3 section below — the zero-price boundary, and the ownership of the missing expiry guard.
+> Settle those two and nothing else, then stop for the owner's approval before any
+> verification, pull request or merge.
 >
 > Do not reopen any step 5 behaviour: it was reviewed screen by screen and approved, and the
 > decisions that look arbitrary are recorded with their reasons in the step 5 section above.
@@ -361,7 +368,7 @@ Full detail, including every schema column and the reasoning behind each choice,
 | --- | ------------------------------------- | ------------------------------------------------------------- |
 | 1   | ~~`feat/payment-window`~~             | **MERGED `8fa6051` (PR #21)** — window, refusal, sweep guards |
 | 2   | ~~`feat/inngest-scheduler`~~          | **MERGED `3eaddf3` (PR #22)** — Inngest, every minute         |
-| 3   | `feat/payments-schema-and-pricing`    | `payments` tables, pure pricing domain, RLS classification    |
+| 3   | `feat/payments-schema-and-pricing`    | **IMPLEMENTED `9cadce3`, NOT MERGED** — 2 review items open   |
 | 4   | `feat/stripe-connect-onboarding`      | Express accounts, `account.updated`                           |
 | 5   | `feat/stripe-payment-intent`          | Payment Element, server-authoritative pricing                 |
 | 6   | `feat/stripe-webhooks-and-fulfilment` | **First real paid booking possible here**                     |
@@ -375,6 +382,134 @@ Two rules from that document are worth repeating here, because both are easy to 
   request staying `selected`. The expiry sweep is guarded on the ILR's status instead.
 - **No real money is accepted while expiry depends on a manual endpoint.** That is why
   Inngest lands at slice 2 rather than later.
+
+#### Payment slice 3 — **IMPLEMENTED, NOT MERGED. TWO REVIEW ITEMS OPEN.**
+
+On `feat/payments-schema-and-pricing`, branched from `main` at `cfc288c`. Implementation
+commit `9cadce3`. **Not pushed. No pull request. Nothing merged.** Read the current HEAD and
+ahead count out of git rather than from this file.
+
+The durable, provider-neutral payment ledger and pricing model, built BEFORE any Stripe
+integration. No Stripe SDK, no PaymentIntent, no webhook route, no Connect account, no card
+on file, no refunds, no payouts. Migrate, seed and every test run with **no provider
+configured at all**, which is the point: the ledger has to say what is owed before anything
+can be charged.
+
+##### What the schema now contains
+
+Three tables, all in `payments`:
+
+- **`payments.payments`** — the money record. Identity (`PAY-` reference, ILR, tutor request,
+  service version), parties (payer user, nullable family account, tutor profile), money, tax,
+  provider, state. All money is `bigint` minor units with `char(3)` currency.
+- **`payments.payment_events`** — the provider-event ledger. **Schema only; nothing writes
+  it.** `provider_event_id` is UNIQUE, so the webhook slice's idempotency will be a database
+  constraint rather than an `if` somebody forgets.
+- **`payments.tutor_transfers`** — the tutor's entitlement, recorded when a payment succeeds
+  and settled manually later. Unique `idempotency_key`, plus a partial unique on `payment_id`
+  where `pending|sent` so a re-run of a manual settlement script cannot pay twice.
+
+**`payments.connected_accounts` is DELIBERATELY DEFERRED TO SLICE 4.** Its shape is dictated
+entirely by Stripe Connect onboarding — account type, `charges_enabled`/`payouts_enabled`, a
+requirements snapshot — so it belongs with the integration that fills it. Nothing in the
+ledger needs it: the tutor is identified by their Studdy profile, and `provider_transfer_id`
+is nullable until a provider moves money. Slice 4 adds the table and, if wanted, a nullable
+`connected_account_id` on `payments` and `tutor_transfers`.
+
+##### The money rules, as implemented
+
+- **NZD only.** Currency is stored per row with a regex CHECK, so a second currency is a data
+  change rather than a migration.
+- **Studdy's commission is 10%**, held centrally as `payments.platform_fee_rate_bps = 1000`.
+- **Alpha default processing-fee payer is `platform`** — Studdy absorbs the cost, and the
+  parent is charged exactly the tutor's listed price.
+- **Provider cost is nullable and NEVER ESTIMATED.** It is recorded from the provider's own
+  figures after settlement. A modelled figure would be a guess wearing a ledger's clothes.
+- **No GST logic exists anywhere.** `tax_treatment_code` and `tax_metadata` are present and
+  stay null. No tutor registration is assumed. The treatment needs a New Zealand
+  accountant's confirmation before production money moves.
+- **THE ROUNDING INVARIANT:** the fee is computed and rounded half up, and the entitlement is
+  the REMAINDER — never a second rounded calculation. `$33.33` gives `333 + 3000` by
+  construction, so the database CHECK that they sum to the lesson cannot fire.
+- **ONE VERSION PER RULE**, the slice 1 lesson applied before it could be repeated.
+  `rule_settings` versions per key, so the rate and the payer policy move independently and a
+  payment snapshots both. `payments.disclosed_processing_fee_minor` is **not seeded and has
+  no fallback percentage** — enabling parent-pays without configuring a real amount throws
+  rather than putting an invented number on a receipt.
+
+A `$40` lesson: `lesson 4000 · rate 1000 bps · fee 400 · entitlement 3600 · processing fee 0
+· total 4000 · provider cost null`.
+
+##### Status model
+
+`requires_payment → processing → succeeded`, plus `failed`, `cancelled`, `expired`. Named for
+what Studdy acts on rather than mirrored from Stripe. Two deliberate absences: **no
+`processing → expired`** (the sweep must not close a payment whose confirmation is in
+flight), and **no `requires_payment → requires_payment`** — a recoverable decline is not a
+transition, just `failed_attempt_count` moving, which is what keeps retries on one row.
+
+##### Migration `0007`
+
+Three `CREATE TABLE`s. Integer money throughout, currency regex CHECK, **all nine foreign
+keys `ON DELETE restrict`** so a request carrying a payment cannot be deleted, status CHECKs
+on all three tables, three arithmetic CHECKs, two partial unique indexes, every provider
+column nullable.
+
+The live-payment index is `intended_lesson_request_id WHERE status_code in
+('requires_payment','processing','succeeded')`. `succeeded` is inside the set so a paid
+lesson can never be paid twice; the three terminal failures are outside it so a family whose
+payment genuinely failed can start fresh while their window is open. Ordinary recoverable
+declines never create a second row at all.
+
+##### RLS
+
+All three tables classified **`server_only`** — no browser policy, no grant. `check:rls`
+passes with **31 tables** (was 28). Family- and tutor-facing figures will be served by
+explicit projections; the tutor's projection may show lesson price, Studdy fee and
+entitlement, and must never show Studdy's provider cost.
+
+##### Verified at `9cadce3`
+
+| Gate                                           | Result                        |
+| ---------------------------------------------- | ----------------------------- |
+| domain `src/payments` (pricing + window)       | **35 passing**                |
+| `payments.integration.test.ts`                 | **17 passing**                |
+| full integration suite                         | **144 passing, 1 skipped**    |
+| typecheck / lint / format / `check:boundaries` | green                         |
+| `check:rls`                                    | green — 31 tables             |
+| fresh `db:reset` → `db:migrate` → `db:seed`    | green, no provider configured |
+
+**Targeted only.** The full sequential verification has NOT been run, and neither has the
+full unit suite, the build or the end-to-end suite since this branch began.
+
+> ### THE TWO REVIEW ITEMS. DO THESE FIRST, AND NOTHING ELSE.
+>
+> **1. The zero-price / payment boundary.**
+>
+> The pure pricing function intentionally supports arithmetic at zero — `0` in gives
+> `0 / 0 / 0` out, and the invariant sweep starts there — because a total function is easier
+> to reason about than one with a hole in it.
+>
+> What is NOT settled is whether the LEDGER should refuse it. Decide whether
+> `payments.payments` needs a `lesson_amount_minor > 0` CHECK, or whether the existing
+> service-version constraints plus server-side pricing already make a zero-price payment
+> structurally unreachable. Inspect before changing: the answer may be that no constraint is
+> needed, and adding one that duplicates an existing guarantee is its own cost.
+>
+> **DO NOT INVENT FREE-LESSON SUPPORT.** This is a question about whether an impossible row
+> can be written, not about whether Studdy offers free lessons.
+>
+> **2. The missing expiry guard, and who owns it.**
+>
+> `expireOverdueRequests` still lacks the payment-status guard slice 1 deliberately left
+> unwritten rather than faked: **a payment that is `processing` or `succeeded` must not have
+> its request lapsed out from under a webhook in flight.** The `payments` table now exists,
+> so the guard is finally writable.
+>
+> **IT IS ASSIGNED TO LAUNCH SLICE 5, `feat/stripe-payment-intent`** — before payment rows
+> become operational, and not before. **Slice 4 (Connect onboarding) must not own it**:
+> onboarding creates no payment rows, so the guard would sit there untested and unexercised.
+> Record the assignment; do not implement it in slice 3.
 
 #### Payment slice 2 — **COMPLETE AND MERGED**
 
@@ -1275,22 +1410,40 @@ THE NEXT TASK IS NOT STEP 6. Studdy is working against a launch-critical roadmap
 the first real paid lesson. Read docs/design/payments-and-first-paid-booking.md — it is the
 authority.
 
-Payment slices 1 and 2 are MERGED (8fa6051 PR #21, 3eaddf3 PR #22): the 60-minute window
-with its snapshot columns and sweep guard, and Inngest running that sweep every minute.
-THE NEXT TASK IS SLICE 3, feat/payments-schema-and-pricing, on a NEW branch off main — the
-payments tables and the pure pricing domain, with a Fable security review on the migration
-before it is finalised. Slice 3 is schema and pure logic only; Stripe integration is slice 4
-and later.
+Payment slices 1 and 2 are MERGED (8fa6051 PR #21, 3eaddf3 PR #22). SLICE 3 IS IMPLEMENTED
+BUT NOT MERGED, on the branch feat/payments-schema-and-pricing. You are NOT starting new
+implementation.
+
+Confirm from git, not from this prompt: the branch, the current HEAD, that it is ahead of
+origin/main and 0 behind, that the working tree is clean, that the branch has NOT been
+pushed (no remote ref), and that there is NO pull request. 9cadce3 is the slice 3
+implementation commit and stays true; a handoff commit may sit on top of it.
+
+Then read the "Payment slice 3" section in §8. It records the three payment tables, the
+deliberate deferral of payments.connected_accounts to slice 4, the money rules, the status
+model, migration 0007, the RLS classification and the targeted results.
+
+YOUR FIRST TASK IS THE TWO REVIEW ITEMS RECORDED THERE, AND NOTHING ELSE:
+
+  1. The zero-price / payment boundary. The pure pricing function intentionally supports
+     arithmetic at zero. Decide whether payments.payments needs a lesson_amount_minor > 0
+     CHECK, or whether existing service-version constraints plus server-side pricing already
+     make a zero-price payment structurally impossible. INSPECT BEFORE CHANGING — the honest
+     answer may be that no constraint is needed. DO NOT invent free-lesson support.
+
+  2. The missing expiry guard. expireOverdueRequests still needs the guard that a payment in
+     `processing` or `succeeded` cannot have its request lapsed. It is ASSIGNED TO SLICE 5,
+     feat/stripe-payment-intent — record that assignment, and do NOT implement it now. Slice
+     4 (Connect onboarding) must not own it, because onboarding creates no payment rows.
+
+THEN STOP AND WAIT FOR APPROVAL. Do not run the full sequential verification, do not push,
+do not open a pull request, do not merge, and do not start slice 4.
 
 Three things are already decided and easy to get wrong: the Tutor Request state machine does
 NOT gain a `confirmed` state (a paid booking is ILR fulfilled + reservation
 booking_confirmed + payment succeeded, and the sweep is guarded on the ILR's status);
 Inngest holds no rules and no scheduled function may contain booking or expiry logic; and
 there is exactly ONE production scheduler, so do not add a Vercel cron.
-
-Slice 3 also completes the sweep's second guard, which slice 1 deliberately left unwritten
-rather than faked: a payment that is `processing` or `succeeded` must not be swept out from
-under a webhook in flight.
 
 Then, in your own words rather than copying the handoff back to me, summarise:
 - why the shortlist is a saving-and-comparison surface rather than a way to book, and how
