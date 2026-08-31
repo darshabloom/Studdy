@@ -50,6 +50,13 @@
       "when": 1787795818503,
       "tag": "0006_bizarre_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788140730914,
+      "tag": "0007_living_vulture",
+      "breakpoints": true
     }
   ]
 }

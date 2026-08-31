@@ -2,8 +2,12 @@ import { and, eq } from 'drizzle-orm';
 import { PROVISIONAL_REQUEST_RULES, RULE_KEYS, type RequestRules } from '@studdy/domain/bookings';
 import {
   PAYMENT_RULE_KEYS,
+  PRICING_RULE_KEYS,
   PROVISIONAL_PAYMENT_WINDOW_RULES,
+  PROVISIONAL_PRICING_RULES,
   type PaymentWindowRules,
+  type PricingRules,
+  type ProcessingFeePayer,
 } from '@studdy/domain/payments';
 import { createDatabaseClient } from '../client';
 import { ruleSettings } from '../schema/index';
@@ -141,6 +145,78 @@ export async function loadPaymentWindowRules(reader?: Reader): Promise<LoadedPay
       windowRuleVersion: byKey.get(PAYMENT_RULE_KEYS.windowMinutes)?.version ?? 0,
       nearLessonCutoffRuleVersion:
         byKey.get(PAYMENT_RULE_KEYS.nearLessonCutoffMinutes)?.version ?? 0,
+    };
+  } finally {
+    if (client !== null) await client.sql.end();
+  }
+}
+
+export interface LoadedPricingRules {
+  readonly rules: PricingRules;
+  /**
+   * ONE VERSION PER RULE, for the same reason the payment window carries two.
+   *
+   * `rule_settings` versions PER KEY, so the fee rate can sit at v3 while the
+   * payer policy is still v1. A payment snapshots both, because a single
+   * "pricing rule version" could not say which policy applied when the rate
+   * last moved — and a support question a year later would get a confident
+   * wrong answer rather than no answer.
+   */
+  readonly platformFeeRuleVersion: number;
+  readonly processingFeeRuleVersion: number;
+}
+
+/**
+ * Load the pricing configuration.
+ *
+ * Falls back to the provisional constants for any key not yet seeded, exactly
+ * as the request rules do, so a fresh database prices correctly before anybody
+ * has configured anything.
+ */
+export async function loadPricingRules(reader?: Reader): Promise<LoadedPricingRules> {
+  const client = reader === undefined ? createDatabaseClient() : null;
+  const db = reader ?? client!.db;
+  try {
+    const rows = await db
+      .select({
+        key: ruleSettings.settingKey,
+        value: ruleSettings.value,
+        version: ruleSettings.versionNumber,
+      })
+      .from(ruleSettings)
+      .where(eq(ruleSettings.statusCode, 'current'));
+
+    const byKey = new Map(rows.map((row) => [row.key, row]));
+    const read = <T>(key: string, fallback: T): T => {
+      const row = byKey.get(key);
+      return row === undefined ? fallback : (row.value as T);
+    };
+
+    /*
+     * The disclosed fee is read but NOT seeded. It has no meaning while Studdy
+     * absorbs processing costs, and the pricing domain refuses to charge a
+     * parent-paid fee that has not been configured — so enabling the policy
+     * without setting an amount fails loudly rather than inventing one.
+     *
+     * JSON numbers arrive as `number`; money is a bigint everywhere else, so it
+     * is converted here at the boundary rather than leaking a float inward.
+     */
+    const disclosed = read<number | null>(PRICING_RULE_KEYS.disclosedProcessingFeeMinor, null);
+
+    return {
+      rules: {
+        platformFeeRateBps: read(
+          PRICING_RULE_KEYS.platformFeeRateBps,
+          PROVISIONAL_PRICING_RULES.platformFeeRateBps,
+        ),
+        processingFeePayer: read<ProcessingFeePayer>(
+          PRICING_RULE_KEYS.processingFeePayer,
+          PROVISIONAL_PRICING_RULES.processingFeePayer,
+        ),
+        disclosedProcessingFeeMinor: disclosed === null ? null : BigInt(disclosed),
+      },
+      platformFeeRuleVersion: byKey.get(PRICING_RULE_KEYS.platformFeeRateBps)?.version ?? 0,
+      processingFeeRuleVersion: byKey.get(PRICING_RULE_KEYS.processingFeePayer)?.version ?? 0,
     };
   } finally {
     if (client !== null) await client.sql.end();

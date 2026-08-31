@@ -58,3 +58,8 @@ export { availabilityExceptions } from './availability/availability-exceptions';
 // multi-time requests (feat/availability-and-multi-time-requests)
 export { requestTimeOptions } from './bookings/request-time-options';
 export { tutorRequestTimeOptions } from './bookings/tutor-request-time-options';
+
+// payment ledger and pricing (feat/payments-schema-and-pricing)
+export { payments } from './payments/payments';
+export { paymentEvents } from './payments/payment-events';
+export { tutorTransfers } from './payments/tutor-transfers';

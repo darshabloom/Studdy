@@ -1,5 +1,5 @@
 {
-  "$comment": "Intentional RLS classification for every application table (brief §8: CI fails if a new exposed table lacks a classification). Classifications: own_record_read | catalogue_read | server_only | public_view_backed | family_scope | tutor_scope | organisation_scope | manager_scope.",
+  "$comment": "Intentional RLS classification for every application table (brief \u00a78: CI fails if a new exposed table lacks a classification). Classifications: own_record_read | catalogue_read | server_only | public_view_backed | family_scope | tutor_scope | organisation_scope | manager_scope.",
   "tables": {
     "identity.users": {
       "classification": "own_record_read",
@@ -14,7 +14,7 @@
     "identity.contact_points": {
       "classification": "own_record_read",
       "policy": "user_read_own_contact_points",
-      "notes": "Spec §13.7 policy naming example."
+      "notes": "Spec \u00a713.7 policy naming example."
     },
     "identity.user_preferences": {
       "classification": "own_record_read",
@@ -34,7 +34,7 @@
     "audit.audit_events": {
       "classification": "server_only",
       "policy": null,
-      "notes": "Sensitive (spec §13.4): RLS enabled, no browser policy, append-only."
+      "notes": "Sensitive (spec \u00a713.4): RLS enabled, no browser policy, append-only."
     },
     "audit.status_transitions": {
       "classification": "server_only",
@@ -79,7 +79,7 @@
     "tutors.tutor_profiles": {
       "classification": "public_view_backed",
       "policy": "public_read_visible_tutor_profiles",
-      "notes": "Authenticated read of publicly visible tutors only. NO anon grant — anon reads public.public_tutor_search."
+      "notes": "Authenticated read of publicly visible tutors only. NO anon grant \u2014 anon reads public.public_tutor_search."
     },
     "tutors.tutor_verifications": {
       "classification": "public_view_backed",
@@ -119,7 +119,7 @@
     "bookings.tutor_request_time_options": {
       "classification": "server_only",
       "policy": null,
-      "notes": "Server-only. One tutor's own offered subset — the only option table a tutor-facing projection may read, and even there request_time_option_id is never selected because it is an identifier from the family's side. RLS enabled as fail-closed second layer."
+      "notes": "Server-only. One tutor's own offered subset \u2014 the only option table a tutor-facing projection may read, and even there request_time_option_id is never selected because it is an identifier from the family's side. RLS enabled as fail-closed second layer."
     },
     "availability.tutor_time_reservations": {
       "classification": "server_only",
@@ -140,6 +140,21 @@
       "classification": "server_only",
       "policy": null,
       "notes": "Server-only, and the most sensitive table in this slice: reason_code and private_note may record a medical appointment or family circumstance. Never selected by any family-facing projection. Families receive only derived positive bookable slots, from which no gap or reason can be read."
+    },
+    "payments.payments": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Money. Server-only: no anon/authenticated grant and no browser policy. Carries provider identifiers, Studdy's commission and another family's payments, none of which any browser role may reach. Family- and tutor-facing figures are served by explicit projections, never by selecting this table."
+    },
+    "payments.payment_events": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Raw provider webhook payloads and the idempotency ledger. Server-only, append-mostly; nothing here is ever family- or tutor-facing."
+    },
+    "payments.tutor_transfers": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Settlement obligations to tutors. Server-only: a tutor's own earnings reach them through a projection that shows lesson price, Studdy fee and entitlement \u2014 never this table, and never Studdy's provider cost."
     }
   }
 }

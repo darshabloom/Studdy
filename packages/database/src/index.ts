@@ -78,9 +78,11 @@ export {
 } from './repositories/request-projections';
 export {
   loadPaymentWindowRules,
+  loadPricingRules,
   loadRequestRules,
   setRuleSetting,
   type LoadedPaymentWindowRules,
+  type LoadedPricingRules,
   type LoadedRequestRules,
 } from './repositories/rule-settings';
 export {
