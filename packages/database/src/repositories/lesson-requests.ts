@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, lte, ne, or } from 'drizzle-orm';
+import { and, eq, exists, inArray, isNotNull, isNull, lte, ne, not, or } from 'drizzle-orm';
 import {
   acceptanceHoldExpiry,
   assignPositions,
@@ -23,6 +23,7 @@ import {
   domainEvents,
   intendedLessonRequests,
   outboxEntries,
+  payments,
   requestTimeOptions,
   tutorRequestTimeOptions,
   services,
@@ -36,6 +37,20 @@ import {
 } from '../schema/index';
 import { bookableSlotsForTutors } from './availability';
 import { loadPaymentWindowRules, loadRequestRules } from './rule-settings';
+
+/**
+ * Payment statuses that make a request untouchable by the expiry sweep.
+ *
+ * `succeeded` is obvious. `processing` is the one that matters: it is the state
+ * a payment sits in between the parent confirming and Stripe's webhook landing,
+ * which is precisely the moment a one-minute sweep would otherwise close the
+ * booking out from under them.
+ *
+ * The terminal statuses are deliberately absent — a `failed`, `cancelled` or
+ * `expired` payment must not protect a request from expiring, or an abandoned
+ * attempt would hold a tutor's calendar open forever.
+ */
+const PAYMENT_IN_FLIGHT_STATUSES = ['processing', 'succeeded'] as const;
 
 /**
  * Commands for the Intended Lesson Request slice.
@@ -1112,25 +1127,27 @@ export async function expireOverdueRequests(options: {
        * change and the more honest one, because the ILR is where that fact
        * genuinely lives.
        *
-       * A SECOND GUARD IS STILL MISSING, AND IT BELONGS TO LAUNCH SLICE 5,
-       * `feat/stripe-payment-intent`. A payment that is `processing` or
-       * `succeeded` must not be swept out from under a webhook in flight:
+       * THE IN-FLIGHT PAYMENT GUARD, implemented in slice 5 alongside the rows
+       * it protects.
        *
-       *   and not exists (
-       *     select 1 from payments.payments p
-       *     where p.tutor_request_id = tr.id
-       *       and p.status_code in ('processing', 'succeeded'))
+       * A payment that is `processing` or `succeeded` must not have its request
+       * lapsed out from under it. The window between a parent confirming a card
+       * and Stripe's webhook arriving is small, and it is exactly the window a
+       * one-minute sweep lands in: without this, a family could pay and watch
+       * the booking evaporate a few seconds later, with the money taken and the
+       * tutor's time given back.
        *
-       * `payments.payments` DOES now exist — slice 3 created it — so this is no
-       * longer blocked on schema. It is deferred on purpose. Slice 5 is the
-       * first branch that writes operational payment rows, so it is the first
-       * branch where this predicate can be made true by a test rather than
-       * merely written. It must land there, before any real PaymentIntent is
-       * processed. Slice 4 (Connect onboarding) must not own it: onboarding
-       * creates no payment rows, so the guard would sit here unexercised.
+       * IT IS A SEPARATE GUARD FROM THE ILR CHECK, not a duplicate of it. The
+       * ILR only reaches `fulfilled` when the webhook applies (slice 6), so
+       * between confirmation and webhook the ILR still says `awaiting_payment`
+       * and the ILR guard alone would let the sweep through. This one reads the
+       * payment.
        *
-       * Nothing is at risk meanwhile, because no operational payment rows exist
-       * until slice 5 creates them. See `docs/design/payments-and-first-paid-booking.md` §8.
+       * Written as a correlated EXISTS rather than a join, so a request with two
+       * historical payment rows cannot produce duplicate result rows — and so
+       * the terminal statuses (`failed`, `cancelled`, `expired`) are simply
+       * outside the set, which is what keeps a genuinely abandoned payment
+       * expiring normally.
        *
        * Leaving an expired hold `active` would be worse than closing it: §12
        * forbids retaining a hold beyond its expiry, the tutor's own screen
@@ -1173,6 +1190,23 @@ export async function expireOverdueRequests(options: {
             ),
             // Never a confirmed booking. `fulfilled` means somebody paid.
             eq(intendedLessonRequests.statusCode, 'awaiting_payment'),
+            // Never a payment in flight. See the note above.
+            not(
+              exists(
+                tx
+                  // A column rather than a literal: the enclosing function
+                  // destructures its own `sql` from the client, which shadows
+                  // drizzle's template tag.
+                  .select({ one: payments.id })
+                  .from(payments)
+                  .where(
+                    and(
+                      eq(payments.tutorRequestId, tutorRequests.id),
+                      inArray(payments.statusCode, PAYMENT_IN_FLIGHT_STATUSES),
+                    ),
+                  ),
+              ),
+            ),
           ),
         )
         .limit(batchSize);
