@@ -314,6 +314,49 @@ click-to-create, snapping, window fitting and the family-safe refusal.
   identical slot is correctly refused because the previous hold is still live.
 - **A `'use server'` file may only export async functions.** Exporting a constant breaks
   the production build but not typecheck — it surfaces only at `pnpm build`.
+- **THE STRIPE CLI CAN BE POINTED AT A DIFFERENT SANDBOX THAN YOUR API KEY**, and when it
+  is, local webhook testing fails in the most misleading way available: Stripe emits the
+  events, the CLI says `Ready!`, the endpoint is reachable, the signing secret verifies —
+  and nothing is ever delivered, because the listener is watching an account with no
+  activity on it. It cost a full debugging pass, and the wrong conclusion first (that a v2
+  Event Destination was required — it is not; Stripe's documented local flow works).
+
+  **The rule: the CLI must listen against the SAME account as `STRIPE_SECRET_KEY`.**
+  `stripe login` selects an account once and then keeps it, silently, across every later
+  session, so "it worked yesterday" is not evidence.
+
+  **Verify before debugging anything else** — neither command prints a secret:
+
+  ```bash
+  stripe config --list | grep account_id      # the CLI's account
+  ```
+
+  ```bash
+  node -e "const S=require('stripe');new S(process.env.STRIPE_SECRET_KEY).accounts.retrieve().then(a=>console.log(a.id))"
+  ```
+
+  If those two ids differ, that is the bug. **Prefer the explicit form** over whatever
+  `stripe login` last chose, which is also the pattern proven to deliver v2 thin events:
+
+  ```bash
+  stripe listen --latest --api-key "$STRIPE_SECRET_KEY" --forward-thin-to localhost:3000/api/webhooks/stripe/connect --thin-events "*"
+  ```
+
+  `--api-key` pins the account, `--latest` matches the SDK's pinned API version, and
+  `--forward-thin-to` is the right flag because Accounts v2 account events are
+  PLATFORM-scope (`context` is null on every one) rather than connected-account scope —
+  `--forward-thin-connect-to` will not carry them. A plain `stripe listen --forward-to`
+  forwards v1 snapshot events ONLY and will silently ignore every v2 event.
+
+  Changing listener also changes the signing secret, so `STRIPE_CONNECT_WEBHOOK_SECRET`
+  must be updated to match and the app restarted. Compare fingerprints rather than values:
+  `sha256(secret).slice(0,12)` on each side is enough to tell them apart without printing
+  either. **Never put a key or a `whsec_` into docs, scripts, git or logs.**
+
+  **Do NOT create a persistent Event Destination for local development.** None is needed,
+  and one pointing at `localhost` or a placeholder host is worse than none. A deployed
+  destination later must point at Studdy's real public HTTPS endpoint.
+
 - **Drizzle wraps driver errors**, so a Postgres SQLSTATE sits on the `cause` chain, not on
   the error itself. `postgresErrorCode()` in `lesson-requests.ts` walks it.
 - **`sql.array()` is not valid postgres.js API** — pass a plain array. This typechecks and
