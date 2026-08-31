@@ -1409,6 +1409,33 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
     };
   };
 
+  /** The claimed start of the winner's time, and its request row. */
+  const winnerFacts = async (
+    reference: string,
+  ): Promise<{ id: string; startAt: Date; ilrId: string }> => {
+    const { sql, db } = createDatabaseClient();
+    try {
+      const [row] = await db
+        .select({
+          id: tutorRequests.id,
+          ilrId: tutorRequests.intendedLessonRequestId,
+          startAt: tutorRequestTimeOptions.startsAt,
+        })
+        .from(tutorRequests)
+        .innerJoin(
+          tutorRequestTimeOptions,
+          eq(tutorRequests.acceptedTimeOptionId, tutorRequestTimeOptions.id),
+        )
+        .where(eq(tutorRequests.reference, reference));
+      return { id: row!.id, startAt: row!.startAt, ilrId: row!.ilrId };
+    } finally {
+      await sql.end();
+    }
+  };
+
+  const minutesBefore = (at: Date, minutes: number): Date =>
+    new Date(at.getTime() - minutes * 60_000);
+
   describe('family selection', () => {
     it('keeps the winner, closes the rest and releases only their holds', async () => {
       const scenario = await twoAcceptances(`select-${randomUUID().slice(0, 8)}`);
@@ -1617,33 +1644,6 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
    * them, and these tests pin that from both sides.
    */
   describe('the payment window', () => {
-    /** The claimed start of the winner's time, and its request row. */
-    const winnerFacts = async (
-      reference: string,
-    ): Promise<{ id: string; startAt: Date; ilrId: string }> => {
-      const { sql, db } = createDatabaseClient();
-      try {
-        const [row] = await db
-          .select({
-            id: tutorRequests.id,
-            ilrId: tutorRequests.intendedLessonRequestId,
-            startAt: tutorRequestTimeOptions.startsAt,
-          })
-          .from(tutorRequests)
-          .innerJoin(
-            tutorRequestTimeOptions,
-            eq(tutorRequests.acceptedTimeOptionId, tutorRequestTimeOptions.id),
-          )
-          .where(eq(tutorRequests.reference, reference));
-        return { id: row!.id, startAt: row!.startAt, ilrId: row!.ilrId };
-      } finally {
-        await sql.end();
-      }
-    };
-
-    const minutesBefore = (at: Date, minutes: number): Date =>
-      new Date(at.getTime() - minutes * 60_000);
-
     it('snapshots the deadline and both rule inputs onto the winner', async () => {
       const scenario = await twoAcceptances(`pay-snap-${randomUUID().slice(0, 8)}`);
       const facts = await winnerFacts(scenario.winner);
@@ -2017,6 +2017,165 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
           .where(eq(tutorRequests.reference, scenario.winner));
         // One deadline, written once.
         expect(won!.paymentDeadlineAt?.getTime()).toBe(selectedAt.getTime() + 60 * 60_000);
+      } finally {
+        await sql.end();
+      }
+    });
+  });
+
+  /**
+   * What a scheduler running every minute needs from this command.
+   *
+   * Inngest will invoke `expireOverdueRequests` roughly 1,440 times a day, will
+   * retry it when it fails, and can in principle overlap a slow run with its
+   * successor. None of that may double-release a hold, write a second close
+   * event, or turn an already-processed request into an error — and the
+   * guarantee has to live HERE, in the transaction, rather than in a lock the
+   * scheduler holds. A scheduler-side lock would protect only the caller that
+   * remembered to take it.
+   */
+  describe('safe to run on a schedule', () => {
+    it('reports zeros and changes nothing when there is nothing overdue', async () => {
+      const scenario = await twoAcceptances(`sweep-quiet-${randomUUID().slice(0, 8)}`);
+
+      const result = await expireOverdueRequests({ correlationId: `cor_${randomUUID()}` });
+      expect(result.expiredTutorRequests).toBe(0);
+      expect(result.closedIntendedLessonRequests).toBe(0);
+      expect(result.releasedHolds).toBe(0);
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const rows = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        // Untouched: a quiet run is a no-op, not a state change reported as one.
+        expect(rows[0]!.statusCode).toBe('accepted');
+        expect(rows[0]!.closedAt).toBeNull();
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('does nothing the second time, having done it all the first', async () => {
+      const scenario = await twoAcceptances(`sweep-repeat-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = new Date(facts.startAt.getTime() - 600 * 60_000);
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+
+      const past = new Date(selectedAt.getTime() + 61 * 60_000);
+      const first = await expireOverdueRequests({
+        correlationId: `cor_${randomUUID()}`,
+        now: past,
+      });
+      expect(first.releasedHolds).toBeGreaterThan(0);
+
+      // The tick a minute later, and the one after that.
+      const second = await expireOverdueRequests({
+        correlationId: `cor_${randomUUID()}`,
+        now: past,
+      });
+      const third = await expireOverdueRequests({
+        correlationId: `cor_${randomUUID()}`,
+        now: past,
+      });
+
+      expect(second).toEqual({
+        expiredTutorRequests: 0,
+        closedIntendedLessonRequests: 0,
+        releasedHolds: 0,
+      });
+      expect(third).toEqual(second);
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(won!.statusCode).toBe('closed');
+        expect(won!.closeReasonCode).toBe('payment_window_lapsed');
+
+        // ONE hold, released ONCE. A second release would show up as a second
+        // reservation row or a moved `released_at`.
+        const holds = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorRequestId, won!.id));
+        expect(holds).toHaveLength(1);
+        expect(holds[0]!.statusCode).toBe('released');
+
+        // ONE close transition, not one per sweep.
+        const closes = await db
+          .select()
+          .from(statusTransitions)
+          .where(
+            and(
+              eq(statusTransitions.entityType, 'tutor_request'),
+              eq(statusTransitions.entityId, won!.id),
+              eq(statusTransitions.toStatusCode, 'closed'),
+            ),
+          );
+        expect(closes).toHaveLength(1);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /**
+     * Two ticks landing at once, which a retry or a slow run makes possible.
+     * `FOR UPDATE SKIP LOCKED` means the second sweep skips rows the first has
+     * claimed rather than blocking on them or processing them twice.
+     */
+    it('survives two sweeps running at the same instant', async () => {
+      const scenario = await twoAcceptances(`sweep-race-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = new Date(facts.startAt.getTime() - 600 * 60_000);
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+
+      const past = new Date(selectedAt.getTime() + 61 * 60_000);
+      const results = await Promise.all([
+        expireOverdueRequests({ correlationId: `cor_${randomUUID()}`, now: past }),
+        expireOverdueRequests({ correlationId: `cor_${randomUUID()}`, now: past }),
+      ]);
+
+      // Between them the work happens exactly once.
+      const released = results.reduce((total, entry) => total + entry.releasedHolds, 0);
+      expect(released).toBe(1);
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        const closes = await db
+          .select()
+          .from(statusTransitions)
+          .where(
+            and(
+              eq(statusTransitions.entityType, 'tutor_request'),
+              eq(statusTransitions.entityId, won!.id),
+              eq(statusTransitions.toStatusCode, 'closed'),
+            ),
+          );
+        expect(closes).toHaveLength(1);
       } finally {
         await sql.end();
       }

@@ -30,9 +30,35 @@ decision.
 
 ---
 
-## Automated invocation is intentionally not enabled
+## Inngest is the production scheduler
 
-**There is no Vercel Cron schedule in this repository, and this is deliberate.**
+**There is exactly one production scheduling mechanism, and it is Inngest.**
+
+`apps/web/src/inngest/functions/expire-requests.ts` runs `expireOverdueRequests` on the cron
+`* * * * *` — once a minute. Inngest reaches the app at `POST /api/inngest`, signed with
+`INNGEST_SIGNING_KEY` and verified by the SDK's own `serve` handler.
+
+| Property         | Value                                                             |
+| ---------------- | ----------------------------------------------------------------- |
+| Function id      | `expire-overdue-requests` (slug `studdy-expire-overdue-requests`) |
+| Trigger          | `cron: * * * * *`                                                 |
+| Endpoint         | `apps/web/src/app/api/inngest/route.ts`, Node runtime             |
+| Concurrency      | 1 — one run at a time                                             |
+| Business command | `expireOverdueRequests`, unchanged and scheduler-agnostic         |
+
+### Why once a minute
+
+The payment window is sixty minutes and the tutor is told when their hold ends, so the
+sweep's period is the error bar on that promise. At five minutes a family could be told 5:00
+and the slot stay held until 5:05 — a small lie told to a tutor about their own calendar. The
+sweep is a single batched transaction that finds nothing to do on almost every run.
+
+Inngest's documentation states no minimum interval for cron triggers and no plan-tier limit
+on cron frequency. **Note one free-plan behaviour that matters at this cadence:** a function
+that fails twenty times consecutively is paused automatically — twenty minutes of failures,
+here. Alerting on `expiry run failed` matters more than it would at an hourly cadence.
+
+### Why not Vercel Cron
 
 A `vercel.json` on `feat/intended-lesson-request` previously declared:
 
@@ -44,27 +70,50 @@ The Vercel **Hobby** plan permits cron schedules **once per day only**. Any more
 expression fails the deployment, which is what broke the checks on
 [PR #14](https://github.com/darshabloom/Studdy/pull/14).
 
-**The schedule was removed rather than slowed down.** Studdy's request deadlines are
-measured in hours, not days — the provisional response tiers under
-[PD-012](../../docs/decisions/approved-product-decisions.md) are 24h, 12h, 4h and 1h. A
-once-daily sweep would leave a request whose deadline was one hour long sitting unexpired
-for up to a day, holding a tutor's calendar slot against a lesson that can no longer be
-booked and showing the family a request that is in truth already dead. Reducing the
-frequency to satisfy a deployment constraint would have silently changed the product's
-behaviour, so it was not done.
+**The schedule was removed rather than slowed down**, and it has not been reinstated.
+Studdy's request deadlines are measured in hours and its payment windows in minutes; a
+once-daily sweep would leave a one-hour deadline unexpired for most of a day, holding a
+tutor's slot against a lesson nobody can book and showing the family a request that is
+already dead. Reducing the frequency to satisfy a deployment constraint would have silently
+changed the product's behaviour.
 
-Deployments therefore succeed and nothing calls the route automatically. Expiry is correct
-whenever it runs; it simply does not yet run on its own.
+**Do not add a Vercel cron back.** Two schedulers invoking the same sweep would double the
+load for no benefit and make "did it run?" a question with two places to look.
 
-### Consequences while this stands
+### The manual route stays
 
-- Overdue requests expire only when the route is invoked by hand.
-- Holds for overdue requests stay `active` until then. The GiST exclusion constraint keeps
-  them honest — the slot is genuinely still held, not merely displayed as held.
-- Local and preview environments are unaffected in substance: neither had a working
-  scheduled run before, because preview has no database.
+`POST /api/jobs/expire-requests` is retained for operations: forcing a sweep after an
+incident, while the Inngest function is paused, or to reproduce a report. It is **not** a
+second scheduler — nothing invokes it on a timer.
 
-To run it by hand against a deployed environment:
+Both doors call `runExpirySweep` (`apps/web/src/lib/jobs/expire-requests.ts`), which owns the
+correlation id, the batch size and the log shape, so neither can report something different
+about the same sweep. Neither owns an expiry rule.
+
+### Overlapping runs and retries are safe
+
+Inngest retries a failed run and can in principle overlap a slow run with its successor.
+Neither double-releases a hold nor writes a second close event, and the guarantee lives in
+the repository rather than in a scheduler-side lock: `expireOverdueRequests` selects due rows
+`FOR UPDATE SKIP LOCKED` inside one transaction and every UPDATE is status-guarded, so a
+second run finds nothing left to do. Integration tests cover a repeated sweep and two sweeps
+running at the same instant.
+
+### Deployment prerequisites
+
+1. Create the app in the Inngest dashboard and point it at
+   `https://<host>/api/inngest`.
+2. Set `INNGEST_SIGNING_KEY` in Vercel for every deployed environment. Server-only — never
+   `NEXT_PUBLIC_`.
+3. `INNGEST_EVENT_KEY` is only needed to SEND events. Studdy currently runs a cron function
+   and sends none, so it may stay unset until an event-driven function exists.
+4. Both are declared in `turbo.json` for the tasks that need them, because Turborepo's strict
+   env mode strips anything undeclared.
+
+Locally, no keys are needed: `npx inngest-cli@latest dev -u http://localhost:3200/api/inngest`
+runs an unsigned dev server, and the SDK reports `"mode":"dev"` at the endpoint.
+
+### Running a sweep by hand
 
 ```bash
 curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/jobs/expire-requests
@@ -72,28 +121,23 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/jobs/exp
 
 ---
 
-## Required production invocation mechanism
+## What still needs a person
 
-**Inngest** (ADR-0003) is the intended production scheduler, and is the mechanism this
-route is waiting on. A scheduled Inngest function under `infrastructure/inngest/` issues
-the authenticated `POST` on a short interval — **15 minutes or better**, matching the
-schedule that was removed.
+Inngest is now implemented and running the sweep every minute (see above). It calls the
+business command directly in the Next.js app rather than issuing an authenticated `POST` at
+`/api/jobs/expire-requests` — one fewer network hop into the same command, and the manual
+route keeps its own shared-secret check for the humans who use it.
 
-Inngest is the right answer rather than a workaround: it is already the approved home for
-durable background work, it gives retries, run history and observability that a plain cron
-ping does not, and it removes the platform-plan dependency entirely.
+Before any deployed environment expires anything automatically:
 
-**Vercel Cron on a paid plan** is the alternative. The Pro plan allows minute-level
-schedules, so restoring the deleted `vercel.json` verbatim would be sufficient on its own.
+1. **Create the Inngest app** and point it at `https://<host>/api/inngest`.
+2. **Set `INNGEST_SIGNING_KEY`** in Vercel for that environment. Without it the SDK refuses
+   unsigned invocations and expiry silently never happens — the failure mode most worth
+   alerting on.
+3. **Keep `CRON_SECRET` set** so the manual route still works when someone needs it.
+4. **Alert on `expiry run failed`.** At a one-minute cadence, Inngest's free plan pauses a
+   function after twenty consecutive failures — twenty minutes. A scheduler that stops
+   quietly is indistinguishable from one with nothing to do.
 
-Either path is acceptable. Whichever is chosen must satisfy:
-
-1. Invocation at least every 15 minutes.
-2. `CRON_SECRET` present in the target environment. Without it the route fails closed and
-   expiry silently never happens — this is the failure mode most worth alerting on.
-3. Failures surfaced somewhere a person looks. A scheduler that stops quietly is
-   indistinguishable from one with nothing to do.
-
-**ACTION REQUIRED FROM DARSHA — REQUIRED BEFORE STAGING.** Choose Inngest or a paid Vercel
-plan. Expiry does not run automatically in any deployed environment until one is in place.
-Not required now: nothing beyond local development depends on it yet.
+**Vercel Cron is no longer a candidate and must not be added back.** There is one production
+scheduler.

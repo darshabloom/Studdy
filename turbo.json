@@ -8,7 +8,9 @@
         "STUDDY_ENVIRONMENT",
         "NEXT_PUBLIC_STUDDY_ENVIRONMENT",
         "NEXT_PUBLIC_SUPABASE_URL",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "INNGEST_SIGNING_KEY",
+        "INNGEST_EVENT_KEY"
       ]
     },
     "dev": {
@@ -36,7 +38,9 @@
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
         "CRON_SECRET",
         "DATABASE_URL",
-        "MAILPIT_URL"
+        "MAILPIT_URL",
+        "INNGEST_SIGNING_KEY",
+        "INNGEST_EVENT_KEY"
       ]
     }
   }
