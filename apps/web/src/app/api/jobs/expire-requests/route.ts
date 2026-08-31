@@ -1,7 +1,7 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { expireOverdueRequests } from '@studdy/database';
 import { createLogger } from '@studdy/observability';
+import { runExpirySweep } from '@/lib/jobs/expire-requests';
 
 /**
  * Scheduled expiry of overdue tutor requests.
@@ -11,12 +11,18 @@ import { createLogger } from '@studdy/observability';
  * are released, what is written and in what transaction — lives in
  * `expireOverdueRequests`, which knows nothing about HTTP or any scheduler.
  *
- * Nothing invokes this route automatically yet. The Vercel Cron schedule was
- * removed because the Hobby plan allows once-daily execution only, which is too
- * coarse for hour-based request deadlines — the frequency was not reduced to
- * fit. Inngest is the required production mechanism; any scheduler able to make
- * an authenticated POST is sufficient, and none of them touch the domain.
- * See documentation/operations/scheduled-jobs.md.
+ * THE MANUAL AND OPERATIONS DOOR. Inngest now runs this sweep automatically
+ * every minute (`src/inngest/functions/expire-requests.ts`); this route stays
+ * so a human can force a sweep — after an incident, while the scheduler is
+ * paused, or to reproduce a report — without waiting for the next tick.
+ *
+ * IT IS NOT A SECOND SCHEDULER. Nothing invokes it on a timer: the Vercel Cron
+ * schedule was removed because the Hobby plan allows once-daily execution only,
+ * far too coarse for hour-based deadlines and minute-based payment windows, and
+ * it has not been reinstated. There is one production scheduler.
+ *
+ * Both doors call the same `runExpirySweep`, so neither can report something
+ * different about the same sweep. See documentation/operations/scheduled-jobs.md.
  *
  * Authentication: a server-only shared secret in the `Authorization` header,
  * never a query string (query strings land in access logs, browser history and
@@ -50,31 +56,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
   }
 
-  const correlationId = `cor_${randomUUID()}`;
-  const startedAt = Date.now();
-
   try {
-    const result = await expireOverdueRequests({ correlationId, batchSize: 200 });
-
-    // Counts and timing only — never a reference, tutor, student, family or
-    // any request detail. This log is read by operations, not by a tutor, but
-    // the discipline stops request data reaching log aggregation at all.
-    logger.info('expiry run complete', {
-      correlationId,
-      expiredTutorRequests: result.expiredTutorRequests,
-      closedIntendedLessonRequests: result.closedIntendedLessonRequests,
-      releasedHolds: result.releasedHolds,
-      durationMs: Date.now() - startedAt,
-    });
-
-    return NextResponse.json({ ok: true, ...result });
-  } catch (error) {
-    logger.error('expiry run failed', {
-      correlationId,
-      durationMs: Date.now() - startedAt,
-      // Message only: no request payload, no identifiers.
-      message: error instanceof Error ? error.message : 'unknown error',
-    });
+    // Correlation id, batch size and the log shape all live in the runner, so
+    // this door and the scheduler describe the same sweep the same way.
+    const { correlationId, durationMs, ...counts } = await runExpirySweep();
+    return NextResponse.json({ ok: true, correlationId, durationMs, ...counts });
+  } catch {
+    // The runner has already logged the failure with its correlation id; the
+    // response says only that it failed.
     return NextResponse.json({ error: 'expiry_failed' }, { status: 500 });
   }
 }
