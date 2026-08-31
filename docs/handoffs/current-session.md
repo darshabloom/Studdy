@@ -39,22 +39,25 @@ current; they are not duplicates.
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
 > **SLICE 3 IS IN FLIGHT.** Payment slices 1 and 2 are merged; slice 3 is implemented on
-> this branch, is NOT pushed, has NO pull request, and has **two review items to settle
-> before closeout** — see the slice 3 section in §8. Read the CURRENT HEAD and ahead count
-> out of git; `9cadce3` is the slice 3 implementation commit and stays true.
+> this branch, is NOT pushed and has NO pull request. **Both review items are now SETTLED**
+> — the zero-price boundary (a `lesson_amount_minor > 0` CHECK was added) and the expiry
+> guard's ownership (assigned to slice 5, not implemented here). See the slice 3 section in
+> §8. What remains before closeout is the OWNER'S APPROVAL, then full sequential
+> verification. Read the CURRENT HEAD and ahead count out of git; `9cadce3` is the slice 3
+> implementation commit and stays true.
 
 > ### Checkpoint state, verified against git
 >
-> | Fact            | Value                                               |
-> | --------------- | --------------------------------------------------- |
-> | Branch          | `main`, level with `origin/main`                    |
-> | UX steps 1–4    | merged (PRs #17, #18, #19)                          |
-> | UX step 5       | merged as `a738913` (PR #20, squash, 2026-08-26)    |
-> | UX step 6       | **DEFERRED** — replaced by the launch-critical path |
-> | Payment slice 1 | merged as `8fa6051` (PR #21, squash, 2026-08-30)    |
-> | Payment slice 2 | merged as `3eaddf3` (PR #22, squash, 2026-08-31)    |
-> | Payment slice 3 | **IMPLEMENTED, NOT MERGED** — two review items open |
-> | Payment slice 4 | not started                                         |
+> | Fact            | Value                                                   |
+> | --------------- | ------------------------------------------------------- |
+> | Branch          | `main`, level with `origin/main`                        |
+> | UX steps 1–4    | merged (PRs #17, #18, #19)                              |
+> | UX step 5       | merged as `a738913` (PR #20, squash, 2026-08-26)        |
+> | UX step 6       | **DEFERRED** — replaced by the launch-critical path     |
+> | Payment slice 1 | merged as `8fa6051` (PR #21, squash, 2026-08-30)        |
+> | Payment slice 2 | merged as `3eaddf3` (PR #22, squash, 2026-08-31)        |
+> | Payment slice 3 | **IMPLEMENTED, NOT MERGED** — both review items settled |
+> | Payment slice 4 | not started                                             |
 >
 > Step 5 merged with all four CI jobs and both Vercel checks green, after a full
 > sequential local verification from a fresh database. It was approved screen by
@@ -351,10 +354,11 @@ confirmed booking`
 >
 > **Slices 1 and 2 are merged** (`8fa6051` PR #21, `3eaddf3` PR #22). **Slice 3 is
 > IMPLEMENTED on `feat/payments-schema-and-pricing` and not merged.** The immediate next
-> task is not new implementation: it is the **two open review items** recorded in the slice
-> 3 section below — the zero-price boundary, and the ownership of the missing expiry guard.
-> Settle those two and nothing else, then stop for the owner's approval before any
-> verification, pull request or merge.
+> task is no longer the two review items: **both are settled** (see the slice 3 section
+> below — the zero-price boundary resolved with a `lesson_amount_minor > 0` CHECK, and the
+> expiry guard's ownership assigned to slice 5 without implementing it). The next step is
+> the **owner's approval**, then full sequential verification, then the pull request. Do not
+> start slice 4 before slice 3 closes.
 >
 > Do not reopen any step 5 behaviour: it was reviewed screen by screen and approved, and the
 > decisions that look arbitrary are recorded with their reasons in the step 5 section above.
@@ -368,7 +372,7 @@ Full detail, including every schema column and the reasoning behind each choice,
 | --- | ------------------------------------- | ------------------------------------------------------------- |
 | 1   | ~~`feat/payment-window`~~             | **MERGED `8fa6051` (PR #21)** — window, refusal, sweep guards |
 | 2   | ~~`feat/inngest-scheduler`~~          | **MERGED `3eaddf3` (PR #22)** — Inngest, every minute         |
-| 3   | `feat/payments-schema-and-pricing`    | **IMPLEMENTED `9cadce3`, NOT MERGED** — 2 review items open   |
+| 3   | `feat/payments-schema-and-pricing`    | **IMPLEMENTED, NOT MERGED** — both review items settled       |
 | 4   | `feat/stripe-connect-onboarding`      | Express accounts, `account.updated`                           |
 | 5   | `feat/stripe-payment-intent`          | Payment Element, server-authoritative pricing                 |
 | 6   | `feat/stripe-webhooks-and-fulfilment` | **First real paid booking possible here**                     |
@@ -468,48 +472,105 @@ passes with **31 tables** (was 28). Family- and tutor-facing figures will be ser
 explicit projections; the tutor's projection may show lesson price, Studdy fee and
 entitlement, and must never show Studdy's provider cost.
 
-##### Verified at `9cadce3`
+##### Verified after settling the two review items
 
-| Gate                                           | Result                        |
-| ---------------------------------------------- | ----------------------------- |
-| domain `src/payments` (pricing + window)       | **35 passing**                |
-| `payments.integration.test.ts`                 | **17 passing**                |
-| full integration suite                         | **144 passing, 1 skipped**    |
-| typecheck / lint / format / `check:boundaries` | green                         |
-| `check:rls`                                    | green — 31 tables             |
-| fresh `db:reset` → `db:migrate` → `db:seed`    | green, no provider configured |
+Re-run on the branch after the `lesson_amount_minor > 0` constraint landed. Targeted to what
+the change touches, plus the whole-repo gates.
+
+| Gate                                           | Result                                          |
+| ---------------------------------------------- | ----------------------------------------------- |
+| domain `src/payments` (pricing + window)       | **35 passing** — unchanged, the function is not |
+| `payments.integration.test.ts`                 | **18 passing** (was 17: +1 zero-value refusal)  |
+| `pnpm test:integration` (10 files)             | **145 passing, 1 skipped** (was 144)            |
+| `pnpm test` in `@studdy/database` (11 files)   | **151 passing, 1 skipped**                      |
+| typecheck / lint / format / `check:boundaries` | green                                           |
+| `check:rls`                                    | green — 31 tables                               |
+| fresh `db:reset` → `db:migrate` → `db:seed`    | green, no provider configured                   |
+| `pnpm db:generate`                             | "No schema changes, nothing to migrate"         |
+
+The `db:generate` line is the one that matters for the amended migration: it proves the
+hand-edited `0007` SQL, the drizzle snapshot and the schema TypeScript are in agreement, so
+`0007` is exactly what drizzle would have generated.
+
+**Two different suites, and they are easy to confuse — the `144` recorded at `9cadce3` was
+correct.** `pnpm test:integration` runs the 10 files under `src/integration` (144 at
+`9cadce3`, 145 here with the one added test). The database package's own `pnpm test` runs
+those **plus** `src/seed/synthetic-users.test.ts`, which is a unit test — 11 files, 151. Quote
+which command produced a number, because the two differ by six tests and comparing across
+them invents a regression or a windfall that is not there.
 
 **Targeted only.** The full sequential verification has NOT been run, and neither has the
 full unit suite, the build or the end-to-end suite since this branch began.
 
-> ### THE TWO REVIEW ITEMS. DO THESE FIRST, AND NOTHING ELSE.
+> ### THE TWO REVIEW ITEMS — **BOTH SETTLED. NEITHER IS OPEN.**
 >
-> **1. The zero-price / payment boundary.**
+> Settled on the branch, on top of `9cadce3`. Slice 3 is ready for the owner's approval and
+> full verification. Nothing else was touched.
 >
-> The pure pricing function intentionally supports arithmetic at zero — `0` in gives
-> `0 / 0 / 0` out, and the invariant sweep starts there — because a total function is easier
-> to reason about than one with a hole in it.
+> **1. The zero-price / payment boundary — RESOLVED: CONSTRAINT ADDED.**
 >
-> What is NOT settled is whether the LEDGER should refuse it. Decide whether
-> `payments.payments` needs a `lesson_amount_minor > 0` CHECK, or whether the existing
-> service-version constraints plus server-side pricing already make a zero-price payment
-> structurally unreachable. Inspect before changing: the answer may be that no constraint is
-> needed, and adding one that duplicates an existing guarantee is its own cost.
+> The pure pricing function still intentionally supports arithmetic at zero, and was **not
+> changed**. A total function is easier to reason about than one with a hole in it.
 >
-> **DO NOT INVENT FREE-LESSON SUPPORT.** This is a question about whether an impossible row
-> can be written, not about whether Studdy offers free lessons.
+> What was open was whether the LEDGER should refuse a zero-value payment. It should, and
+> the reason is that the assumed upstream guarantee **does not exist**. Verified against
+> both the migrations and the live database:
 >
-> **2. The missing expiry guard, and who owns it.**
+> - **`services.service_versions.price_amount_minor` has NO CHECK constraint whatsoever** —
+>   not `> 0`, not even `>= 0`. `services.service_versions` has zero check constraints of
+>   any kind. There was no service-price invariant to duplicate.
+> - Slice 5 prices server-side from `service_version_id`, copying `price_amount_minor`
+>   straight into `lesson_amount_minor`. A zero-priced version therefore reaches the ledger
+>   through the real, intended payment path.
+> - Every other CHECK on `payments.payments` passes on a consistent zero row: `0 = 0 + 0`
+>   satisfies the fee split, `0 = 0 + 0` satisfies the total, and all six amounts are `>= 0`.
 >
-> `expireOverdueRequests` still lacks the payment-status guard slice 1 deliberately left
-> unwritten rather than faked: **a payment that is `processing` or `succeeded` must not have
-> its request lapsed out from under a webhook in flight.** The `payments` table now exists,
-> so the guard is finally writable.
+> So a zero-value payment row was **reachable, not unreachable**, and nothing would have
+> refused it. Added:
 >
-> **IT IS ASSIGNED TO LAUNCH SLICE 5, `feat/stripe-payment-intent`** — before payment rows
-> become operational, and not before. **Slice 4 (Connect onboarding) must not own it**:
-> onboarding creates no payment rows, so the guard would sit there untested and unexercised.
-> Record the assignment; do not implement it in slice 3.
+> ```sql
+> CONSTRAINT "payment_lesson_amount_positive_check" CHECK (lesson_amount_minor > 0)
+> ```
+>
+> `lesson_amount_minor >= 0` was removed from `payment_amounts_non_negative_check` at the
+> same time — `> 0` subsumes it, and two constraints answering for one column is the
+> duplication the review was trying to avoid. Net: one constraint added, none duplicated.
+>
+> **Amended migration `0007` in place** rather than adding an `0008`. `0007` is unmerged,
+> unpushed and exists only on this branch and one local database, so `main` should show the
+> payments table created correctly once, not created and then patched a commit later.
+> `pnpm db:generate` reports **"No schema changes, nothing to migrate"**, which is the proof
+> that the hand-edited SQL, the drizzle snapshot and the schema TypeScript all agree.
+>
+> Proven necessary rather than assumed: with the constraint dropped inside a rolled-back
+> transaction, the consistent zero row **inserts successfully**; with it in place the insert
+> is refused by name. The test is not vacuous.
+>
+> **This is NOT free-lesson support.** It is the ledger refusing a money record that says no
+> money was owed.
+>
+> **2. The missing expiry guard — RESOLVED: OWNERSHIP RECORDED, NOT IMPLEMENTED.**
+>
+> `expireOverdueRequests` **still lacks** the payment-status guard, deliberately and
+> correctly. Confirmed still true at this HEAD: the `selected` branch guards on
+> `ilr.status_code = 'awaiting_payment'` and on the deadline, and has **no** `payments`
+> predicate. The requirement is unchanged: **a payment that is `processing` or `succeeded`
+> must not have its request lapsed out from under a webhook in flight.**
+>
+> **IT IS ASSIGNED TO LAUNCH SLICE 5, `feat/stripe-payment-intent`.** It must land **before
+> any operational PaymentIntent or payment row can be processed** — slice 5 is that
+> boundary, being the first branch that creates real payment rows, so the guard ships with
+> the rows it protects.
+>
+> **Slice 4 (`feat/stripe-connect-onboarding`) must NOT own it.** Onboarding creates no
+> payment rows at all, so the guard would sit there unexercised and untestable — a guard
+> whose predicate no test can make true is indistinguishable from one that does not work.
+>
+> Recorded in `docs/design/payments-and-first-paid-booking.md` §8 (ownership callout, plus
+> corrected PR-sequence rows 3 and 5) and here. The stale comment in
+> `expireOverdueRequests` that claimed the `payments` table "does not exist in this slice"
+> was corrected — on this branch it does exist; what is deferred is the guard, to slice 5.
+> **The guard was not implemented in slice 3.**
 
 #### Payment slice 2 — **COMPLETE AND MERGED**
 

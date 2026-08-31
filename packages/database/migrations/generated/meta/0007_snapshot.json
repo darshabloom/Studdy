@@ -2184,9 +2184,13 @@
           "name": "payment_platform_absorbs_check",
           "value": "\"payments\".\"payments\".\"processing_fee_payer_code\" <> 'platform' or \"payments\".\"payments\".\"processing_fee_charged_minor\" = 0"
         },
+        "payment_lesson_amount_positive_check": {
+          "name": "payment_lesson_amount_positive_check",
+          "value": "\"payments\".\"payments\".\"lesson_amount_minor\" > 0"
+        },
         "payment_amounts_non_negative_check": {
           "name": "payment_amounts_non_negative_check",
-          "value": "\"payments\".\"payments\".\"lesson_amount_minor\" >= 0\n      and \"payments\".\"payments\".\"platform_fee_amount_minor\" >= 0\n      and \"payments\".\"payments\".\"tutor_entitlement_minor\" >= 0\n      and \"payments\".\"payments\".\"processing_fee_charged_minor\" >= 0\n      and \"payments\".\"payments\".\"total_charged_minor\" >= 0\n      and (\"payments\".\"payments\".\"provider_cost_minor\" is null or \"payments\".\"payments\".\"provider_cost_minor\" >= 0)"
+          "value": "\"payments\".\"payments\".\"platform_fee_amount_minor\" >= 0\n      and \"payments\".\"payments\".\"tutor_entitlement_minor\" >= 0\n      and \"payments\".\"payments\".\"processing_fee_charged_minor\" >= 0\n      and \"payments\".\"payments\".\"total_charged_minor\" >= 0\n      and (\"payments\".\"payments\".\"provider_cost_minor\" is null or \"payments\".\"payments\".\"provider_cost_minor\" >= 0)"
         },
         "payment_fee_rate_range_check": {
           "name": "payment_fee_rate_range_check",

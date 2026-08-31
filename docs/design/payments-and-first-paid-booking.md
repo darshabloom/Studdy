@@ -241,6 +241,28 @@ snapshot. All `bigint`. **The rounding invariant: the fee is computed and rounde
 entitlement is the remainder** (`lesson − fee`), never computed independently — so the two
 always sum exactly and the CHECK constraint cannot fail.
 
+**A payable lesson is worth something: `payment_lesson_amount_positive_check`.** The ledger
+enforces `lesson_amount_minor > 0` itself, decided during slice 3 review after inspecting
+whether a zero-value payment was already unreachable. It was **not**:
+
+- `services.service_versions.price_amount_minor` carries **no CHECK constraint at all** —
+  not `> 0`, not even `>= 0`. There is no upstream service-price invariant to lean on.
+- Slice 5 prices server-side by copying that column into `lesson_amount_minor`, so whatever
+  the version says is what the payment row gets.
+- Every other CHECK on `payments` passes on a zero row: `0 = 0 + 0` satisfies the fee split,
+  `0 = 0 + 0` satisfies the total, and all six amounts are `>= 0`.
+
+So the constraint is **not a duplicate of an existing guarantee** — it is the only thing
+refusing the row. It is stated on the ledger because it is a **historical** invariant: a
+payment row is the durable record that money was owed, and a row saying nothing was owed is
+one that should never have been written. `lesson_amount_minor >= 0` was dropped from
+`payment_amounts_non_negative_check` at the same time, so one column is not answered for by
+two constraints.
+
+This is **not free-lesson support**, and `computePaymentBreakdown` was deliberately left
+total at zero — a pure arithmetic function with a hole in it is harder to reason about than
+a constraint at the boundary where the record is actually written.
+
 **`payment-window.ts`** — decision 1, with the near-lesson rule explicit rather than folded
 into deadline arithmetic.
 
@@ -424,6 +446,30 @@ WHERE tr.status_code = 'selected'
 The ILR guard is what protects a paid booking: once the ILR is `fulfilled`, its winning
 request is out of the sweep's reach without any new Tutor Request state. The coalesce keeps
 rows created before this slice behaving exactly as they do today.
+
+> ### OWNERSHIP: THE `NOT EXISTS` PAYMENT GUARD BELONGS TO SLICE 5
+>
+> **Status: STILL UNWRITTEN.** Slice 1 shipped the ILR guard and the coalesce. Slice 3
+> created `payments.payments`, so the guard above is finally _writable_ — but slice 3 does
+> **not** write it, and the earlier note in the PR sequence claiming slice 3 "completes"
+> it was wrong and has been corrected.
+>
+> **It is assigned to launch slice 5, `feat/stripe-payment-intent`.** The requirement is
+> unchanged and unconditional: `expireOverdueRequests` must skip any `selected` request
+> holding a payment in `processing` or `succeeded`, so a webhook in flight cannot have its
+> request lapsed out from under it.
+>
+> **It must land before any operational PaymentIntent or payment row can be processed.**
+> Slice 5 is exactly that boundary — the first branch that creates real payment rows — so
+> the guard ships in the same branch as the rows it protects, and never a branch later.
+>
+> **Slice 4 (`feat/stripe-connect-onboarding`) must NOT own it.** Connect onboarding
+> creates no payment rows at all, so the guard would sit there unexercised and untestable:
+> a guard whose predicate no test can make true is indistinguishable from one that does not
+> work. Writing it in slice 4 would buy nothing and would retire a real risk on paper only.
+>
+> Until it lands, no operational payment row may exist — which is precisely why slices 3
+> and 4 create none.
 
 ### What happens, moment by moment
 
@@ -648,16 +694,16 @@ Only genuinely open items. Everything in §1 is settled.
 Eight PRs. Sequenced so that **expiry is automated before any real money can be taken** — the
 owner's explicit requirement — and so the first paid booking arrives as early as is safe.
 
-| #     | Branch                                | What                                                                                                                                                                        | Why here                                                                                                                                                                                                                               |
-| ----- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1** | `feat/payment-window`                 | Window and cutoff rules, near-lesson refusal, TR snapshot columns, reservation `expires_at` moved to the deadline, expiry sweep guarded on ILR status and in-flight payment | **No Stripe at all.** Fixes the sweep before it can ever threaten a booking, and is fully testable today. The `payments` table does not exist yet, so the sweep's payment guard lands as a no-op predicate and is completed in slice 3 |
-| **2** | `feat/inngest-scheduler`              | Inngest app at `/api/inngest`, `expire-requests` every minute, deployment wiring                                                                                            | **Expiry becomes operational before any money exists.** No real payment can be accepted while expiry depends on someone calling an endpoint by hand                                                                                    |
-| **3** | `feat/payments-schema-and-pricing`    | `payments` tables, pure pricing and window domain, tax metadata columns, RLS classification, sweep payment guard completed                                                  | Schema and pure logic, no integration. Fable security review on the migration before it is finalised, per the standing rule                                                                                                            |
-| **4** | `feat/stripe-connect-onboarding`      | Express account creation, onboarding link, `account.updated` webhook, `connected_accounts`                                                                                  | A tutor must be payable before anyone can pay. Also proves webhook verification end to end on a low-risk event                                                                                                                         |
-| **5** | `feat/stripe-payment-intent`          | `createPaymentForRequest`, `/requests/[ref]/pay` with the Payment Element, server-authoritative pricing, retry on the same intent                                           | The parent can pay. Nothing is fulfilled yet — deliberately                                                                                                                                                                            |
-| **6** | `feat/stripe-webhooks-and-fulfilment` | Webhook route, `payment_events`, `applyPaymentSucceeded`/`Failed`, late-success re-take, transfer row, `reconcile-payments`                                                 | **The first real paid booking is possible at the end of this PR.** The riskiest code, reviewed alone rather than buried in a large branch                                                                                              |
-| **7** | `feat/resend-outbox-notifications`    | `drainOutbox`, Resend adapter, `communications.notification_deliveries`, the seven launch-critical emails                                                                   | The tutor stops needing to log in to discover anything. Last because alpha testers are known people who can be told by hand                                                                                                            |
-| **8** | `feat/admin-settlement`               | Weekly settlement view, eligibility rules from §5, idempotent transfer creation                                                                                             | Tutors are paid. The record existed from slice 6; this is the tooling around it                                                                                                                                                        |
+| #     | Branch                                | What                                                                                                                                                                                                              | Why here                                                                                                                                                                                                                               |
+| ----- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1** | `feat/payment-window`                 | Window and cutoff rules, near-lesson refusal, TR snapshot columns, reservation `expires_at` moved to the deadline, expiry sweep guarded on ILR status and in-flight payment                                       | **No Stripe at all.** Fixes the sweep before it can ever threaten a booking, and is fully testable today. The `payments` table does not exist yet, so the sweep's payment guard lands as a no-op predicate and is completed in slice 3 |
+| **2** | `feat/inngest-scheduler`              | Inngest app at `/api/inngest`, `expire-requests` every minute, deployment wiring                                                                                                                                  | **Expiry becomes operational before any money exists.** No real payment can be accepted while expiry depends on someone calling an endpoint by hand                                                                                    |
+| **3** | `feat/payments-schema-and-pricing`    | `payments` tables, pure pricing and window domain, tax metadata columns, RLS classification. **The sweep's payment guard is NOT completed here — reassigned to slice 5 (§8)**                                     | Schema and pure logic, no integration. Fable security review on the migration before it is finalised, per the standing rule                                                                                                            |
+| **4** | `feat/stripe-connect-onboarding`      | Express account creation, onboarding link, `account.updated` webhook, `connected_accounts`                                                                                                                        | A tutor must be payable before anyone can pay. Also proves webhook verification end to end on a low-risk event                                                                                                                         |
+| **5** | `feat/stripe-payment-intent`          | `createPaymentForRequest`, `/requests/[ref]/pay` with the Payment Element, server-authoritative pricing, retry on the same intent, **and the sweep's in-flight payment guard (§8) — it must land in this branch** | The parent can pay. Nothing is fulfilled yet — deliberately. **This is the first branch that writes operational payment rows, so it is the first branch where the guard can be exercised rather than merely written**                  |
+| **6** | `feat/stripe-webhooks-and-fulfilment` | Webhook route, `payment_events`, `applyPaymentSucceeded`/`Failed`, late-success re-take, transfer row, `reconcile-payments`                                                                                       | **The first real paid booking is possible at the end of this PR.** The riskiest code, reviewed alone rather than buried in a large branch                                                                                              |
+| **7** | `feat/resend-outbox-notifications`    | `drainOutbox`, Resend adapter, `communications.notification_deliveries`, the seven launch-critical emails                                                                                                         | The tutor stops needing to log in to discover anything. Last because alpha testers are known people who can be told by hand                                                                                                            |
+| **8** | `feat/admin-settlement`               | Weekly settlement view, eligibility rules from §5, idempotent transfer creation                                                                                                                                   | Tutors are paid. The record existed from slice 6; this is the tooling around it                                                                                                                                                        |
 
 After 8, and gating **public** rather than first-paid launch: admin refund and cancellation,
 availability rate limiting, tutor self-service onboarding.

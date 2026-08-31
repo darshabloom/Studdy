@@ -1112,10 +1112,25 @@ export async function expireOverdueRequests(options: {
        * change and the more honest one, because the ILR is where that fact
        * genuinely lives.
        *
-       * Payment status will add a second guard when the payments schema lands:
-       * a payment that is `processing` must not be swept out from under a
-       * webhook in flight. That table does not exist in this slice, so the
-       * guard is not written yet rather than faked.
+       * A SECOND GUARD IS STILL MISSING, AND IT BELONGS TO LAUNCH SLICE 5,
+       * `feat/stripe-payment-intent`. A payment that is `processing` or
+       * `succeeded` must not be swept out from under a webhook in flight:
+       *
+       *   and not exists (
+       *     select 1 from payments.payments p
+       *     where p.tutor_request_id = tr.id
+       *       and p.status_code in ('processing', 'succeeded'))
+       *
+       * `payments.payments` DOES now exist — slice 3 created it — so this is no
+       * longer blocked on schema. It is deferred on purpose. Slice 5 is the
+       * first branch that writes operational payment rows, so it is the first
+       * branch where this predicate can be made true by a test rather than
+       * merely written. It must land there, before any real PaymentIntent is
+       * processed. Slice 4 (Connect onboarding) must not own it: onboarding
+       * creates no payment rows, so the guard would sit here unexercised.
+       *
+       * Nothing is at risk meanwhile, because no operational payment rows exist
+       * until slice 5 creates them. See `docs/design/payments-and-first-paid-booking.md` §8.
        *
        * Leaving an expired hold `active` would be worse than closing it: §12
        * forbids retaining a hold beyond its expiry, the tutor's own screen

@@ -212,10 +212,33 @@ export const payments = paymentsSchema.table(
       'payment_platform_absorbs_check',
       sql`${table.processingFeePayerCode} <> 'platform' or ${table.processingFeeChargedMinor} = 0`,
     ),
+    /*
+     * A PAYABLE LESSON IS WORTH SOMETHING. The ledger says so itself.
+     *
+     * Not a duplicate of an upstream guarantee — there isn't one.
+     * `services.service_versions.price_amount_minor` carries NO check
+     * constraint at all, so a zero-priced version is writable today, and slice
+     * 5 prices server-side by copying that column straight into
+     * `lesson_amount_minor`. Every other check here would pass on the result:
+     * 0 = 0 + 0 splits, 0 = 0 + 0 totals, and all six amounts are >= 0. A
+     * zero-value payment row is therefore reachable through the real payment
+     * path, and nothing else would refuse it.
+     *
+     * This is a HISTORICAL invariant, which is why it belongs on the ledger
+     * rather than only upstream: a payment row is the durable record that money
+     * was owed. A row saying nothing was owed is not a free lesson Studdy
+     * offers — it is a record that should never have been written.
+     *
+     * Deliberately NOT free-lesson support, and deliberately not a change to
+     * `computePaymentBreakdown`, which stays total at zero because arithmetic
+     * with a hole in it is harder to reason about than the constraint here.
+     */
+    check('payment_lesson_amount_positive_check', sql`${table.lessonAmountMinor} > 0`),
+    // `lesson_amount_minor` is absent below: `> 0` above already subsumes it,
+    // and repeating it would make two constraints answer for one column.
     check(
       'payment_amounts_non_negative_check',
-      sql`${table.lessonAmountMinor} >= 0
-      and ${table.platformFeeAmountMinor} >= 0
+      sql`${table.platformFeeAmountMinor} >= 0
       and ${table.tutorEntitlementMinor} >= 0
       and ${table.processingFeeChargedMinor} >= 0
       and ${table.totalChargedMinor} >= 0

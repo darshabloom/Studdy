@@ -63,8 +63,8 @@ CREATE TABLE "payments"."payments" (
 	CONSTRAINT "payment_fee_split_check" CHECK ("payments"."payments"."lesson_amount_minor" = "payments"."payments"."platform_fee_amount_minor" + "payments"."payments"."tutor_entitlement_minor"),
 	CONSTRAINT "payment_total_check" CHECK ("payments"."payments"."total_charged_minor" = "payments"."payments"."lesson_amount_minor" + "payments"."payments"."processing_fee_charged_minor"),
 	CONSTRAINT "payment_platform_absorbs_check" CHECK ("payments"."payments"."processing_fee_payer_code" <> 'platform' or "payments"."payments"."processing_fee_charged_minor" = 0),
-	CONSTRAINT "payment_amounts_non_negative_check" CHECK ("payments"."payments"."lesson_amount_minor" >= 0
-      and "payments"."payments"."platform_fee_amount_minor" >= 0
+	CONSTRAINT "payment_lesson_amount_positive_check" CHECK ("payments"."payments"."lesson_amount_minor" > 0),
+	CONSTRAINT "payment_amounts_non_negative_check" CHECK ("payments"."payments"."platform_fee_amount_minor" >= 0
       and "payments"."payments"."tutor_entitlement_minor" >= 0
       and "payments"."payments"."processing_fee_charged_minor" >= 0
       and "payments"."payments"."total_charged_minor" >= 0

@@ -327,6 +327,30 @@ describe.skipIf(!available)('the payment ledger (integration)', () => {
       await refuses(rowFor({ providerCostMinor: -1n }));
     });
 
+    /**
+     * A ZERO-VALUE PAYMENT IS NOT A FREE LESSON — it is a money record saying
+     * no money was owed, and the ledger refuses to hold one.
+     *
+     * The row below is INTERNALLY CONSISTENT on purpose: 0 = 0 + 0 satisfies
+     * the fee split, 0 = 0 + 0 satisfies the total, and every amount is >= 0.
+     * Every other CHECK on this table passes. If this test fails, the row went
+     * in, which is exactly what would happen through the real slice 5 path:
+     * `service_versions.price_amount_minor` carries no constraint of its own,
+     * and server-side pricing copies it straight into `lesson_amount_minor`.
+     * So `payment_lesson_amount_positive_check` is the only thing refusing it.
+     */
+    it('refuses a zero-value payment even when the arithmetic is consistent', async () => {
+      await refuses(
+        rowFor({
+          lessonAmountMinor: 0n,
+          platformFeeAmountMinor: 0n,
+          tutorEntitlementMinor: 0n,
+          processingFeeChargedMinor: 0n,
+          totalChargedMinor: 0n,
+        }),
+      );
+    });
+
     it('refuses a fee rate outside 0-10000 basis points', async () => {
       await refuses(rowFor({ platformFeeRateBps: 10_001 }));
     });
