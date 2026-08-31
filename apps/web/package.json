@@ -16,6 +16,7 @@
     "@studdy/database": "workspace:*",
     "@studdy/design-system": "workspace:*",
     "@studdy/domain": "workspace:*",
+    "@studdy/integrations": "workspace:*",
     "@studdy/observability": "workspace:*",
     "@studdy/permissions": "workspace:*",
     "@supabase/ssr": "^0.6.1",

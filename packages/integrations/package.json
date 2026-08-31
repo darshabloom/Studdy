@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./email/local": "./src/email/local/index.ts"
+    "./email/local": "./src/email/local/index.ts",
+    "./payments/stripe": "./src/payments/stripe/connect.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -12,7 +13,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@studdy/domain": "workspace:*"
+    "@studdy/domain": "workspace:*",
+    "stripe": "^22.6.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",

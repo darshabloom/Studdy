@@ -21,6 +21,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       navLinks={[
         { label: 'Lesson requests', href: '/tutor/requests' },
         { label: 'Availability', href: '/tutor/availability' },
+        { label: 'Getting paid', href: '/tutor/payments' },
       ]}
       homeHref="/tutor"
     >

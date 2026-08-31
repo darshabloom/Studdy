@@ -44,6 +44,9 @@ importers:
       '@studdy/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@studdy/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@studdy/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -244,6 +247,9 @@ importers:
       '@studdy/domain':
         specifier: workspace:*
         version: link:../domain
+      stripe:
+        specifier: ^22.6.0
+        version: 22.6.0(@types/node@24.13.3)
     devDependencies:
       '@eslint/js':
         specifier: ^9.30.0
@@ -3470,6 +3476,15 @@ packages:
   strip-literal@3.1.0:
     resolution: {integrity: sha512-8r3mkIM/2+PpjHoOtiAW8Rg3jJLHaV7xPwG+YRGrv6FP0wwk/toTpATxWYOW0BKdWwl82VT2tFYi5DlROa0Mxg==}
 
+  stripe@22.6.0:
+    resolution: {integrity: sha512-Ezk+WYEEwX2DLxFrKfb6coznlCMZvCaCYMNPXNHFSZkBIEzF5Hgm7RLb38q/0h9Ol5jsUJGJRorvhzAvckgfhw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   styled-jsx@5.1.6:
     resolution: {integrity: sha512-qSVyDTeMotdvQYoHWLNGwRFJHC+i+ZvdBRYosOFgC+Wg1vx4frN2/RG/NA7SYqqvKNLf39P2LSRA2pu6n0XYZA==}
     engines: {node: '>= 12.0.0'}
@@ -6645,6 +6660,10 @@ snapshots:
   strip-literal@3.1.0:
     dependencies:
       js-tokens: 9.0.1
+
+  stripe@22.6.0(@types/node@24.13.3):
+    optionalDependencies:
+      '@types/node': 24.13.3
 
   styled-jsx@5.1.6(react@19.2.8):
     dependencies:

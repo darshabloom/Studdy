@@ -60,6 +60,8 @@ export { requestTimeOptions } from './bookings/request-time-options';
 export { tutorRequestTimeOptions } from './bookings/tutor-request-time-options';
 
 // payment ledger and pricing (feat/payments-schema-and-pricing)
+// Connect onboarding (feat/stripe-connect-onboarding)
+export { connectedAccounts } from './payments/connected-accounts';
 export { payments } from './payments/payments';
 export { paymentEvents } from './payments/payment-events';
 export { tutorTransfers } from './payments/tutor-transfers';

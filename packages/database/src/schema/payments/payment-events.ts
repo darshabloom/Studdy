@@ -34,7 +34,21 @@ export const paymentEvents = paymentsSchema.table(
     providerEventId: text('provider_event_id').notNull().unique(),
     /** The provider's event name, e.g. `payment_intent.succeeded`. */
     eventType: text('event_type').notNull(),
-    /** The raw event, kept whole so a decision can be re-examined later. */
+    /**
+     * The event, kept so a decision can be re-examined later.
+     *
+     * "WHOLE" HAS ONE DOCUMENTED EXCEPTION, added by the Connect slice.
+     * Payment events are stored as they arrive. `account.updated` is NOT: a raw
+     * Connect account payload carries the tutor's name, date of birth, address
+     * and document details, none of which Studdy reads. Storing identity data
+     * the product never uses would create a liability in exchange for nothing,
+     * so the webhook writes a redacted projection — capability and payability
+     * flags, plus requirement IDENTIFIERS, never their values.
+     *
+     * Recorded here rather than left to be discovered, because a column whose
+     * contract quietly varies by event type is worse than one whose exception
+     * is written down.
+     */
     payload: jsonb('payload').notNull(),
     /**
      * The payment it concerns, once resolved. Nullable: an event can arrive
