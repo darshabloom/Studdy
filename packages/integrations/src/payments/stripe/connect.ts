@@ -146,7 +146,15 @@ export function snapshotFromAccount(account: Stripe.V2.Core.Account): StripeAcco
 export interface CreateConnectAccountInput {
   /** Correlates the Stripe account back to Studdy without carrying identity. */
   readonly tutorProfileId: string;
-  /** The tutor's sign-in email, so Stripe can reach them about verification. */
+  /**
+   * The tutor's sign-in email.
+   *
+   * REQUIRED, not optional — Stripe refuses a recipient configuration without
+   * a contact email ("If configuration.recipient is supplied, the Account must
+   * have a contact email"). It was optional in the first draft, which would
+   * have turned a tutor with no email into a Stripe validation error nobody
+   * could read. Null is now refused here, close to the cause.
+   */
   readonly email: string | null;
   /**
    * Stable across retries, so a repeated request cannot create a second Stripe
@@ -172,39 +180,48 @@ export async function createConnectAccount(
   stripe: Stripe,
   input: CreateConnectAccountInput,
 ): Promise<StripeAccountSnapshot> {
+  if (input.email === null || input.email.trim() === '') {
+    throw new StripeConfigurationError(
+      'A tutor needs a contact email before Stripe can create their payout account.',
+    );
+  }
   const account = await stripe.v2.core.accounts.create(
     {
       dashboard: STUDDY_CONNECT_DASHBOARD,
-      // Spread rather than `contact_email: undefined`: the repo runs
-      // `exactOptionalPropertyTypes`, so an explicitly-undefined optional is a
-      // type error rather than an omitted field.
-      ...(input.email === null ? {} : { contact_email: input.email }),
+      contact_email: input.email,
       identity: { country: 'NZ' },
       /*
        * REQUIRED BY STRIPE for a recipient holding `stripe_transfers`, and a
-       * LIABILITY DECISION rather than a formality. Stripe refuses account
+       * LIABILITY POSITION rather than a formality. Stripe refuses account
        * creation without both.
        *
-       * `fees_collector: 'application_express'` — Studdy collects Stripe's
-       * fees, which is the arrangement the approved money model already
-       * assumes: Studdy absorbs the processing cost and the parent is charged
-       * exactly the tutor's listed price. The `_express` variant is the one
-       * consistent with `dashboard: 'express'`.
+       * BOTH ARE `application`, which is the clean Accounts v2 shape for a
+       * marketplace doing separate charges and transfers. `application_express`
+       * is also accepted, and was tried first on the assumption that it paired
+       * with `dashboard: 'express'` — it does not. It is a legacy Express-era
+       * fee-payer value the SDK still takes, and `dashboard` already carries
+       * the Express decision. Verified against real Stripe test mode with this
+       * exact NZ / express / recipient configuration: both are accepted, so
+       * this is the deliberate choice rather than the only one that worked.
        *
-       * `losses_collector: 'application'` — Studdy carries a negative balance
-       * a tutor cannot pay back. This is the conservative reading of the
-       * approved architecture: the platform takes the parent's money, holds it,
-       * and keeps disputes and refunds operationally on its own side. Handing
-       * losses to Stripe would be claiming a protection Studdy has not
+       * `fees_collector: 'application'` — Studdy collects Stripe's fees, which
+       * is what the approved money model already assumes: Studdy absorbs the
+       * processing cost and the parent is charged exactly the tutor's listed
+       * price.
+       *
+       * `losses_collector: 'application'` — Studdy carries a negative balance a
+       * tutor cannot pay back. Owner-approved. The platform takes the parent's
+       * money, holds it, and keeps disputes and refunds on its own side;
+       * handing losses to Stripe would claim a protection Studdy has not
        * negotiated.
        *
        * NEITHER IS A LEGAL OR TAX ASSERTION. Merchant-of-record treatment is
-       * still unconfirmed (design §5) and both values are changeable while no
+       * still unconfirmed (design §5) and both remain changeable while no
        * production account exists and no money has moved.
        */
       defaults: {
         responsibilities: {
-          fees_collector: 'application_express',
+          fees_collector: 'application',
           losses_collector: 'application',
         },
       },

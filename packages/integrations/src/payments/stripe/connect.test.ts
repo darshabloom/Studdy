@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type Stripe from 'stripe';
 import {
+  createConnectAccount,
   HANDLED_CONNECT_EVENT_TYPES,
   PAYOUTS_CAPABILITY,
   snapshotFromAccount,
@@ -188,6 +189,26 @@ describe('stripeClient', () => {
   it('refuses to build a client with no secret key', () => {
     expect(() => stripeClient(undefined)).toThrow(StripeConfigurationError);
     expect(() => stripeClient('   ')).toThrow(StripeConfigurationError);
+  });
+});
+
+describe('createConnectAccount', () => {
+  /**
+   * Stripe refuses a recipient configuration with no contact email. Catching it
+   * here turns a provider validation error nobody can read into a sentence that
+   * says what is missing — and does so without a network call.
+   */
+  it('refuses a tutor with no contact email before calling Stripe', async () => {
+    const stripe = stripeClient('sk_test_not_a_real_key');
+    for (const email of [null, '   ']) {
+      await expect(
+        createConnectAccount(stripe, {
+          tutorProfileId: 'tutor-1',
+          email,
+          idempotencyKey: 'connect-account:tutor-1',
+        }),
+      ).rejects.toThrow(StripeConfigurationError);
+    }
   });
 });
 
