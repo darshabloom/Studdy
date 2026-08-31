@@ -46,8 +46,9 @@ current; they are not duplicates.
 > | UX steps 1–4    | merged (PRs #17, #18, #19)                           |
 > | UX step 5       | merged as `a738913` (PR #20, squash, 2026-08-26)     |
 > | UX step 6       | **DEFERRED** — replaced by the launch-critical path  |
-> | Payment slice 1 | **MERGED as `8fa6051` (PR #21, squash, 2026-08-30)** |
-> | Payment slice 2 | **NOT STARTED — this is the next task**              |
+> | Payment slice 1 | merged as `8fa6051` (PR #21, squash, 2026-08-30)     |
+> | Payment slice 2 | **MERGED as `3eaddf3` (PR #22, squash, 2026-08-31)** |
+> | Payment slice 3 | **NOT STARTED — this is the next task**              |
 >
 > Step 5 merged with all four CI jobs and both Vercel checks green, after a full
 > sequential local verification from a fresh database. It was approved screen by
@@ -342,10 +343,11 @@ confirmed booking`
 > `claude/studdy-implementation-plan.md` or with the step 6 section below, that document
 > wins.
 >
-> **Slice 1 is merged (`8fa6051`, PR #21).** The immediate next task is **slice 2,
-> `feat/inngest-scheduler`** — Inngest invoking the existing `expireOverdueRequests`
-> command, so expiry stops depending on someone calling an endpoint by hand. No real
-> money may be accepted before this lands. It touches no Stripe surface either.
+> **Slices 1 and 2 are merged** (`8fa6051` PR #21, `3eaddf3` PR #22). Expiry is now
+> automatic, which was the precondition for accepting real money. The immediate next task
+> is **slice 3, `feat/payments-schema-and-pricing`** — the `payments` tables and the pure
+> pricing domain, with a Fable security review on the migration before it is finalised.
+> Still no Stripe integration: slice 3 is schema and pure logic only.
 >
 > Do not reopen any step 5 behaviour: it was reviewed screen by screen and approved, and the
 > decisions that look arbitrary are recorded with their reasons in the step 5 section above.
@@ -358,7 +360,7 @@ Full detail, including every schema column and the reasoning behind each choice,
 | #   | Branch                                | What                                                          |
 | --- | ------------------------------------- | ------------------------------------------------------------- |
 | 1   | ~~`feat/payment-window`~~             | **MERGED `8fa6051` (PR #21)** — window, refusal, sweep guards |
-| 2   | `feat/inngest-scheduler`              | Expiry automated BEFORE any money can be taken                |
+| 2   | ~~`feat/inngest-scheduler`~~          | **MERGED `3eaddf3` (PR #22)** — Inngest, every minute         |
 | 3   | `feat/payments-schema-and-pricing`    | `payments` tables, pure pricing domain, RLS classification    |
 | 4   | `feat/stripe-connect-onboarding`      | Express accounts, `account.updated`                           |
 | 5   | `feat/stripe-payment-intent`          | Payment Element, server-authoritative pricing                 |
@@ -373,6 +375,57 @@ Two rules from that document are worth repeating here, because both are easy to 
   request staying `selected`. The expiry sweep is guarded on the ILR's status instead.
 - **No real money is accepted while expiry depends on a manual endpoint.** That is why
   Inngest lands at slice 2 rather than later.
+
+#### Payment slice 2 — **COMPLETE AND MERGED**
+
+Merged as `3eaddf3` (PR #22, squash, 2026-08-31). All four CI jobs and both Vercel checks
+green first time, after a full sequential local verification from a fresh database.
+
+**Expiry is now automatic, which was the precondition for accepting real money.** A payment
+window measured in minutes is not a promise you can keep with a scheduler that runs only
+when a person remembers.
+
+- **Inngest is TRANSPORT and owns no rule.** `apps/web/src/inngest/functions/expire-requests.ts`
+  calls `runExpirySweep`, which calls `expireOverdueRequests` — unchanged, still covered by
+  integration tests that never mention a scheduler. Swapping Inngest out later is a transport
+  change, not a domain one. **Do not move booking or expiry logic into a scheduled function.**
+- **Cadence `* * * * *`**, function id `expire-overdue-requests`, slug
+  `studdy-expire-overdue-requests`. The cadence is a product promise: the sweep's period is
+  the error bar on the hold expiry a tutor is shown.
+- **ONE PRODUCTION SCHEDULER.** There is no `vercel.json` and no `"crons"` anywhere. **Do not
+  add a Vercel cron back** — the Hobby plan allows a daily schedule, and two schedulers make
+  "did it run?" a question with two places to look.
+- **`POST /api/jobs/expire-requests` is retained** for operations, and shares the same
+  `runExpirySweep`, so the two doors cannot describe one sweep differently. Nothing invokes
+  it on a timer.
+- **Endpoint config:** `runtime = 'nodejs'`, `dynamic = 'force-dynamic'`, `maxDuration = 300`,
+  exporting GET/POST/PUT. Checkpointing's `maxRuntime` is deliberately unset — the function
+  has no steps and one database call, and the SDK creates that timer only when explicitly
+  configured.
+- **Overlapping runs and retries are safe WITHOUT a scheduler-side lock**, because the sweep
+  is one status-guarded transaction over `FOR UPDATE SKIP LOCKED` rows. A lock in the
+  scheduler would duplicate a guarantee the repository already gives.
+
+> ### PRODUCTION PREREQUISITES — STILL OUTSTANDING, OWNER ACTION
+>
+> Expiry runs automatically in LOCAL development only until these are done. Nothing expires
+> in any deployed environment without them.
+>
+> 1. **Install the Inngest Vercel integration** and point the app at
+>    `https://<host>/api/inngest`. The integration syncs the app on every deploy.
+> 2. **Set `INNGEST_SIGNING_KEY`** per deployed environment. Server-only, never
+>    `NEXT_PUBLIC_`. Without it the SDK refuses invocations and expiry silently never runs.
+> 3. **Configure operational alerting on `expiry run failed`.** A scheduler that stops
+>    quietly is indistinguishable from one with nothing to do.
+>
+> `INNGEST_EVENT_KEY` is OPTIONAL and a deployment must not fail for its absence: the SDK
+> needs it only inside `inngest.send()`, which Studdy never calls. Neither key is declared in
+> `turbo.json`, deliberately — nothing reads them at build or test time, and Vercel supplies
+> them to the deployed function directly.
+>
+> Note on provider behaviour, recorded as OPERATIONAL DOCUMENTATION rather than a Studdy
+> invariant: Inngest's free plan pauses a function after consecutive failures, which at a
+> one-minute cadence is a short window. It is a reason to alert, not a rule Studdy enforces.
 
 #### Payment slice 1 — **COMPLETE AND MERGED**
 
@@ -1222,17 +1275,22 @@ THE NEXT TASK IS NOT STEP 6. Studdy is working against a launch-critical roadmap
 the first real paid lesson. Read docs/design/payments-and-first-paid-booking.md — it is the
 authority.
 
-Payment slice 1 is MERGED (8fa6051, PR #21): the 60-minute window, the 30-minute
-near-lesson cutoff, the five snapshot columns and the expiry-sweep guard. THE NEXT TASK IS
-SLICE 2, feat/inngest-scheduler, on a NEW branch off main — Inngest invoking the existing
-expireOverdueRequests command rather than restating any expiry rule. No real money may be
-accepted while expiry still depends on someone calling an endpoint by hand, which is why
-this lands before any Stripe work.
+Payment slices 1 and 2 are MERGED (8fa6051 PR #21, 3eaddf3 PR #22): the 60-minute window
+with its snapshot columns and sweep guard, and Inngest running that sweep every minute.
+THE NEXT TASK IS SLICE 3, feat/payments-schema-and-pricing, on a NEW branch off main — the
+payments tables and the pure pricing domain, with a Fable security review on the migration
+before it is finalised. Slice 3 is schema and pure logic only; Stripe integration is slice 4
+and later.
 
-Two things are already decided and easy to get wrong: the Tutor Request state machine does
+Three things are already decided and easy to get wrong: the Tutor Request state machine does
 NOT gain a `confirmed` state (a paid booking is ILR fulfilled + reservation
-booking_confirmed + payment succeeded, and the sweep is guarded on the ILR's status), and
-Inngest holds no rules — it authenticates and calls a domain command that already exists.
+booking_confirmed + payment succeeded, and the sweep is guarded on the ILR's status);
+Inngest holds no rules and no scheduled function may contain booking or expiry logic; and
+there is exactly ONE production scheduler, so do not add a Vercel cron.
+
+Slice 3 also completes the sweep's second guard, which slice 1 deliberately left unwritten
+rather than faked: a payment that is `processing` or `succeeded` must not be swept out from
+under a webhook in flight.
 
 Then, in your own words rather than copying the handoff back to me, summarise:
 - why the shortlist is a saving-and-comparison surface rather than a way to book, and how
