@@ -12,6 +12,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^6.8.2",
+    "@stripe/stripe-js": "^9.14.0",
     "@studdy/configuration": "workspace:*",
     "@studdy/database": "workspace:*",
     "@studdy/design-system": "workspace:*",

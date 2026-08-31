@@ -103,7 +103,9 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
   }> => {
     const { sql } = createDatabaseClient();
     try {
-      const price = options.priceMinor ?? 4000n;
+      // postgres.js takes no bigint parameter; the column is bigint and casts
+      // a numeric string cleanly.
+      const price = (options.priceMinor ?? 4000n).toString();
       const deadlineMinutes = options.deadlineMinutesFromNow ?? 45;
       const suffix = randomUUID().slice(0, 8);
 
@@ -125,15 +127,16 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
       const [payer] = await sql`select id from identity.users limit 1`;
 
       await sql`
-        update services.service_versions set price_amount_minor = ${price}
-        where id = ${version!['service_version_id']}`;
+        update services.service_versions set price_amount_minor = ${price}::bigint
+        where id = ${version!['service_version_id'] as string}`;
 
       const [ilr] = await sql`
         insert into bookings.intended_lesson_requests
           (student_subject_section_id, requested_by_user_id, family_account_id,
            duration_minutes, format_code, time_zone, status_code, reference,
            decision_deadline_at, deadline_rule_version)
-        values (${section!['section_id']}, ${payer!['id']}, ${section!['family_account_id']},
+        values (${section!['section_id'] as string}, ${payer!['id'] as string},
+                ${section!['family_account_id'] as string | null},
                 60, 'online', 'Pacific/Auckland', 'awaiting_payment', ${'LR-PAY-' + suffix},
                 now() + interval '4 hours', 1)
         returning id, reference`;
@@ -142,7 +145,8 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
         insert into bookings.tutor_requests
           (intended_lesson_request_id, tutor_profile_id, service_version_id, status_code,
            position, respond_by_at, reference, payment_deadline_at, deadline_rule_version)
-        values (${ilr!['id']}, ${version!['tutor_profile_id']}, ${version!['service_version_id']},
+        values (${ilr!['id'] as string}, ${version!['tutor_profile_id'] as string},
+                ${version!['service_version_id'] as string},
                 'selected', 1, now() + interval '2 hours', ${'TREQ-PAY-' + suffix},
                 now() + (${deadlineMinutes} * interval '1 minute'), 1)
         returning id`;
