@@ -38,13 +38,14 @@ decision.
 `* * * * *` — once a minute. Inngest reaches the app at `POST /api/inngest`, signed with
 `INNGEST_SIGNING_KEY` and verified by the SDK's own `serve` handler.
 
-| Property         | Value                                                             |
-| ---------------- | ----------------------------------------------------------------- |
-| Function id      | `expire-overdue-requests` (slug `studdy-expire-overdue-requests`) |
-| Trigger          | `cron: * * * * *`                                                 |
-| Endpoint         | `apps/web/src/app/api/inngest/route.ts`, Node runtime             |
-| Concurrency      | 1 — one run at a time                                             |
-| Business command | `expireOverdueRequests`, unchanged and scheduler-agnostic         |
+| Property         | Value                                                                 |
+| ---------------- | --------------------------------------------------------------------- |
+| Function id      | `expire-overdue-requests` (slug `studdy-expire-overdue-requests`)     |
+| Trigger          | `cron: * * * * *`                                                     |
+| Endpoint         | `apps/web/src/app/api/inngest/route.ts`, Node runtime                 |
+| `maxDuration`    | 300s — Inngest's documented Vercel value, and Hobby's default and max |
+| Concurrency      | 1 — one run at a time                                                 |
+| Business command | `expireOverdueRequests`, unchanged and scheduler-agnostic             |
 
 ### Why once a minute
 
@@ -105,10 +106,16 @@ running at the same instant.
    `https://<host>/api/inngest`.
 2. Set `INNGEST_SIGNING_KEY` in Vercel for every deployed environment. Server-only — never
    `NEXT_PUBLIC_`.
-3. `INNGEST_EVENT_KEY` is only needed to SEND events. Studdy currently runs a cron function
-   and sends none, so it may stay unset until an event-driven function exists.
-4. Both are declared in `turbo.json` for the tasks that need them, because Turborepo's strict
-   env mode strips anything undeclared.
+3. `INNGEST_EVENT_KEY` is **optional**. The SDK requires it only inside `inngest.send()`,
+   which throws in cloud mode when it is missing; Studdy runs a cron function and sends no
+   events, so nothing reads it and a deployment must not fail for its absence. The official
+   Vercel integration sets it anyway, which is harmless.
+4. **Neither is declared in `turbo.json`, deliberately.** Turborepo's strict env mode governs
+   what a BUILD or TEST task sees, and nothing reads these at build time — the route is
+   `force-dynamic` and the SDK reads the environment per request. Vercel supplies them to the
+   deployed function directly, not through Turborepo. Declaring them would only add churn to
+   the build cache key. If something ever does read one at build time it must be declared
+   then, or strict mode will strip it silently.
 
 Locally, no keys are needed: `npx inngest-cli@latest dev -u http://localhost:3200/api/inngest`
 runs an unsigned dev server, and the SDK reports `"mode":"dev"` at the endpoint.

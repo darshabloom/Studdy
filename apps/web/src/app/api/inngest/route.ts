@@ -23,6 +23,29 @@ import { expireRequestsScheduled } from '@/inngest/functions/expire-requests';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+/**
+ * The ceiling Vercel gives one invocation of this endpoint.
+ *
+ * Inngest's Vercel guidance is to set this explicitly rather than inherit an
+ * implicit platform timeout, so a step cannot be killed mid-flight by a default
+ * nobody chose. 300 seconds is their documented example and also the Hobby
+ * plan's default AND maximum with fluid compute, so it is the largest honest
+ * value here and carries no risk of failing a deployment the way an
+ * over-plan-limit setting would.
+ *
+ * The expiry sweep itself finishes in tens of milliseconds — 59ms, 89ms and
+ * 354ms across three observed runs. This is headroom, not an expectation.
+ *
+ * CHECKPOINTING'S `maxRuntime` IS DELIBERATELY NOT SET. Inngest recommends
+ * pinning it 20-40% below `maxDuration` when checkpointing is in play, which
+ * exists so a long multi-step function persists progress before the platform
+ * kills the request. This function has no steps and one database call; the
+ * installed SDK creates that timer only when `maxRuntime` is explicitly
+ * configured, so there is no default sitting above this ceiling to correct.
+ * Setting it would be inventing a timeout policy for a sub-second function.
+ */
+export const maxDuration = 300;
+
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [expireRequestsScheduled],
