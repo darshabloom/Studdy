@@ -5,7 +5,8 @@ import { Alert, Button, Card } from '@studdy/design-system';
 import { formatLessonDateTime, formatMoney } from '@/components/requests/request-status';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 import { resolveDiscoveryContext } from '@/lib/discovery/context';
-import { refusalMessage, startPaymentForRequest } from '@/lib/payments/payment-actions';
+import { startPaymentForRequest } from '@/lib/payments/payment-actions';
+import { refusalMessage } from '@/lib/payments/refusal';
 import { PaymentForm } from './payment-form';
 
 export const metadata = { title: 'Pay for your lesson' };

@@ -5,7 +5,6 @@ import {
   attachProviderPaymentIntent,
   createPaymentForRequest,
   PaymentRefusedError,
-  type PaymentRefusalReason,
 } from '@studdy/database';
 import {
   createPlatformPaymentIntent,
@@ -15,6 +14,7 @@ import {
 } from '@studdy/integrations/payments/stripe';
 import { createLogger } from '@studdy/observability';
 import { resolveDiscoveryContext } from '../discovery/context';
+import type { PaymentRefusalCode } from './refusal';
 
 /**
  * Preparing a parent's payment: ledger row first, PaymentIntent second.
@@ -47,26 +47,7 @@ export interface PaymentSession {
 
 export interface PaymentRefusal {
   readonly ok: false;
-  readonly reason: PaymentRefusalReason | 'provider_unavailable';
-}
-
-/**
- * Family-safe wording. Never names another family's data, never explains why a
- * request could not be found, and never mentions Stripe internals.
- */
-export function refusalMessage(reason: PaymentRefusal['reason']): string {
-  switch (reason) {
-    case 'request_not_found':
-      return 'We could not find that lesson request.';
-    case 'not_awaiting_payment':
-      return 'This request is not waiting for payment. It may already be booked, or it may have closed.';
-    case 'payment_window_closed':
-      return 'The time to pay for this lesson has passed, so the tutor’s slot has been released.';
-    case 'tutor_not_payable':
-      return 'This tutor cannot accept payments just now. Nothing has been charged — please try another tutor or contact Studdy.';
-    default:
-      return 'We could not start the payment. Nothing has been charged — please try again shortly.';
-  }
+  readonly reason: PaymentRefusalCode;
 }
 
 /**
