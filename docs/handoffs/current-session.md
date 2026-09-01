@@ -38,24 +38,26 @@ current; they are not duplicates.
 **Branch:** `main`, level with `origin/main`.
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
-> **SLICE 5 IS MERGED. NOTHING IS IN FLIGHT.** Payment slices 1–5 are all on `main`. Slice
-> 5 merged as **`55b1ea5` (PR #26, squash, 2026-09-01)**, with all four CI jobs and both
+> **SLICE 6 IS MERGED. NOTHING IS IN FLIGHT.** Payment slices 1–6 are all on `main`. Slice
+> 6 merged as **`7698dd4` (PR #27, squash, 2026-09-02)**, with all four CI jobs and both
 > Vercel checks green, after a full sequential local verification from a fresh database AND
 > a real Stripe test-mode payment walkthrough.
 >
-> **A parent can now pay.** A real PaymentIntent is created on the platform account from
-> server-authoritative pricing, and the expiry sweep can no longer close a booking whose
-> payment is in flight. See the slice 5 section in §8.
+> **A PAID BOOKING IS NOW POSSIBLE.** A verified `payment_intent.succeeded` moves four
+> records in one transaction: payment `succeeded`, ILR `awaiting_payment → fulfilled`, the
+> same reservation carried forward to `booking_confirmed` with no expiry, and one
+> `tutor_transfers` obligation. See the slice 6 section in §8.
 >
-> **NOTHING IS FULFILLED YET, and that is deliberate.** A successful Stripe payment leaves
-> the ILR `awaiting_payment`, creates no `booking_confirmed` reservation and no tutor
-> transfer obligation. Fulfilment is webhook-authoritative and belongs to slice 6.
+> **A SUCCESSFUL PAYMENT IS NOT ALWAYS A BOOKING.** If the sweep already closed the request
+> and released the slot, the payment is recorded `succeeded` and flagged
+> `refund_required_at` with a high-risk alert — and nothing is fulfilled, re-taken or owed.
+> Refund EXECUTION is still not built.
 >
-> **Launch slice 6, `feat/stripe-webhooks-and-fulfilment`, is next and NOT STARTED.** It
-> owns `payment_intent.succeeded`, the `awaiting_payment → fulfilled` transition, the
-> reservation becoming `booking_confirmed` and the `tutor_transfers` row. The first real
-> paid booking becomes possible at the end of it. Read the current HEAD out of git rather
-> than from this file.
+> **Launch slice 7, `feat/resend-outbox-notifications`, is next and NOT STARTED.** The
+> outbox has been accumulating entries since slice 1 — `payment.required`,
+> `booking.confirmed`, `payment.refund_required`, `tutor_request.*` — and nothing drains it,
+> so no email has ever been sent. Read the current HEAD out of git rather than from this
+> file.
 
 > ### Checkpoint state, verified against git
 >
@@ -70,7 +72,8 @@ current; they are not duplicates.
 > | Payment slice 3 | merged as `daaba6c` (PR #24, squash, 2026-08-31)    |
 > | Payment slice 4 | merged as `4153d45` (PR #25, squash, 2026-08-31)    |
 > | Payment slice 5 | merged as `55b1ea5` (PR #26, squash, 2026-09-01)    |
-> | Payment slice 6 | **NEXT — not started**                              |
+> | Payment slice 6 | merged as `7698dd4` (PR #27, squash, 2026-09-02)    |
+> | Payment slice 7 | **NEXT — not started**                              |
 >
 > Step 5 merged with all four CI jobs and both Vercel checks green, after a full
 > sequential local verification from a fresh database. It was approved screen by
@@ -213,15 +216,19 @@ first. CI is unaffected because it seeds a fresh instance.
 
 `apps/web/.env.local`, copied from `.env.example`:
 
-| Name                             | Purpose                                                                                                                                              |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `STUDDY_ENVIRONMENT`             | local / development / staging / production                                                                                                           |
-| `NEXT_PUBLIC_STUDDY_ENVIRONMENT` | Drives the visible environment banner                                                                                                                |
-| `NEXT_PUBLIC_SUPABASE_URL`       | Local Supabase API                                                                                                                                   |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Publishable key                                                                                                                                      |
-| `SUPABASE_SERVICE_ROLE_KEY`      | **Server-only.** Never `NEXT_PUBLIC_*`, never committed, never requested through chat                                                                |
-| `DATABASE_URL`                   | Direct Postgres connection                                                                                                                           |
-| `CRON_SECRET`                    | Shared secret for `/api/jobs/expire-requests`, sent as `Authorization: Bearer`. Must be set in any deployed environment or the endpoint fails closed |
+| Name                                 | Purpose                                                                                                                                              |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STUDDY_ENVIRONMENT`                 | local / development / staging / production                                                                                                           |
+| `NEXT_PUBLIC_STUDDY_ENVIRONMENT`     | Drives the visible environment banner                                                                                                                |
+| `NEXT_PUBLIC_SUPABASE_URL`           | Local Supabase API                                                                                                                                   |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`      | Publishable key                                                                                                                                      |
+| `SUPABASE_SERVICE_ROLE_KEY`          | **Server-only.** Never `NEXT_PUBLIC_*`, never committed, never requested through chat                                                                |
+| `DATABASE_URL`                       | Direct Postgres connection                                                                                                                           |
+| `CRON_SECRET`                        | Shared secret for `/api/jobs/expire-requests`, sent as `Authorization: Bearer`. Must be set in any deployed environment or the endpoint fails closed |
+| `STRIPE_SECRET_KEY`                  | **Server-only.** Test-mode (`sk_test_`) only; live mode needs explicit approval                                                                      |
+| `STRIPE_CONNECT_WEBHOOK_SECRET`      | **Server-only.** Signing secret for `/api/webhooks/stripe/connect` (Accounts v2 THIN events)                                                         |
+| `STRIPE_PAYMENTS_WEBHOOK_SECRET`     | **Server-only.** Signing secret for `/api/webhooks/stripe/payments` (v1 SNAPSHOT events). A DIFFERENT secret — Stripe issues one per endpoint        |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | The ONLY Stripe key permitted client-side. Must be the `pk_test_` from the SAME sandbox as `STRIPE_SECRET_KEY`                                       |
 
 The local values are the Supabase CLI's standard demo keys, printed by
 `pnpm supabase:start`.
@@ -419,45 +426,45 @@ confirmed booking`
 > `claude/studdy-implementation-plan.md` or with the step 6 section below, that document
 > wins.
 >
-> **Slices 1–5 are merged** (`8fa6051` PR #21, `3eaddf3` PR #22, `daaba6c` PR #24,
-> `4153d45` PR #25, `55b1ea5` PR #26). A parent can pay; nothing is fulfilled.
+> **Slices 1–6 are merged** (`8fa6051` PR #21, `3eaddf3` PR #22, `daaba6c` PR #24,
+> `4153d45` PR #25, `55b1ea5` PR #26, `7698dd4` PR #27). **A parent can pay AND the booking
+> is confirmed.**
 >
 > **THE EXPIRY SWEEP'S PAYMENT GUARD IS DONE.** It landed in slice 5 alongside the rows it
-> protects: `expireOverdueRequests` now skips any `selected` request holding a payment in
+> protects: `expireOverdueRequests` skips any `selected` request holding a payment in
 > `processing` or `succeeded`. Do not remove it, and do not assume the ILR guard covers the
-> same case — it does not, because the ILR only becomes `fulfilled` when slice 6's webhook
-> applies.
+> same case — it does not, because between a parent confirming a card and the webhook
+> landing the ILR still reads `awaiting_payment`.
 >
-> **THE IMMEDIATE NEXT TASK IS LAUNCH SLICE 6 — `feat/stripe-webhooks-and-fulfilment`, NOT
-> STARTED.** The webhook route, `payment_events` for payment events,
-> `applyPaymentSucceeded`/`Failed`, the late-success re-take, and the transfer row. **The
-> first real paid booking becomes possible at the end of it**, which is why the design calls
-> it the riskiest code in the sequence and asks for it to be reviewed alone.
+> **THE IMMEDIATE NEXT TASK IS LAUNCH SLICE 7 — `feat/resend-outbox-notifications`, NOT
+> STARTED.** `drainOutbox`, the Resend adapter, `communications.notification_deliveries`,
+> and the seven launch-critical emails. The outbox has been written to since slice 1 and
+> **nothing has ever consumed it**, so a tutor still has to log in to discover that a lesson
+> was booked and paid for.
 >
-> **WHAT SLICE 5 DELIBERATELY LEFT UNDONE, for slice 6 to do:** a successful Stripe payment
-> currently leaves the ILR `awaiting_payment`, the reservation not `booking_confirmed`, and
-> no `tutor_transfers` row — verified against real Stripe. That is not a bug to fix in
-> passing; it is the boundary. Fulfilment must be webhook-authoritative, never driven by the
-> browser returning to a success page.
+> **WHAT SLICE 6 DELIBERATELY LEFT UNDONE:** refund EXECUTION. A late success sets
+> `refund_required_at` and raises a high-risk alert, and a human then does the refund by
+> hand at Stripe. Automated settlement (slice 8) and admin refunds are both still absent —
+> `tutor_transfers` rows accumulate as `pending` and nothing sends them.
 >
 > Do not reopen any step 5 behaviour: it was reviewed screen by screen and approved, and the
 > decisions that look arbitrary are recorded with their reasons in the step 5 section above.
 
-### THE LAUNCH-CRITICAL PAYMENT SLICES — **SLICES 1–5 MERGED, SLICE 6 NEXT**
+### THE LAUNCH-CRITICAL PAYMENT SLICES — **SLICES 1–6 MERGED, SLICE 7 NEXT**
 
 Full detail, including every schema column and the reasoning behind each choice, is in
 `docs/design/payments-and-first-paid-booking.md`. The sequence, in order:
 
-| #   | Branch                                 | What                                                            |
-| --- | -------------------------------------- | --------------------------------------------------------------- |
-| 1   | ~~`feat/payment-window`~~              | **MERGED `8fa6051` (PR #21)** — window, refusal, sweep guards   |
-| 2   | ~~`feat/inngest-scheduler`~~           | **MERGED `3eaddf3` (PR #22)** — Inngest, every minute           |
-| 3   | ~~`feat/payments-schema-and-pricing`~~ | **MERGED `daaba6c` (PR #24)** — ledger, pricing, RLS            |
-| 4   | ~~`feat/stripe-connect-onboarding`~~   | **MERGED `4153d45` (PR #25)** — Accounts v2 Connect onboarding  |
-| 5   | ~~`feat/stripe-payment-intent`~~       | **MERGED `55b1ea5` (PR #26)** — PaymentIntent + the sweep guard |
-| 6   | `feat/stripe-webhooks-and-fulfilment`  | **NEXT** — first real paid booking possible here                |
-| 7   | `feat/resend-outbox-notifications`     | Outbox drain, the seven launch-critical emails                  |
-| 8   | `feat/admin-settlement`                | Weekly manual tutor settlement                                  |
+| #   | Branch                                 | What                                                                               |
+| --- | -------------------------------------- | ---------------------------------------------------------------------------------- |
+| 1   | ~~`feat/payment-window`~~              | **MERGED `8fa6051` (PR #21)** — window, refusal, sweep guards                      |
+| 2   | ~~`feat/inngest-scheduler`~~           | **MERGED `3eaddf3` (PR #22)** — Inngest, every minute                              |
+| 3   | ~~`feat/payments-schema-and-pricing`~~ | **MERGED `daaba6c` (PR #24)** — ledger, pricing, RLS                               |
+| 4   | ~~`feat/stripe-connect-onboarding`~~   | **MERGED `4153d45` (PR #25)** — Accounts v2 Connect onboarding                     |
+| 5   | ~~`feat/stripe-payment-intent`~~       | **MERGED `55b1ea5` (PR #26)** — PaymentIntent + the sweep guard                    |
+| 6   | ~~`feat/stripe-payment-fulfilment`~~   | **MERGED `7698dd4` (PR #27)** — webhook fulfilment. A PAID BOOKING IS NOW POSSIBLE |
+| 7   | `feat/resend-outbox-notifications`     | **NEXT** — outbox drain, the seven launch-critical emails                          |
+| 8   | `feat/admin-settlement`                | Weekly manual tutor settlement                                                     |
 
 Two rules from that document are worth repeating here, because both are easy to get wrong:
 
@@ -466,6 +473,169 @@ Two rules from that document are worth repeating here, because both are easy to 
   request staying `selected`. The expiry sweep is guarded on the ILR's status instead.
 - **No real money is accepted while expiry depends on a manual endpoint.** That is why
   Inngest lands at slice 2 rather than later.
+
+#### Payment slice 6 — **COMPLETE AND MERGED**
+
+Merged as **`7698dd4` (PR #27, squash, 2026-09-02)** from `feat/stripe-payment-fulfilment`,
+branched from `main` at `d4af3ae`. All four CI jobs and both Vercel checks green, after a
+full sequential local verification from a fresh database **and a real Stripe test-mode
+payment walkthrough**. The branch is retained on the remote, per convention.
+
+**THE FIRST REAL PAID BOOKING IS NOW POSSIBLE.**
+
+##### NO MIGRATION. Slice 3 had already built everything
+
+Every column, constraint and index this slice needed already existed — `payment_events`,
+`tutor_transfers`, `refund_required_at`, `provider_charge_id`,
+`provider_balance_transaction_id`, `reservation_type_code = 'booking_confirmed'`.
+`check:rls` is unchanged at 32 tables and `db:generate` reports no drift. That is slice 3
+having been designed properly rather than this slice having been small.
+
+##### The chain, and where it is allowed to stop
+
+```
+payment_intent.succeeded
+  → verify signature (BEFORE any write)   → refuse a livemode mismatch
+  → re-fetch the authoritative PaymentIntent from Stripe
+  → amount + currency must equal the immutable Studdy snapshot
+  → ONE transaction: payment succeeded · ILR awaiting_payment → fulfilled
+                     · the SAME reservation → booking_confirmed, expires_at null
+                     · exactly one tutor_transfers obligation, pending
+```
+
+The Tutor Request stays `selected`. **The seven statuses did not change, and there is still
+no `lessons` subsystem** — `lessons` remains an `export {}` stub with zero tables.
+
+##### > "STRIPE PAYMENT SUCCEEDED" IS NOT "STUDDY BOOKING FULFILLED"
+
+> This is the sentence the slice turns on. A successful payment is authoritative about
+> MONEY unconditionally — it is the only thing that may mark a Studdy payment `succeeded`,
+> and no browser path can. It is authoritative about the BOOKING **only while Studdy's own
+> state can still carry one**: ILR still `awaiting_payment`, reservation still live, tutor
+> still holding a payout account.
+>
+> **Late success is RECORDED, never RE-TAKEN.** If the sweep already closed the request and
+> released the slot: payment `succeeded` with its real provider cost, `refund_required_at`
+> set, a high-risk audit event and a `payment.refund_required` outbox alert — and **nothing
+> fulfilled, no reservation recreated, no tutor owed** for a lesson that is not happening.
+>
+> The design's original "re-take the reservation" branch was **dropped, and the design doc
+> now says so in §8.** Re-taking the hold fixes half the record: the same sweep also closes
+> the ILR, and `closed` is TERMINAL, so confirming from there would mean resurrecting a
+> terminal state or inventing a new one. The owner approved the conservative rule on
+> 2026-09-02. **Refund execution remains out of scope.**
+
+##### Two endpoints, because Stripe leaves no choice
+
+`/api/webhooks/stripe/payments` with its own **`STRIPE_PAYMENTS_WEBHOOK_SECRET`**, beside
+slice 4's `/api/webhooks/stripe/connect`. Connect events are Accounts v2 **thin** events
+verified with `parseEventNotification`; PaymentIntent events are v1 **snapshot** events
+verified with `constructEvent`; and Stripe issues a different signing secret per endpoint. A
+single route would have to choose a secret and a parser **before it had verified anything**,
+which is a decision made on unverified input. Everything else is shared — client, error
+types, event ledger, idempotency spine.
+
+Four events handled and no more: `succeeded`, `processing` (nothing else writes the status
+the expiry sweep's in-flight guard reads), `payment_failed` (an annotation — the payment
+stays `requires_payment` so the family retries the same intent), `canceled` (releases the one
+live-payment slot so a fresh attempt is possible inside the window).
+
+##### Idempotency is five layers, four of them the database
+
+1. unique `provider_event_id` — a redelivery never reaches the transaction;
+2. the payment row taken `FOR UPDATE` — racing workers serialise;
+3. every write `WHERE status_code = <expected>` — zero rows is SUCCESS, not an error;
+4. `tutor_transfer_live_per_payment_unique_idx` + unique `idempotency_key`;
+5. `succeeded` excluded from every other handler's guard, so a stale `failed`, `processing`
+   or `canceled` cannot regress a paid booking.
+
+**A reconciler racing a webhook is the one the unique event id does NOT absorb** — the two
+ids differ by construction — and it is resolved by layer 2 plus layer 3. Tested explicitly.
+
+##### `reconcile-payments`, and the hole it closes
+
+Slice 5 taught the sweep to skip `processing`; this slice is the first that can WRITE it.
+Together they would leave a payment whose webhook never arrived invisible to the sweep
+forever, blocking a tutor's calendar. The 15-minute Inngest function asks Stripe and applies
+the answer **through the same `applyPaymentProviderEvent`**, so a reconciled late success is
+refused exactly as a late webhook is. A provider failure is caught **per payment**, counted
+as `unreadable`, and never written — one bad row cannot starve the batch, and not knowing
+never becomes success.
+
+**Its cadence is an OPERATIONAL POLLING INTERVAL, not a business rule.** No deadline,
+entitlement, window or refund derives from it. A unit test asserts the number lives in the
+transport layer and not in `@studdy/domain`.
+
+##### Real Stripe test-mode walkthrough
+
+The CLI's stored account and `STRIPE_SECRET_KEY`'s account **differed again** — §7's trap,
+so the pinned `--api-key` form was mandatory. The journey to `awaiting_payment` was driven
+through the REAL repository commands, then a real card paid.
+
+Parent payment page → `4242` → real `payment_intent.succeeded` → webhook → **`outcome:
+"fulfilled"`**. Verified in the database: payment `succeeded` with `provider_cost_minor`
+recorded **from Stripe's balance transaction** (Stripe does supply an authoritative fee at
+succeed time), ILR `fulfilled`, reservation `booking_confirmed` with `expires_at` null,
+exactly one `pending` transfer obligation, Tutor Request still `selected`. **Redelivering the
+real event returned `duplicate`** and changed nothing. Unsigned and bogus-signature POSTs
+returned 400 with **zero rows written**; GET returned 405.
+
+The walkthrough tutor's listed price is $35, so it exercised 3500/350/3150 — the same 10%
+rule. The canonical **$40 → $4 fee → $36 obligation** is asserted exactly in the integration
+suite.
+
+##### Things not to undo
+
+- **The late-success rule.** Do not add an automatic re-take. See the block above.
+- **The two separate endpoints and their two secrets.** Using the Connect secret on the
+  payments route fails every signature check with something that reads as tampering.
+- **The unconditional re-fetch.** The authoritative PaymentIntent is re-read on EVERY event,
+  not only on conflict, which is what makes out-of-order delivery harmless by construction.
+- **`connected_account_id` on the transfer comes from Studdy's own row**, never from an
+  event, and the tutor entitlement is copied from the payment snapshot. No web-layer file
+  names an entitlement or a transfer amount at all — a test asserts it.
+- **Only two callers of `applyPaymentProviderEvent`**, both server-authoritative — a test
+  asserts the count, because the cheapest way to lose this is a convenient call in a server
+  action later.
+
+##### Two traps this slice re-proved, both now in memory
+
+**A Playwright run BUILDS the app** (`webServer.command = "pnpm build && pnpm start"`).
+Editing source — including a `prettier --write` sweep — while a run is in flight produced 5
+failures / 32 not run, in parent onboarding and discovery, nowhere near the changed code. The
+same branch on a quiet tree was 98 passed, and so was `main`. **Leave the tree alone until a
+suite reports.**
+
+**An integration fixture that takes a reservation MUST delete it.** The GiST exclusion
+constraint means a leftover hold makes the next run of the same file collide with the
+previous one, on a tutor every fixture shares. Randomised day offsets do not save you — with
+~34 fixtures it is a birthday problem, so it fails intermittently and reads as flake. Counted
+days plus a thorough `afterEach`; proven by running the file three times in a row.
+
+| Gate                                   | Result                                                      |
+| -------------------------------------- | ----------------------------------------------------------- |
+| full unit suite                        | **432 passed**                                              |
+| full integration suite                 | **227 passed, 1 skipped**                                   |
+| Playwright E2E                         | **98 passed** (3.0 min alone)                               |
+| typecheck / lint / format / boundaries | green                                                       |
+| `check:rls`                            | green — 32 tables                                           |
+| `db:generate`                          | no drift, no migration                                      |
+| clean build, cold cache                | green; `sk_test_`/`whsec_`/`acct_` in **zero** bundle files |
+
+##### MANUAL STRIPE CONFIGURATION STILL REQUIRED
+
+A **second** webhook endpoint for `/api/webhooks/stripe/payments` with its own signing
+secret in `STRIPE_PAYMENTS_WEBHOOK_SECRET`, subscribed to **only** these four:
+`payment_intent.succeeded`, `payment_intent.processing`, `payment_intent.payment_failed`,
+`payment_intent.canceled`. Do not add unrelated events. Locally the secret comes from
+`stripe listen --api-key "$STRIPE_SECRET_KEY" --forward-to
+localhost:3000/api/webhooks/stripe/payments`; it is NOT declared in `turbo.json`, because
+like the Connect secret it is request-time only.
+
+**`losses_collector: 'application'` remains a live-money blocker from slice 4**, untouched
+here and still needing professional confirmation alongside merchant-of-record.
+
+---
 
 #### Payment slice 5 — **COMPLETE AND MERGED**
 
@@ -1786,29 +1956,26 @@ origin/main, that the working tree is clean, and that 55b1ea5 is on main. The me
 branches are RETAINED on the remote by convention — do not delete them, and do not continue
 work on them.
 
-Then read the "Payment slice 5" and "Payment slice 4" sections in §8. Slice 5 records
-server-authoritative pricing, the PaymentIntent shape and the expiry guard; slice 4 records
-the Accounts v2 Connect model.
+Then read the "Payment slice 6" and "Payment slice 5" sections in §8. Slice 6 records the
+webhook fulfilment chain and the late-success rule; slice 5 records server-authoritative
+pricing, the PaymentIntent shape and the expiry guard.
 
-YOUR NEXT TASK IS LAUNCH SLICE 6 — feat/stripe-webhooks-and-fulfilment, NOT STARTED. The
-webhook route, payment_events for payment events, applyPaymentSucceeded/Failed, the
-late-success re-take, and the tutor_transfers row. THE FIRST REAL PAID BOOKING BECOMES
-POSSIBLE AT THE END OF IT, which is why the design asks for it to be reviewed alone. Get the
-owner's approval on the approach before implementing.
+YOUR NEXT TASK IS LAUNCH SLICE 7 — feat/resend-outbox-notifications, NOT STARTED.
+drainOutbox, the Resend adapter, communications.notification_deliveries, and the seven
+launch-critical emails. The outbox has been written to since slice 1 and NOTHING HAS EVER
+CONSUMED IT, so a tutor still has to log in to discover that a lesson was booked and paid
+for. Get the owner's approval on the approach before implementing.
 
-START FROM AN ALIGNED STRIPE ENVIRONMENT. Slice 6 is entirely webhook-driven, and slice 4
-lost a full debugging pass to a CLI listening on a different sandbox from STRIPE_SECRET_KEY.
-Use the pinned `--api-key` form in §7 and verify where the DATA comes from — the CLI's
-banner prints its stored account even when --api-key has correctly retargeted the calls, so
-the banner is not the check.
+A PAID BOOKING IS ALREADY POSSIBLE. Slice 6 merged as 7698dd4 (PR #27): a verified
+payment_intent.succeeded moves payment, ILR, reservation and the tutor transfer obligation
+in one transaction. Your slice sends the email about it; it must not change any of that.
 
-WHAT SLICE 5 DELIBERATELY LEFT UNDONE, FOR YOU TO DO: a successful Stripe payment currently
-leaves the ILR `awaiting_payment`, the reservation not `booking_confirmed`, and no
-tutor_transfers row — verified against real Stripe. That is the boundary, not a bug. Keep
-fulfilment webhook-authoritative: reaching a browser success page must never fulfil
-anything.
+FIVE THINGS SLICE 7 MUST NOT UNDO:
 
-FIVE THINGS SLICE 6 MUST NOT UNDO:
+  0. The fulfilment boundary. Only two callers of applyPaymentProviderEvent exist — the
+     payments webhook and the reconciler — and a test asserts the count. Draining the outbox
+     must never fulfil, confirm or refund anything; it sends messages about work already
+     done. A late success is recorded with refund_required_at and is NOT a booking.
 
   1. The expiry sweep's payment guard, which landed in slice 5. expireOverdueRequests skips
      any selected request whose payment is `processing` or `succeeded`. It is NOT redundant
@@ -1827,7 +1994,7 @@ FIVE THINGS SLICE 6 MUST NOT UNDO:
   5. The key boundary: pk_test_ is the ONLY Stripe key permitted client-side. The secret
      key, the webhook secret and any provider account id stay server-only.
 
-BEFORE LIVE MONEY, NOT BEFORE SLICE 6: losses_collector: 'application' means Studdy carries
+BEFORE LIVE MONEY, NOT BEFORE SLICE 7: losses_collector: 'application' means Studdy carries
 unresolved negative balances a tutor cannot pay back. Approved for sandbox only, and needs
 professional confirmation alongside merchant-of-record treatment. Do not treat it as
 settled.
