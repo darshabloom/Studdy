@@ -145,3 +145,13 @@ export {
   type PaymentRefusalReason,
   type PreparedPayment,
 } from './repositories/payments';
+
+// Webhook fulfilment — a successful payment becomes a booking
+// (feat/stripe-payment-fulfilment)
+export {
+  applyPaymentProviderEvent,
+  paymentsAwaitingReconciliation,
+  type AuthoritativeIntent,
+  type ApplyPaymentEventInput,
+  type FulfilmentOutcome,
+} from './repositories/payment-fulfilment';

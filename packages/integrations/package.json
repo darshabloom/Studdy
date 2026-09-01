@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     "./email/local": "./src/email/local/index.ts",
-    "./payments/stripe": "./src/payments/stripe/connect.ts"
+    "./payments/stripe": "./src/payments/stripe/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
