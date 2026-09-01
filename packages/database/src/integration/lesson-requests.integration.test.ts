@@ -1842,6 +1842,40 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       }
     });
 
+    /**
+     * THE CONTRACT THE PAYMENT PAGE'S "When" ROW DEPENDS ON.
+     *
+     * `/requests/[reference]/pay` finds the lesson time by looking for the
+     * winner's offered time with status `claimed`. Nothing else asserted that
+     * a selection actually produces that status in the FAMILY projection, so
+     * renaming it would have silently emptied the row on the one screen a
+     * parent reads before paying — a page that suddenly stops saying WHEN the
+     * lesson is, while still asking for money.
+     */
+    it('surfaces the winner’s claimed time in the family projection', async () => {
+      const scenario = await twoAcceptances(`claimed-time-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = minutesBefore(facts.startAt, 600);
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+
+      const [view] = await listRequestsForStudents(scenario.studentProfileIds);
+      const winner = view!.tutorRequests.find((entry) => entry.statusCode === 'selected');
+      expect(winner).toBeDefined();
+
+      const claimed = winner!.offeredTimes.filter((option) => option.statusCode === 'claimed');
+      expect(claimed).toHaveLength(1);
+      expect(claimed[0]!.startAt).toBeInstanceOf(Date);
+      expect(claimed[0]!.startAt.getTime()).toBe(facts.startAt.getTime());
+    });
+
     it('leaves a selection alone while its window is still open', async () => {
       const scenario = await twoAcceptances(`pay-open-${randomUUID().slice(0, 8)}`);
       const facts = await winnerFacts(scenario.winner);
