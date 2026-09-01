@@ -37,6 +37,14 @@ const available = await databaseAvailable();
 
 describe.skipIf(!available)('creating a payment for a selected request (integration)', () => {
   const madePayable: string[] = [];
+  /*
+   * Every ILR this file creates.
+   *
+   * Assertions and cleanup are scoped to these rather than to the whole table:
+   * a suite that truncates `payments` globally is one that quietly depends on
+   * being the only thing running, and integration suites share one database.
+   */
+  const createdIlrIds: string[] = [];
 
   /** Make a tutor payable, as slice 4's readiness rule defines it. */
   const makePayable = async (
@@ -69,7 +77,9 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
   afterEach(async () => {
     const { sql, db } = createDatabaseClient();
     try {
-      await db.delete(payments);
+      if (createdIlrIds.length > 0) {
+        await db.delete(payments).where(inArray(payments.intendedLessonRequestId, createdIlrIds));
+      }
       if (madePayable.length > 0) {
         await db
           .delete(connectedAccounts)
@@ -95,6 +105,7 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
       readonly deadlineMinutesFromNow?: number;
     } = {},
   ): Promise<{
+    ilrId: string;
     reference: string;
     studentProfileIds: string[];
     payerUserId: string;
@@ -151,13 +162,28 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
                 now() + (${deadlineMinutes} * interval '1 minute'), 1)
         returning id`;
 
+      createdIlrIds.push(ilr!['id'] as string);
       return {
+        ilrId: ilr!['id'] as string,
         reference: ilr!['reference'] as string,
         studentProfileIds: [section!['student_profile_id'] as string],
         payerUserId: payer!['id'] as string,
         tutorProfileId: version!['tutor_profile_id'] as string,
         tutorRequestId: treq!['id'] as string,
       };
+    } finally {
+      await sql.end();
+    }
+  };
+
+  /** Payment rows for ONE request. Never the whole table. */
+  const paymentRowsFor = async (ilrId: string): Promise<{ id: string }[]> => {
+    const { sql, db } = createDatabaseClient();
+    try {
+      return await db
+        .select({ id: payments.id })
+        .from(payments)
+        .where(eq(payments.intendedLessonRequestId, ilrId));
     } finally {
       await sql.end();
     }
@@ -244,7 +270,10 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
 
       const { sql, db } = createDatabaseClient();
       try {
-        const [row] = await db.select().from(payments).limit(1);
+        const [row] = await db
+          .select()
+          .from(payments)
+          .where(eq(payments.intendedLessonRequestId, req.ilrId));
         expect(row!.platformFeeRateBps).toBe(1000);
         expect(row!.platformFeeRuleVersion).toBeGreaterThan(0);
         expect(row!.processingFeeRuleVersion).toBeGreaterThan(0);
@@ -277,13 +306,7 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
       expect(second.paymentId).toBe(first.paymentId);
       expect(second.reused).toBe(true);
 
-      const { sql, db } = createDatabaseClient();
-      try {
-        const rows = await db.select({ id: payments.id }).from(payments);
-        expect(rows).toHaveLength(1);
-      } finally {
-        await sql.end();
-      }
+      expect(await paymentRowsFor(req.ilrId)).toHaveLength(1);
     });
 
     it('produces exactly one row when two creations race', async () => {
@@ -304,13 +327,7 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
       ]);
       expect(results.some((r) => r.status === 'fulfilled')).toBe(true);
 
-      const { sql, db } = createDatabaseClient();
-      try {
-        const rows = await db.select({ id: payments.id }).from(payments);
-        expect(rows).toHaveLength(1);
-      } finally {
-        await sql.end();
-      }
+      expect(await paymentRowsFor(req.ilrId)).toHaveLength(1);
     });
   });
 
@@ -333,12 +350,7 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
       );
       expect(reason).toBe('payment_window_closed');
 
-      const { sql, db } = createDatabaseClient();
-      try {
-        expect(await db.select({ id: payments.id }).from(payments)).toHaveLength(0);
-      } finally {
-        await sql.end();
-      }
+      expect(await paymentRowsFor(req.ilrId)).toHaveLength(0);
     });
 
     /** Slice 4's readiness rule, read live rather than trusted from the client. */
@@ -485,12 +497,7 @@ describe.skipIf(!available)('creating a payment for a selected request (integrat
         }),
       ).rejects.toThrow();
 
-      const { sql, db } = createDatabaseClient();
-      try {
-        expect(await db.select({ id: payments.id }).from(payments)).toHaveLength(0);
-      } finally {
-        await sql.end();
-      }
+      expect(await paymentRowsFor(req.ilrId)).toHaveLength(0);
     });
   });
 
