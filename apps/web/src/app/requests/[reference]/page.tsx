@@ -176,8 +176,17 @@ export default async function RequestDetailPage({
                 then, the time will be released.
               </>
             )}
-            <span className="mt-2 block text-sm">Payment arrives in the next release.</span>
           </Alert>
+          {/*
+            The route into payment. Offered only while the ILR is awaiting it —
+            the page already guards that — and the payment page re-checks
+            everything server-side anyway, because a link is not a permission.
+          */}
+          <div className="mt-3">
+            <Button asChild>
+              <Link href={`/requests/${reference}/pay`}>Pay for this lesson</Link>
+            </Button>
+          </div>
         </div>
       ) : isOpen ? (
         <div className="mt-6">

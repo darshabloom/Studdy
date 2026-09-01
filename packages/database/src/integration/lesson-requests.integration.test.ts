@@ -25,6 +25,7 @@ import {
   domainEvents,
   intendedLessonRequests,
   outboxEntries,
+  payments,
   requestTimeOptions,
   services,
   serviceVersions,
@@ -1841,6 +1842,40 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       }
     });
 
+    /**
+     * THE CONTRACT THE PAYMENT PAGE'S "When" ROW DEPENDS ON.
+     *
+     * `/requests/[reference]/pay` finds the lesson time by looking for the
+     * winner's offered time with status `claimed`. Nothing else asserted that
+     * a selection actually produces that status in the FAMILY projection, so
+     * renaming it would have silently emptied the row on the one screen a
+     * parent reads before paying — a page that suddenly stops saying WHEN the
+     * lesson is, while still asking for money.
+     */
+    it('surfaces the winner’s claimed time in the family projection', async () => {
+      const scenario = await twoAcceptances(`claimed-time-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = minutesBefore(facts.startAt, 600);
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+
+      const [view] = await listRequestsForStudents(scenario.studentProfileIds);
+      const winner = view!.tutorRequests.find((entry) => entry.statusCode === 'selected');
+      expect(winner).toBeDefined();
+
+      const claimed = winner!.offeredTimes.filter((option) => option.statusCode === 'claimed');
+      expect(claimed).toHaveLength(1);
+      expect(claimed[0]!.startAt).toBeInstanceOf(Date);
+      expect(claimed[0]!.startAt.getTime()).toBe(facts.startAt.getTime());
+    });
+
     it('leaves a selection alone while its window is still open', async () => {
       const scenario = await twoAcceptances(`pay-open-${randomUUID().slice(0, 8)}`);
       const facts = await winnerFacts(scenario.winner);
@@ -1867,6 +1902,173 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
           .from(tutorRequests)
           .where(eq(tutorRequests.reference, scenario.winner));
         expect(won!.statusCode).toBe('selected');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /*
+     * THE IN-FLIGHT PAYMENT GUARD — slice 5's mandatory precondition.
+     *
+     * Between a parent confirming a card and Stripe's webhook landing, the
+     * payment is `processing` and the ILR is still `awaiting_payment`. That
+     * window is small, and a one-minute sweep lands in it. Without this guard a
+     * family could pay and watch the booking evaporate seconds later.
+     *
+     * Payments are written directly here. The point under test is the SWEEP's
+     * predicate, and driving a real PaymentIntent to reach it would test Stripe
+     * rather than the guard.
+     */
+    const writePaymentFor = async (
+      tutorRequestReference: string,
+      statusCode: string,
+    ): Promise<void> => {
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [tr] = await db
+          .select({
+            id: tutorRequests.id,
+            ilrId: tutorRequests.intendedLessonRequestId,
+            serviceVersionId: tutorRequests.serviceVersionId,
+            tutorProfileId: tutorRequests.tutorProfileId,
+            deadline: tutorRequests.paymentDeadlineAt,
+          })
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, tutorRequestReference));
+        const [payer] = await db.select({ id: users.id }).from(users).limit(1);
+        await db.insert(payments).values({
+          intendedLessonRequestId: tr!.ilrId,
+          tutorRequestId: tr!.id,
+          serviceVersionId: tr!.serviceVersionId,
+          payerUserId: payer!.id,
+          tutorProfileId: tr!.tutorProfileId,
+          currencyCode: 'NZD',
+          lessonAmountMinor: 4000n,
+          platformFeeRateBps: 1000,
+          platformFeeRuleVersion: 1,
+          platformFeeAmountMinor: 400n,
+          tutorEntitlementMinor: 3600n,
+          processingFeePayerCode: 'platform',
+          processingFeeRuleVersion: 1,
+          processingFeeChargedMinor: 0n,
+          totalChargedMinor: 4000n,
+          statusCode,
+          // notNull on the ledger; selection always sets it, and the fallback
+          // keeps this helper usable for a legacy row that has none.
+          paymentDeadlineAt: tr!.deadline ?? new Date(),
+        });
+      } finally {
+        await sql.end();
+      }
+    };
+
+    /** Select a winner, then sweep well past the deadline. */
+    const selectThenSweep = async (
+      label: string,
+      paymentStatus: string | null,
+    ): Promise<{ winner: string; status: string; holdStatus: string | undefined }> => {
+      const scenario = await twoAcceptances(`${label}-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = minutesBefore(facts.startAt, 600);
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+
+      if (paymentStatus !== null) await writePaymentFor(scenario.winner, paymentStatus);
+
+      await expireOverdueRequests({
+        correlationId: `cor_${randomUUID()}`,
+        now: new Date(selectedAt.getTime() + 61 * 60_000),
+      });
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        const [hold] = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorRequestId, won!.id));
+        return { winner: scenario.winner, status: won!.statusCode, holdStatus: hold?.statusCode };
+      } finally {
+        await sql.end();
+      }
+    };
+
+    it('lapses a selection whose payment is still requires_payment', async () => {
+      const result = await selectThenSweep('pay-guard-requires', 'requires_payment');
+      expect(result.status).toBe('closed');
+      expect(result.holdStatus).toBe('released');
+    });
+
+    it('PROTECTS a selection whose payment is processing', async () => {
+      const result = await selectThenSweep('pay-guard-processing', 'processing');
+      expect(result.status).toBe('selected');
+      expect(result.holdStatus).toBe('active');
+    });
+
+    it('PROTECTS a selection whose payment has succeeded', async () => {
+      const result = await selectThenSweep('pay-guard-succeeded', 'succeeded');
+      expect(result.status).toBe('selected');
+      expect(result.holdStatus).toBe('active');
+    });
+
+    /** A terminal payment must not shield an abandoned request forever. */
+    it('still lapses when the only payment failed, cancelled or expired', async () => {
+      for (const terminal of ['failed', 'cancelled', 'expired']) {
+        const result = await selectThenSweep(`pay-guard-${terminal}`, terminal);
+        expect(result.status).toBe('closed');
+        expect(result.holdStatus).toBe('released');
+      }
+    });
+
+    /** The legacy path: no payment row at all behaves exactly as before. */
+    it('still lapses when there is no payment row at all', async () => {
+      const result = await selectThenSweep('pay-guard-none', null);
+      expect(result.status).toBe('closed');
+      expect(result.holdStatus).toBe('released');
+    });
+
+    it('stays idempotent across repeated sweeps with a protected payment', async () => {
+      const scenario = await twoAcceptances(`pay-guard-idem-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = minutesBefore(facts.startAt, 600);
+
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+      await writePaymentFor(scenario.winner, 'processing');
+
+      const past = new Date(selectedAt.getTime() + 61 * 60_000);
+      for (let run = 0; run < 3; run += 1) {
+        await expireOverdueRequests({ correlationId: `cor_${randomUUID()}`, now: past });
+      }
+
+      const { sql, db } = createDatabaseClient();
+      try {
+        const [won] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.reference, scenario.winner));
+        expect(won!.statusCode).toBe('selected');
+        const [ilr] = await db
+          .select()
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.reference, scenario.ilrReference));
+        expect(ilr!.statusCode).toBe('awaiting_payment');
       } finally {
         await sql.end();
       }

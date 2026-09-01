@@ -343,8 +343,19 @@ click-to-create, snapping, window fitting and the family-safe refusal.
   node -e "const S=require('stripe');new S(process.env.STRIPE_SECRET_KEY).accounts.retrieve().then(a=>console.log(a.id))"
   ```
 
-  If those two ids differ, that is the bug. **Prefer the explicit form** over whatever
-  `stripe login` last chose, which is also the pattern proven to deliver v2 thin events:
+  If those two ids differ, the CLI's STORED LOGIN is on the wrong sandbox.
+
+  **BUT DO NOT STOP THERE, and do not trust the CLI's banner.** `--api-key` genuinely
+  retargets the API calls — verified in slice 5 by listing v2 events with `--api-key` and
+  getting THIS sandbox's events back — while the CLI still prints its stale stored account
+  in the `▸ Running in …` banner. So after the workflow is correctly pinned, the two ids
+  can still differ and everything works. The banner is not the check; where the DATA comes
+  from is.
+
+  The stored login cannot be changed non-interactively (`stripe login --api-key` reports
+  "already logged in"; `stripe login --new-session` and `stripe reauth` both need a
+  browser). That is why the pinned form below is the workflow rather than a workaround —
+  and it is also the pattern proven to deliver v2 thin events:
 
   ```bash
   stripe listen --latest --api-key "$STRIPE_SECRET_KEY" --forward-thin-to localhost:3000/api/webhooks/stripe/connect --thin-events "*"
