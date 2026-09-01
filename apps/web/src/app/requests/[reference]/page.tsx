@@ -58,6 +58,16 @@ export default async function RequestDetailPage({
   const paymentDeadlineAt = selected?.paymentDeadlineAt ?? null;
   const selectedTutorFirstName = selected?.tutorFirstName ?? null;
   const paymentWindowMinutes = selected?.paymentWindowMinutes ?? null;
+  /*
+   * The time the tutor actually claimed, for the confirmed-booking panel.
+   * `claimed` is the accepted state in the family projection; falling back to
+   * the first offered time would risk telling a family their lesson is on a day
+   * nobody booked.
+   */
+  const confirmedStartAt = selected?.offeredTimes.find(
+    (option) => option.statusCode === 'claimed',
+  )?.startAt;
+
   const paymentWindowLabel =
     paymentWindowMinutes === null
       ? 'a short while'
@@ -121,7 +131,36 @@ export default async function RequestDetailPage({
         ) : null}
       </Card>
 
-      {request.statusCode === 'ready_for_selection' && acceptedCount > 0 ? (
+      {request.statusCode === 'fulfilled' ? (
+        <div className="mt-6">
+          {/*
+           * THE LESSON IS BOOKED, and this is the first screen in Studdy that
+           * has ever been allowed to say so.
+           *
+           * It is rendered from the ILR's own `fulfilled` status — the
+           * authoritative record that a payment succeeded — and never from
+           * anything the browser observed. A parent who reached a Stripe return
+           * URL sees this only once the webhook has actually fulfilled; until
+           * then the request still reads `awaiting_payment` and the copy above
+           * still says the lesson is not booked.
+           */}
+          <Alert tone="success" title="This lesson is booked">
+            <p>
+              {selectedTutorFirstName ?? 'Your tutor'} has this time reserved for you
+              {confirmedStartAt === undefined ? null : (
+                <>
+                  {' '}
+                  on{' '}
+                  <strong className="font-semibold">
+                    {formatLessonDateTime(confirmedStartAt, request.timeZone)}
+                  </strong>
+                </>
+              )}
+              . Your payment went through and nothing else is needed from you.
+            </p>
+          </Alert>
+        </div>
+      ) : request.statusCode === 'ready_for_selection' && acceptedCount > 0 ? (
         <div className="mt-6">
           <Alert tone="information" title="Ready for you to choose">
             <p>

@@ -297,6 +297,16 @@ export interface TutorRequestView {
   /** The temporary hold, labelled and time-boxed in the interface. */
   readonly holdExpiresAt: Date | null;
   readonly holdStatusCode: string | null;
+  /**
+   * `request_hold` while the family decides or pays, `booking_confirmed` once a
+   * payment has succeeded.
+   *
+   * THE TUTOR'S OWN RESERVATION, so this reveals nothing about anybody else —
+   * it is the same row their calendar already labels "Confirmed lesson". It is
+   * here so the request screen can stop describing a paid booking as a
+   * temporary hold that "may or may not become a booking".
+   */
+  readonly holdTypeCode: string | null;
 }
 
 /**
@@ -355,6 +365,7 @@ export async function listRequestsForTutor(
         currencyCode: serviceVersions.currencyCode,
         holdExpiresAt: tutorTimeReservations.expiresAt,
         holdStatusCode: tutorTimeReservations.statusCode,
+        holdTypeCode: tutorTimeReservations.reservationTypeCode,
       })
       .from(tutorRequests)
       // The ILR is joined for the lesson details the tutor needs to assess the

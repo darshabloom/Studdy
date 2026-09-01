@@ -61,6 +61,12 @@ export default async function TutorRequestPage({
   const open = request.statusCode === 'sent';
   const stillOffered = request.offeredTimes.filter((option) => option.statusCode === 'offered');
   const accepted = request.offeredTimes.find((option) => option.statusCode === 'claimed');
+  /*
+   * Booked, as opposed to merely held. Read from this tutor's own reservation
+   * row rather than inferred from a null expiry, which a pre-payment-window row
+   * also has.
+   */
+  const isBooked = request.holdTypeCode === 'booking_confirmed';
 
   return (
     <>
@@ -118,17 +124,42 @@ export default async function TutorRequestPage({
 
       {accepted !== undefined ? (
         <div className="mt-6">
-          <Alert tone="information" title="You accepted this time">
-            <p>{formatLessonDateTime(accepted.startAt, request.timeZone)}</p>
-            {request.holdExpiresAt !== null ? (
+          {/*
+           * A CONFIRMED BOOKING IS NOT A HOLD, and until this slice the tutor
+           * screen had no way to say so — a paid lesson kept reading "this may
+           * or may not become a booking", which is a temporary claim on a
+           * calendar the family has already paid for.
+           *
+           * The signal is the tutor's own reservation type, flipped to
+           * `booking_confirmed` by the fulfilment transaction. The same row the
+           * availability calendar already labels "Confirmed lesson", so the two
+           * screens cannot disagree.
+           *
+           * The REQUEST's status is untouched and still `selected` — the seven
+           * Tutor Request statuses do not gain a `confirmed`, and the booking
+           * is recorded where it actually lives.
+           */}
+          {isBooked ? (
+            <Alert tone="success" title="This lesson is booked">
+              <p>{formatLessonDateTime(accepted.startAt, request.timeZone)}</p>
               <p className="mt-1">
-                It is held on your calendar until{' '}
-                {formatDeadline(request.holdExpiresAt, request.timeZone)}. The family is choosing
-                now — this may or may not become a booking, and the hold is released either way when
-                it expires.
+                The family has paid and this time is confirmed on your calendar. It no longer
+                expires.
               </p>
-            ) : null}
-          </Alert>
+            </Alert>
+          ) : (
+            <Alert tone="information" title="You accepted this time">
+              <p>{formatLessonDateTime(accepted.startAt, request.timeZone)}</p>
+              {request.holdExpiresAt !== null ? (
+                <p className="mt-1">
+                  It is held on your calendar until{' '}
+                  {formatDeadline(request.holdExpiresAt, request.timeZone)}. The family is choosing
+                  now — this may or may not become a booking, and the hold is released either way
+                  when it expires.
+                </p>
+              ) : null}
+            </Alert>
+          )}
         </div>
       ) : null}
 

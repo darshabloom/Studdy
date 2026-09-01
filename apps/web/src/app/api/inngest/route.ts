@@ -1,6 +1,7 @@
 import { serve } from 'inngest/next';
 import { inngest } from '@/inngest/client';
 import { expireRequestsScheduled } from '@/inngest/functions/expire-requests';
+import { reconcilePaymentsScheduled } from '@/inngest/functions/reconcile-payments';
 
 /**
  * The Inngest endpoint: where Inngest discovers and invokes Studdy's scheduled
@@ -48,5 +49,5 @@ export const maxDuration = 300;
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [expireRequestsScheduled],
+  functions: [expireRequestsScheduled, reconcilePaymentsScheduled],
 });

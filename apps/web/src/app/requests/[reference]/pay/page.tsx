@@ -46,6 +46,38 @@ export default async function PayPage({
 
   const winner = request.tutorRequests.find((entry) => entry.statusCode === 'selected') ?? null;
 
+  /*
+   * ALREADY BOOKED, SO THERE IS NOTHING TO PAY — and this is checked BEFORE
+   * `startPaymentForRequest`, which would otherwise refuse with
+   * `not_awaiting_payment` and tell a family whose lesson is confirmed that
+   * their lesson "cannot be paid for". Both sentences are true and only one is
+   * useful.
+   *
+   * `fulfilled` on the ILR is the authoritative record that the webhook
+   * confirmed the booking. This page reads it; it has never had a write path,
+   * and reaching it from a Stripe return URL still fulfils nothing.
+   */
+  if (request.statusCode === 'fulfilled') {
+    const bookedStartAt = winner?.offeredTimes.find(
+      (option) => option.statusCode === 'claimed',
+    )?.startAt;
+    return (
+      <section className="space-y-6">
+        <h1 className="text-2xl font-semibold">This lesson is booked</h1>
+        <Alert tone="success" title="Your payment went through">
+          {winner?.tutorFirstName ?? 'Your tutor'} has this time reserved for you
+          {bookedStartAt === undefined
+            ? ''
+            : ` on ${formatLessonDateTime(bookedStartAt, PLATFORM_TIME_ZONE)}`}
+          . Nothing else is needed from you.
+        </Alert>
+        <Button asChild variant="secondary">
+          <Link href={`/requests/${reference}`}>Back to your request</Link>
+        </Button>
+      </section>
+    );
+  }
+
   const session = await startPaymentForRequest(reference);
 
   if (!session.ok) {
