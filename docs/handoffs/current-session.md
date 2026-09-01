@@ -38,20 +38,24 @@ current; they are not duplicates.
 **Branch:** `main`, level with `origin/main`.
 **Working tree:** clean. Nothing uncommitted, nothing stashed.
 
-> **SLICE 4 IS MERGED. NOTHING IS IN FLIGHT.** Payment slices 1, 2, 3 and 4 are all on
-> `main`. Slice 4 merged as **`4153d45` (PR #25, squash, 2026-08-31)**, with all four CI
-> jobs and both Vercel checks green, after a full sequential local verification from a fresh
-> database AND a real Stripe test-mode provider walkthrough.
+> **SLICE 5 IS MERGED. NOTHING IS IN FLIGHT.** Payment slices 1–5 are all on `main`. Slice
+> 5 merged as **`55b1ea5` (PR #26, squash, 2026-09-01)**, with all four CI jobs and both
+> Vercel checks green, after a full sequential local verification from a fresh database AND
+> a real Stripe test-mode payment walkthrough.
 >
-> **A tutor can now become payable.** Stripe Connect onboarding is built on ACCOUNTS V2 —
-> Stripe refuses v1 account creation for new platforms — with a `recipient` configuration,
-> the Express dashboard, and readiness derived from the transfers and payouts capability
-> statuses. See the slice 4 section in §8.
+> **A parent can now pay.** A real PaymentIntent is created on the platform account from
+> server-authoritative pricing, and the expiry sweep can no longer close a booking whose
+> payment is in flight. See the slice 5 section in §8.
 >
-> **Launch slice 5, `feat/stripe-payment-intent`, is next and NOT STARTED.** It owns the
-> parent's PaymentIntent, server-authoritative pricing, and the expiry sweep's
-> `processing`/`succeeded` guard. Read the current HEAD out of git rather than from this
-> file.
+> **NOTHING IS FULFILLED YET, and that is deliberate.** A successful Stripe payment leaves
+> the ILR `awaiting_payment`, creates no `booking_confirmed` reservation and no tutor
+> transfer obligation. Fulfilment is webhook-authoritative and belongs to slice 6.
+>
+> **Launch slice 6, `feat/stripe-webhooks-and-fulfilment`, is next and NOT STARTED.** It
+> owns `payment_intent.succeeded`, the `awaiting_payment → fulfilled` transition, the
+> reservation becoming `booking_confirmed` and the `tutor_transfers` row. The first real
+> paid booking becomes possible at the end of it. Read the current HEAD out of git rather
+> than from this file.
 
 > ### Checkpoint state, verified against git
 >
@@ -65,7 +69,8 @@ current; they are not duplicates.
 > | Payment slice 2 | merged as `3eaddf3` (PR #22, squash, 2026-08-31)    |
 > | Payment slice 3 | merged as `daaba6c` (PR #24, squash, 2026-08-31)    |
 > | Payment slice 4 | merged as `4153d45` (PR #25, squash, 2026-08-31)    |
-> | Payment slice 5 | **NEXT — not started**                              |
+> | Payment slice 5 | merged as `55b1ea5` (PR #26, squash, 2026-09-01)    |
+> | Payment slice 6 | **NEXT — not started**                              |
 >
 > Step 5 merged with all four CI jobs and both Vercel checks green, after a full
 > sequential local verification from a fresh database. It was approved screen by
@@ -414,26 +419,31 @@ confirmed booking`
 > `claude/studdy-implementation-plan.md` or with the step 6 section below, that document
 > wins.
 >
-> **Slices 1, 2, 3 and 4 are merged** (`8fa6051` PR #21, `3eaddf3` PR #22, `daaba6c` PR #24,
-> `4153d45` PR #25). A tutor can become payable; nothing can yet take a parent's money.
+> **Slices 1–5 are merged** (`8fa6051` PR #21, `3eaddf3` PR #22, `daaba6c` PR #24,
+> `4153d45` PR #25, `55b1ea5` PR #26). A parent can pay; nothing is fulfilled.
 >
-> **THE IMMEDIATE NEXT TASK IS LAUNCH SLICE 5 — `feat/stripe-payment-intent`, NOT STARTED.**
-> `createPaymentForRequest`, `/requests/[ref]/pay` with the Payment Element,
-> server-authoritative pricing from `service_version_id`, and retry on the same intent. The
-> parent can pay at the end of it; nothing is fulfilled yet, deliberately — fulfilment is
-> slice 6.
+> **THE EXPIRY SWEEP'S PAYMENT GUARD IS DONE.** It landed in slice 5 alongside the rows it
+> protects: `expireOverdueRequests` now skips any `selected` request holding a payment in
+> `processing` or `succeeded`. Do not remove it, and do not assume the ILR guard covers the
+> same case — it does not, because the ILR only becomes `fulfilled` when slice 6's webhook
+> applies.
 >
-> **SLICE 5 ALSO OWNS THE EXPIRY SWEEP'S PAYMENT GUARD**, which is still unwritten.
-> `expireOverdueRequests` must skip a request whose payment is `processing` or `succeeded`,
-> so a webhook in flight cannot have its request lapsed. Slice 5 is the first branch that
-> writes operational payment rows and therefore the first where a test can exercise the
-> predicate. **It must land before any real PaymentIntent is processed.** Verify in git that
-> it is still missing rather than assuming either way — see §8 of the design document.
+> **THE IMMEDIATE NEXT TASK IS LAUNCH SLICE 6 — `feat/stripe-webhooks-and-fulfilment`, NOT
+> STARTED.** The webhook route, `payment_events` for payment events,
+> `applyPaymentSucceeded`/`Failed`, the late-success re-take, and the transfer row. **The
+> first real paid booking becomes possible at the end of it**, which is why the design calls
+> it the riskiest code in the sequence and asks for it to be reviewed alone.
+>
+> **WHAT SLICE 5 DELIBERATELY LEFT UNDONE, for slice 6 to do:** a successful Stripe payment
+> currently leaves the ILR `awaiting_payment`, the reservation not `booking_confirmed`, and
+> no `tutor_transfers` row — verified against real Stripe. That is not a bug to fix in
+> passing; it is the boundary. Fulfilment must be webhook-authoritative, never driven by the
+> browser returning to a success page.
 >
 > Do not reopen any step 5 behaviour: it was reviewed screen by screen and approved, and the
 > decisions that look arbitrary are recorded with their reasons in the step 5 section above.
 
-### THE LAUNCH-CRITICAL PAYMENT SLICES — **SLICES 1–4 MERGED, SLICE 5 NEXT**
+### THE LAUNCH-CRITICAL PAYMENT SLICES — **SLICES 1–5 MERGED, SLICE 6 NEXT**
 
 Full detail, including every schema column and the reasoning behind each choice, is in
 `docs/design/payments-and-first-paid-booking.md`. The sequence, in order:
@@ -444,8 +454,8 @@ Full detail, including every schema column and the reasoning behind each choice,
 | 2   | ~~`feat/inngest-scheduler`~~           | **MERGED `3eaddf3` (PR #22)** — Inngest, every minute           |
 | 3   | ~~`feat/payments-schema-and-pricing`~~ | **MERGED `daaba6c` (PR #24)** — ledger, pricing, RLS            |
 | 4   | ~~`feat/stripe-connect-onboarding`~~   | **MERGED `4153d45` (PR #25)** — Accounts v2 Connect onboarding  |
-| 5   | `feat/stripe-payment-intent`           | **NEXT** — Payment Element, server pricing, **the sweep guard** |
-| 6   | `feat/stripe-webhooks-and-fulfilment`  | **First real paid booking possible here**                       |
+| 5   | ~~`feat/stripe-payment-intent`~~       | **MERGED `55b1ea5` (PR #26)** — PaymentIntent + the sweep guard |
+| 6   | `feat/stripe-webhooks-and-fulfilment`  | **NEXT** — first real paid booking possible here                |
 | 7   | `feat/resend-outbox-notifications`     | Outbox drain, the seven launch-critical emails                  |
 | 8   | `feat/admin-settlement`                | Weekly manual tutor settlement                                  |
 
@@ -456,6 +466,114 @@ Two rules from that document are worth repeating here, because both are easy to 
   request staying `selected`. The expiry sweep is guarded on the ILR's status instead.
 - **No real money is accepted while expiry depends on a manual endpoint.** That is why
   Inngest lands at slice 2 rather than later.
+
+#### Payment slice 5 — **COMPLETE AND MERGED**
+
+Merged as **`55b1ea5` (PR #26, squash, 2026-09-01)** from `feat/stripe-payment-intent`. All
+four CI jobs and both Vercel checks green, after a full sequential local verification from a
+fresh database **and a real Stripe test-mode payment walkthrough**. The branch is retained
+on the remote, per convention.
+
+**A parent can now pay. Nothing is fulfilled.**
+
+##### THE EXPIRY GUARD LANDED HERE, and must not be removed
+
+`expireOverdueRequests` skips any `selected` request holding a payment in `processing` or
+`succeeded`. Slices 1, 3 and 4 each declined to write it because none created a payment row
+the predicate could be true for.
+
+**IT IS NOT A DUPLICATE OF THE ILR GUARD.** The ILR only reaches `fulfilled` when slice 6's
+webhook applies, so between a parent confirming a card and the webhook landing the ILR still
+reads `awaiting_payment` — and that is exactly the window a one-minute sweep lands in.
+Without this, a family could pay and watch the booking evaporate seconds later.
+
+A correlated `EXISTS`, with the terminal statuses (`failed`, `cancelled`, `expired`)
+deliberately outside the set so an abandoned attempt cannot hold a tutor's calendar forever.
+
+##### Server-authoritative pricing is a SHAPE, not a check
+
+`createPaymentForRequest` takes a reference, an ownership scope and a payer. **There is no
+amount, currency or fee parameter**, so tampering is structurally impossible rather than
+validated against. A test asserts the signature stays that way — the cheapest way to lose
+this property is somebody adding a convenient parameter later.
+
+A $40 lesson gives **4000 total, 400 fee, 3600 entitlement, 0 surcharge**. Studdy's 10%
+comes out of the tutor's listed price, not on top of it, so the parent pays exactly what
+they were shown. Rule versions snapshotted per key; `provider_cost_minor` stays null.
+
+Four guards, each refusing before anything is written or charged: ownership in the `WHERE`
+(another family gets `request_not_found`, indistinguishable from missing); the deadline
+checked first; the tutor's payability read LIVE under slice 4's rule; and the ILR still
+`awaiting_payment` with its winner still `selected`.
+
+##### The PaymentIntent, defined by its omissions
+
+Platform account. **No `transfer_data.destination`** — a destination charge would land the
+tutor's share at capture, days before the lesson, making pre-launch refunds a clawback out
+of a connected account. **No `application_fee_amount`** — Studdy's cut is the part not
+transferred, not an application fee. **No `on_behalf_of`**. Nothing moves money to a tutor.
+
+Idempotent in two layers: an existing live row returns as-is before any pricing or provider
+work, and the partial unique index is the backstop. The Stripe key is deterministic on
+Studdy's payment id, so a refresh, a double submit and a retry converge on ONE intent.
+
+##### Real Stripe test-mode walkthrough
+
+**The Payment Element mounted** and Stripe accepted Studdy's client secret. The page showed
+tutor, lesson date and time, 60 minutes, online, $40.00 lesson, **$40.00 total**, deadline,
+and _"This lesson is not booked until your payment succeeds"_ — before paying, not only
+after. No Studdy commission line: itemising a fee the parent is not charged would make $40
+look like it might not be $40.
+
+**Decline → retry → success, all on the SAME intent.** `tok_chargeDeclined` → `card_declined`,
+intent back to `requires_payment_method`, one payment row, window open, ILR still
+`awaiting_payment`. Then `tok_visa` on that same intent → `succeeded`, 4000 received, intent
+id unchanged.
+
+> ### AND STUDDY DID NOT FULFIL — THIS IS THE SLICE 6 BOUNDARY
+>
+> After a genuinely successful payment at Stripe: ILR **`awaiting_payment`**, **0**
+> `booking_confirmed` reservations, **0** `tutor_transfers`, **0** `payment_events`, and
+> Studdy's own payment row still `requires_payment`. Stripe has the money; Studdy has not
+> acted on it. **That is correct, not a bug** — fulfilment is webhook-authoritative and is
+> slice 6's entire job.
+
+##### Things not to undo
+
+- **The expiry guard.** See above.
+- **No amount parameter** on `createPaymentForRequest`.
+- **`pk_test_` is the ONLY Stripe key allowed client-side.** Verified in the built bundle:
+  `sk_test_`, `whsec_` and `acct_` appear in zero files.
+- **`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is declared in turbo's build env** because
+  `NEXT_PUBLIC_*` is inlined at build. `STRIPE_SECRET_KEY` and
+  `STRIPE_CONNECT_WEBHOOK_SECRET` are deliberately NOT declared — both are request-time only.
+- **`@studdy/database` does not depend on `@studdy/integrations`.** The ledger owns the
+  guards and the amounts; the Stripe call is the web layer's job.
+
+##### Two traps this slice re-proved
+
+**A `'use server'` file may export async functions ONLY.** An exported synchronous helper
+typechecks perfectly and fails at `pnpm build`. §7 already recorded this; it still caught
+this slice.
+
+**Integration tests share one database.** `vitest.integration.config.ts` sets
+`fileParallelism: false` for that reason, but the database package's plain `test` script had
+no config and re-ran the same files CONCURRENTLY. It stayed quiet only because earlier
+suites happened not to collide. The package now has a `vitest.config.ts` excluding
+integration tests from the unit run — CI runs `test:integration` as its own job, so nothing
+is lost. `pnpm test` in `@studdy/database` is now 6 unit tests, not 167.
+
+| Gate                                   | Result                    |
+| -------------------------------------- | ------------------------- |
+| full unit suite                        | **392 passed**            |
+| full integration suite                 | **184 passed, 1 skipped** |
+| Playwright E2E                         | **98 passed**             |
+| typecheck / lint / format / boundaries | green                     |
+| `check:rls`                            | green — 32 tables         |
+| `db:generate`                          | no drift                  |
+| clean build, cold cache                | green                     |
+
+---
 
 #### Payment slice 4 — **COMPLETE AND MERGED**
 
@@ -1660,51 +1778,56 @@ THE NEXT TASK IS NOT STEP 6. Studdy is working against a launch-critical roadmap
 the first real paid lesson. Read docs/design/payments-and-first-paid-booking.md — it is the
 authority.
 
-Payment slices 1, 2, 3 and 4 are ALL MERGED (8fa6051 PR #21, 3eaddf3 PR #22, daaba6c PR
-#24, 4153d45 PR #25). Nothing is in flight and there is no open branch of work.
+Payment slices 1-5 are ALL MERGED (8fa6051 PR #21, 3eaddf3 PR #22, daaba6c PR #24,
+4153d45 PR #25, 55b1ea5 PR #26). Nothing is in flight and there is no open branch of work.
 
 Confirm from git, not from this prompt: that you are on main, that main is level with
-origin/main, that the working tree is clean, and that 4153d45 is on main. The merged slice
+origin/main, that the working tree is clean, and that 55b1ea5 is on main. The merged slice
 branches are RETAINED on the remote by convention — do not delete them, and do not continue
 work on them.
 
-Then read the "Payment slice 4" and "Payment slice 3" sections in §8. Slice 4 records the
-Accounts v2 Connect model — recipient configuration, express dashboard, capability-based
-readiness, thin events — and slice 3 records the ledger, migration 0007 and the
-lesson_amount_minor > 0 invariant.
+Then read the "Payment slice 5" and "Payment slice 4" sections in §8. Slice 5 records
+server-authoritative pricing, the PaymentIntent shape and the expiry guard; slice 4 records
+the Accounts v2 Connect model.
 
-YOUR NEXT TASK IS LAUNCH SLICE 5 — feat/stripe-payment-intent, NOT STARTED.
-createPaymentForRequest, /requests/[ref]/pay with the Payment Element, server-authoritative
-pricing from service_version_id, and retry on the same intent. The parent can pay at the end
-of it; nothing is fulfilled yet, deliberately — fulfilment is slice 6. Get the owner's
-approval on the approach before implementing.
+YOUR NEXT TASK IS LAUNCH SLICE 6 — feat/stripe-webhooks-and-fulfilment, NOT STARTED. The
+webhook route, payment_events for payment events, applyPaymentSucceeded/Failed, the
+late-success re-take, and the tutor_transfers row. THE FIRST REAL PAID BOOKING BECOMES
+POSSIBLE AT THE END OF IT, which is why the design asks for it to be reviewed alone. Get the
+owner's approval on the approach before implementing.
 
-SLICE 5 ALSO OWNS THE EXPIRY SWEEP'S PAYMENT GUARD, which is still unwritten.
-expireOverdueRequests must skip a request whose payment is `processing` or `succeeded`, so a
-webhook in flight cannot have its request lapsed. Slice 5 is the first branch that writes
-operational payment rows and therefore the first where a test can exercise the predicate. IT
-MUST LAND BEFORE ANY REAL PAYMENTINTENT IS PROCESSED. Verify in git that it is still missing
-rather than assuming either way.
+START FROM AN ALIGNED STRIPE ENVIRONMENT. Slice 6 is entirely webhook-driven, and slice 4
+lost a full debugging pass to a CLI listening on a different sandbox from STRIPE_SECRET_KEY.
+Use the pinned `--api-key` form in §7 and verify where the DATA comes from — the CLI's
+banner prints its stored account even when --api-key has correctly retargeted the calls, so
+the banner is not the check.
 
-FOUR THINGS SLICE 5 MUST NOT UNDO:
+WHAT SLICE 5 DELIBERATELY LEFT UNDONE, FOR YOU TO DO: a successful Stripe payment currently
+leaves the ILR `awaiting_payment`, the reservation not `booking_confirmed`, and no
+tutor_transfers row — verified against real Stripe. That is the boundary, not a bug. Keep
+fulfilment webhook-authoritative: reaching a browser success page must never fulfil
+anything.
 
-  1. The zero-price invariant. payments.payments enforces lesson_amount_minor > 0, because
-     services.service_versions has NO price constraint of its own and slice 5 prices
-     server-side straight from that column. Not free-lesson support; the pure pricing
-     function stays defined at zero.
+FIVE THINGS SLICE 6 MUST NOT UNDO:
 
-  2. The Accounts v2 model. Do NOT enable v1 compatibility in the Stripe Dashboard, do not
-     reintroduce charges_enabled (v2 does not expose it and it gates nothing under separate
-     charges and transfers), and do not request a merchant configuration — a recipient is
-     not the merchant of record, which is the whole point.
+  1. The expiry sweep's payment guard, which landed in slice 5. expireOverdueRequests skips
+     any selected request whose payment is `processing` or `succeeded`. It is NOT redundant
+     with the ILR guard: the ILR only becomes `fulfilled` when your webhook applies.
 
-  3. The readiness rule: transfers capability active AND payouts capability active. A tutor
-     who is not payable must not be offered for a paid booking.
+  2. The zero-price invariant. payments.payments enforces lesson_amount_minor > 0, because
+     services.service_versions has NO price constraint of its own.
 
-  4. The server-only posture of connected_accounts, and the rule that a provider account id
-     never reaches a browser, a URL or a log line.
+  3. The Accounts v2 model. Do NOT enable v1 compatibility, do not reintroduce
+     charges_enabled, and do not request a merchant configuration — a recipient is not the
+     merchant of record, which is the whole point.
 
-BEFORE LIVE MONEY, NOT BEFORE SLICE 5: losses_collector: 'application' means Studdy carries
+  4. Server-authoritative money. No amount, currency or fee is ever accepted from a browser,
+     and createPaymentForRequest has no parameter for one.
+
+  5. The key boundary: pk_test_ is the ONLY Stripe key permitted client-side. The secret
+     key, the webhook secret and any provider account id stay server-only.
+
+BEFORE LIVE MONEY, NOT BEFORE SLICE 6: losses_collector: 'application' means Studdy carries
 unresolved negative balances a tutor cannot pay back. Approved for sandbox only, and needs
 professional confirmation alongside merchant-of-record treatment. Do not treat it as
 settled.
