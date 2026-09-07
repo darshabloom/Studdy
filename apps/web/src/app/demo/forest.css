@@ -1,0 +1,83 @@
+/*
+ * THE DEMO'S IDENTITY, AND ONLY THE DEMO'S.
+ *
+ * Scoped to `[data-studdy-theme='forest']`, which the demo layout stamps on its
+ * own wrapper. Production keeps the purple identity: nothing outside this
+ * subtree can see any of it.
+ *
+ * Two kinds of override live here, and the difference matters.
+ *
+ * 1. THE FOUR BRAND ALIASES. These are the real interface. Demo code says
+ *    `bg-brand`, `text-brand-strong`, `bg-brand-tint` — never a hue — so the
+ *    demo is written against "the brand" rather than against green. If Studdy
+ *    ever adopts this identity, these four lines move into tokens.css and the
+ *    demo's own code needs no edit at all.
+ *
+ * 2. RE-POINTED DESIGN-SYSTEM TOKENS. The demo reuses production components
+ *    it must not fork — `WeekCalendar` above all — and those name tokens
+ *    directly in their class lists. Re-pointing the tokens rethemes them
+ *    without touching a line of shared code.
+ *
+ *    The consequential one is `status-success`. In the purple system a
+ *    confirmed lesson is a PALE GREEN TINT sitting beside PALE LAVENDER
+ *    availability: two washes of similar weight, so committed time and free
+ *    time look alike at a glance. Here success is inverted to a SOLID forest
+ *    fill with cream text. Solid means sold, tint means available — the
+ *    distinction reads before anything is decoded, and it costs no new colour.
+ *
+ *    `status-warning` becomes clay, which is the only colour in the demo that
+ *    ever means a clock is running.
+ *
+ * Generic "saved / updated / sent" feedback deliberately does NOT become
+ * green. Forest is spent on three things only: the primary action, a
+ * committed lesson, and the current relationship.
+ */
+
+[data-studdy-theme='forest'] {
+  /* 1 — the brand, by role */
+  --color-brand: #1e5340;
+  --color-brand-strong: #14332a;
+  --color-brand-tint: #e4ede4;
+  --color-brand-contrast: #faf7f1;
+
+  /* 2a — warm neutrals: the ~85% of the interface that is not brand */
+  --color-surface-page: #faf7f1;
+  --color-surface-card: #ffffff;
+  --color-surface-card-secondary: #f5f1e9;
+  --color-surface-border: #e4ded2;
+  --color-text-primary: #1c1a17;
+  --color-text-secondary: #55504a;
+  --color-text-muted: #7c766d;
+  --color-text-on-brand: #faf7f1;
+  --color-focus-ring: #1e5340;
+
+  /* 2b — components that name the purple ramp directly (WeekCalendar) */
+  --color-brand-purple: #1e5340;
+  --color-brand-purple-deep: #14332a;
+  --color-brand-purple-mid: #2a6a52;
+  --color-brand-lavender: #e4ede4;
+
+  /* 2c — solid means sold */
+  --color-status-success: #faf7f1;
+  --color-status-success-bg: #1e5340;
+  --color-status-success-border: #14332a;
+
+  /* 2d — clay: a deadline is running, and nothing else */
+  --color-status-warning: #8a4b14;
+  --color-status-warning-bg: #faefe0;
+  --color-status-warning-border: #ebd5b4;
+
+  /* 2e — information carries no hue at all */
+  --color-status-information: #55504a;
+  --color-status-information-bg: #f5f1e9;
+  --color-status-information-border: #e4ded2;
+
+  /* 2f — critical stays restrained */
+  --color-status-critical: #9b3128;
+  --color-status-critical-bg: #faeae7;
+  --color-status-critical-border: #edcfc9;
+
+  --color-status-neutral: #55504a;
+  --color-status-neutral-bg: #f5f1e9;
+  --color-status-neutral-border: #e4ded2;
+}

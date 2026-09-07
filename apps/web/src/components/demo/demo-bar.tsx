@@ -7,17 +7,14 @@ import type { ReactNode } from 'react';
 /**
  * THE DEMO'S ONLY PERSISTENT CHROME.
  *
- * Three jobs, and nothing else, because a control bar competing with the
- * product underneath it defeats the point of showing the product.
+ * Three jobs and nothing else, because a control bar competing with the product
+ * underneath it defeats the point of showing the product.
  *
- * 1. SAY WHAT THIS IS. Every screen states that the data is invented. A demo
- *    that looks this much like the real thing has an obligation to be obvious
- *    about it — nobody should have to wonder whether they are looking at real
- *    families and real tutors.
- * 2. Let the viewer switch sides. The two-sidedness is the product, and it is
- *    lost if seeing the tutor's half means starting over.
- * 3. Let the viewer start again — which, because the demo keeps no state, is
- *    simply a link home.
+ *   1. SAY WHAT THIS IS. A demo that looks this much like the real thing has an
+ *      obligation to be obvious that the people in it are invented.
+ *   2. Let a reviewer switch sides. The two-sidedness is the product, and it is
+ *      lost if seeing the tutor's half means starting over.
+ *   3. Let them start again — which, because the demo keeps no state, is a link.
  */
 export function DemoBar(): ReactNode {
   const pathname = usePathname();
@@ -28,33 +25,33 @@ export function DemoBar(): ReactNode {
       : null;
 
   return (
-    <div className="sticky top-0 z-[1030] border-b border-brand-purple/20 bg-brand-purple-deep text-text-on-brand">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2">
+    <div className="sticky top-0 z-[1030] border-b border-brand-strong bg-brand-strong text-brand-contrast">
+      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-2">
         <Link href="/demo" className="font-display text-lg font-semibold">
           Studdy
         </Link>
-        <span className="rounded-[var(--radius-pill)] border border-white/25 bg-white/10 px-2.5 py-0.5 text-xs font-medium">
-          Demo mode — sample data
+        <span className="rounded-full border border-brand-contrast/25 bg-brand-contrast/10 px-2.5 py-0.5 text-[11px] font-medium">
+          Demo &mdash; sample data
         </span>
 
         <div className="ml-auto flex items-center gap-1">
-          <SideLink href="/demo/parent/tutors" active={side === 'parent'}>
+          <BarLink href="/demo/parent" active={side === 'parent'}>
             Parent
-          </SideLink>
-          <SideLink href="/demo/tutor" active={side === 'tutor'}>
+          </BarLink>
+          <BarLink href="/demo/tutor" active={side === 'tutor'}>
             Tutor
-          </SideLink>
-          <span aria-hidden className="mx-1 h-4 w-px bg-white/25" />
-          <SideLink href="/demo" active={false}>
+          </BarLink>
+          <span aria-hidden className="mx-1 h-4 w-px bg-brand-contrast/25" />
+          <BarLink href="/demo" active={false}>
             Restart
-          </SideLink>
+          </BarLink>
         </div>
       </div>
     </div>
   );
 }
 
-function SideLink({
+function BarLink({
   href,
   active,
   children,
@@ -67,10 +64,11 @@ function SideLink({
     <Link
       href={href}
       aria-current={active ? 'true' : undefined}
-      className={[
-        'rounded-[var(--radius-gentle)] px-2.5 py-1 text-xs font-medium transition-colors',
-        active ? 'bg-white text-brand-purple-deep' : 'text-white/80 hover:bg-white/15 hover:text-white',
-      ].join(' ')}
+      className={`rounded-[4px] px-2.5 py-1 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-contrast ${
+        active
+          ? 'bg-brand-contrast text-brand-strong'
+          : 'text-brand-contrast/80 hover:bg-brand-contrast/15 hover:text-brand-contrast'
+      }`}
     >
       {children}
     </Link>

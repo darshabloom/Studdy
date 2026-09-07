@@ -1,95 +1,123 @@
-import Link from 'next/link';
-import { Button, Card } from '@studdy/design-system';
-import { DemoTutorResponse } from '@/components/demo/demo-tutor-response';
-import { DemoTutorShell } from '@/components/demo/demo-tutor-shell';
+import { notFound } from 'next/navigation';
+import { TutorShell } from '@/components/demo/demo-shells';
+import { DemoAcceptForm } from '@/components/demo/demo-accept-form';
 import {
-  TutorRequestStatus,
-  formatDeadline,
-  formatLessonDateTime,
-  formatMoney,
-} from '@/components/requests/request-status';
-import { DEMO_FAMILY } from '@/lib/demo/fixtures';
-import { demoStory } from '@/lib/demo/story';
+  Aside,
+  Chip,
+  DemoButton,
+  Disc,
+  Fact,
+  Facts,
+  PageHead,
+  SectionLine,
+} from '@/components/demo/kit';
+import { formatDeadline, formatLessonDateTime } from '@/components/requests/request-status';
+import { money, serviceById } from '@/lib/demo/fixtures';
+import { requestBySlug } from '@/lib/demo/schedule';
+import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'Lesson request' };
 
 /**
- * INSPECT AND ANSWER — the one screen where a tutor does something.
+ * INSPECT AND ANSWER — the one tutor screen where something is decided.
  *
- * Accepting is a choice of ONE time from the ones offered. The copy is careful
- * that accepting HOLDS the time rather than books it: the family still has to
- * choose this tutor and then pay, and a tutor who thinks a lesson is confirmed
- * when it is not will keep the slot free for nothing.
- *
- * The buttons are links. There is no server action, nothing is written, and the
- * accepted state lives at its own URL — which is what makes the demo repeatable.
+ * The copy is careful that accepting HOLDS the time rather than books it: the
+ * family still has to choose this tutor and then pay, and a tutor who believes
+ * a hold is a booking keeps an hour free for nothing.
  */
-export default function DemoTutorRequestPage() {
-  const story = demoStory();
+export default async function TutorRequestPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const now = new Date();
+  const request = requestBySlug(slug, now);
+  if (request === null) notFound();
+
+  const service = serviceById(request.serviceId);
 
   return (
-    <DemoTutorShell current="inspect">
-      <Button variant="quiet" size="sm" asChild>
-        <Link href="/demo/tutor/requests">← Back to requests</Link>
-      </Button>
+    <TutorShell active="/demo/tutor/requests">
+      <DemoButton href="/demo/tutor/requests" tone="quiet" size="sm">
+        &larr; All requests
+      </DemoButton>
 
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-text-muted">{story.tutorRequestReference}</p>
-          <h1 className="font-display text-2xl font-semibold text-brand-purple-deep">
-            {DEMO_FAMILY.subjectDisplayName} with {DEMO_FAMILY.studentPreferredName}
-          </h1>
+      <div className="mt-4 flex items-start gap-4">
+        <Disc initials={request.studentInitials} size="lg" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[12.5px] text-text-muted">{request.reference}</p>
+          <PageHead
+            title={`${request.studentFirstName} · Year ${String(request.schoolYear)}`}
+            sub={`${request.parentName} · ${service?.name ?? 'Maths'}`}
+          />
         </div>
-        <TutorRequestStatus statusCode="sent" />
+        {request.urgent ? (
+          <Chip tone="attention">
+            Reply by {formatDeadline(request.respondByAt, PLATFORM_TIME_ZONE)}
+          </Chip>
+        ) : request.isExistingStudent ? (
+          <Chip tone="current">Your student</Chip>
+        ) : (
+          <Chip tone="ghost">New family</Chip>
+        )}
       </div>
 
-      <Card className="mt-6">
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <Pair label="Lesson length" value={`${String(story.durationMinutes)} minutes`} />
-          <Pair label="Format" value={story.formatCode === 'online' ? 'Online' : 'In person'} />
-          <Pair
-            label="Your price"
-            value={formatMoney(story.priceAmountMinor, story.currencyCode)}
-          />
-          <Pair label="Reply by" value={formatDeadline(story.respondByAt, story.timeZone)} />
-          <Pair label="Year" value={DEMO_FAMILY.schoolYearCode} />
-        </dl>
-
-        <div className="mt-4 border-t border-surface-border pt-4">
-          <h2 className="text-sm font-semibold text-text-primary">From the family</h2>
-          <p className="mt-1 text-text-secondary">{DEMO_FAMILY.notesForTutors}</p>
+      <section className="mt-8">
+        <SectionLine title="What they are asking for" />
+        <div className="mt-3 grid gap-x-10 gap-y-0 sm:grid-cols-2">
+          <Facts>
+            <Fact label="Lesson length" value={`${String(request.durationMinutes)} minutes`} />
+            <Fact label="Format" value={request.format === 'online' ? 'Online' : 'In person'} />
+            <Fact label="Year" value={`Year ${String(request.schoolYear)}`} />
+          </Facts>
+          <Facts>
+            <Fact label="Service" value={service?.name ?? 'Maths'} />
+            <Fact label="Your rate for this lesson" value={money(request.priceMinor)} />
+            <Fact
+              label="Reply by"
+              value={formatDeadline(request.respondByAt, PLATFORM_TIME_ZONE)}
+            />
+          </Facts>
         </div>
-      </Card>
+      </section>
 
-      <Card className="mt-6">
-        <h2 className="text-lg font-semibold">Can you do one of these times?</h2>
-        <p className="mt-1 text-sm text-text-secondary">
-          Accepting holds the time on your calendar while the family decides. You can accept one
-          time.
+      <section className="mt-8">
+        <SectionLine title="From the family" />
+        <p className="mt-3 max-w-[68ch] text-[15px] leading-relaxed text-text-secondary">
+          {request.note}
         </p>
+      </section>
 
-        <DemoTutorResponse
-          options={story.offered.map((time) => ({
-            iso: time.at.toISOString(),
-            label: formatLessonDateTime(time.at, story.timeZone),
-          }))}
-        />
-
-        <div className="mt-5 border-t border-surface-border pt-4">
-          <Button variant="quiet" size="sm" asChild>
-            <Link href="/demo/tutor/requests">Decline — none of these work</Link>
-          </Button>
+      {request.isExistingStudent && request.student !== null ? (
+        <div className="mt-8">
+          <Aside title={`You already teach ${request.studentFirstName}`}>
+            {request.student.standing}. {request.student.lessonsSoFar} lessons so far.
+          </Aside>
         </div>
-      </Card>
-    </DemoTutorShell>
-  );
-}
+      ) : (
+        <div className="mt-8">
+          <Aside title="This family is new to you">
+            Nothing here is a commitment beyond the one lesson. If it goes well, they can ask for a
+            standing slot afterwards.
+          </Aside>
+        </div>
+      )}
 
-function Pair({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-text-secondary">{label}</dt>
-      <dd className="font-medium">{value}</dd>
-    </div>
+      <section className="mt-9">
+        <SectionLine title="Can you do one of these times?" />
+        <p className="mt-3 text-[13.5px] text-text-secondary">
+          Accepting holds the time on your calendar while the family decides. You can accept one.
+        </p>
+        <DemoAcceptForm
+          options={request.offered.map((option) => ({
+            id: option.at.toISOString(),
+            label: formatLessonDateTime(option.at, PLATFORM_TIME_ZONE),
+          }))}
+          acceptHref={`/demo/tutor/requests/${request.slug}/accepted`}
+          declineHref="/demo/tutor/requests"
+        />
+      </section>
+    </TutorShell>
   );
 }

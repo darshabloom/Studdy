@@ -28,6 +28,23 @@
   --color-text-muted: #6f6862;
   --color-text-on-brand: #ffffff;
 
+  /*
+   * BRAND ALIASES — what the brand IS, not what colour it happens to be.
+   *
+   * Every screen that wants "the brand" should reach for these four rather
+   * than for `brand-purple`, so the identity can be re-pointed in one place
+   * instead of in every file that ever mentioned a hue. They map to the
+   * existing purple here, so nothing rendered today moves by a pixel.
+   *
+   * The portfolio demo re-points them to a forest palette inside its own
+   * subtree (`app/demo/forest.css`). If that identity is ever adopted for the
+   * product, the change lands on these four lines and nowhere else.
+   */
+  --color-brand: var(--color-brand-purple);
+  --color-brand-strong: var(--color-brand-purple-deep);
+  --color-brand-tint: var(--color-brand-lavender);
+  --color-brand-contrast: var(--color-text-on-brand);
+
   /* Interactive */
   --color-action-primary: #6d28d9;
   --color-action-primary-hover: #5b21b6;
