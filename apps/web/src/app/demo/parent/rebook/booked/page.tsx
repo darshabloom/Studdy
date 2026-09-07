@@ -1,5 +1,5 @@
-import { WeekCalendar } from '@studdy/design-system';
 import { ParentShell } from '@/components/demo/demo-shells';
+import { DemoCalendar } from '@/components/demo/demo-calendar';
 import {
   Chip,
   Confirmed,
@@ -12,10 +12,9 @@ import {
   SectionLine,
 } from '@/components/demo/kit';
 import { formatLessonDateTime } from '@/components/requests/request-status';
-import { profileCalendarWindow } from '@/lib/availability/calendar-projection';
 import { JACOB, STACEY, money, serviceById } from '@/lib/demo/fixtures';
-import { staceyWeekBlocks } from '@/lib/demo/schedule';
-import { rebookStory } from '@/lib/demo/stories';
+import { familyWeekBlocks } from '@/lib/demo/schedule';
+import { chosenTimes, rebookStory } from '@/lib/demo/stories';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'This lesson is booked' };
@@ -32,10 +31,23 @@ export const metadata = { title: 'This lesson is booked' };
  * own side, computed once in `schedule.ts`. That is the point of the whole
  * demo: one lesson, two sides, and they cannot disagree.
  */
-export default function RebookBookedPage() {
+export default async function RebookBookedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ time?: string | string[] }>;
+}) {
+  const { time } = await searchParams;
   const now = new Date();
-  const story = rebookStory(now);
-  const blocks = staceyWeekBlocks(story.week.days, now, {
+  const story = rebookStory(now, chosenTimes(time));
+  /*
+   * THE FAMILY PROJECTION, not the tutor's.
+   *
+   * Priya is looking at Stacey's week. She may see Jacob's lessons and her own
+   * new booking; every other family's lesson is real, occupies the hour, and is
+   * labelled `Booked`. Using the tutor projection here is exactly the mistake
+   * that put another child's name on this screen once already.
+   */
+  const blocks = familyWeekBlocks(story.week.days, now, JACOB.slug, {
     extraLesson: {
       at: story.accepted,
       durationMinutes: story.durationMinutes,
@@ -94,14 +106,13 @@ export default function RebookBookedPage() {
             out of her availability.
           </p>
           <div className="mt-4">
-            <WeekCalendar
+            <DemoCalendar
               blocks={blocks}
-              window={profileCalendarWindow(blocks)}
               dayLabels={story.week.dayLabels}
+              todayIndex={story.week.todayIndex}
+              size="comfortable"
               ariaLabel={`Stacey's week, ${story.week.rangeLabel}`}
-              {...(story.week.todayIndex >= 0
-                ? { now: { dayIndex: story.week.todayIndex, minutes: 9 * 60 } }
-                : {})}
+              legend={{ once: true }}
             />
           </div>
         </section>

@@ -4,6 +4,7 @@ import { availabilityView, type AvailabilityView } from '@/lib/discovery/availab
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 import {
   ACTIVE_STUDENTS,
+  EXCEPTIONS,
   JACOB,
   REFERENCES,
   STACEY,
@@ -263,7 +264,10 @@ export function inboxRequests(now: Date = new Date()): readonly DemoRequest[] {
   noonTomorrow.setHours(12, 0, 0, 0);
 
   const leo = studentBySlug('leo');
-  if (leo === null) throw new Error('schedule: Leo is missing from the fixtures');
+  const mia = studentBySlug('mia');
+  if (leo === null || mia === null) {
+    throw new Error('schedule: a student the inbox depends on is missing from the fixtures');
+  }
 
   return [
     {
@@ -309,6 +313,24 @@ export function inboxRequests(now: Date = new Date()): readonly DemoRequest[] {
       isExistingStudent: true,
     },
     {
+      reference: REFERENCES.mia,
+      slug: 'mia-follow-up',
+      student: mia,
+      studentFirstName: mia.firstName,
+      studentInitials: mia.initials,
+      schoolYear: mia.schoolYear,
+      parentName: mia.parentName,
+      serviceId: mia.serviceId,
+      durationMinutes: 60,
+      format: 'in_person',
+      priceMinor: priceFor(60),
+      note: 'Mia really enjoyed the trial and would like to carry on. Could we keep the same Monday time each week?',
+      offered: [offered(slot(days, 'Mon', 15.5, now), 60)],
+      respondByAt: new Date(now.getTime() + 3 * 86_400_000),
+      urgent: false,
+      isExistingStudent: true,
+    },
+    {
       reference: REFERENCES.chloe,
       slug: 'chloe-first-lesson',
       student: null,
@@ -337,9 +359,33 @@ export function requestBySlug(slug: string, now: Date = new Date()): DemoRequest
   return inboxRequests(now).find((request) => request.slug === slug) ?? null;
 }
 
+
 /* ------------------------------------------------------------------ *
- * Calendar blocks
+ * WHO IS LOOKING — the privacy boundary, crossed once and in one place
  * ------------------------------------------------------------------ */
+
+/**
+ * A calendar always has an audience, and the audience decides what a block is
+ * allowed to say.
+ *
+ * `tutor` is Stacey looking at her own week: she sees her students by name,
+ * because they are hers. A `{ family }` audience is a parent looking at that
+ * same week to find a free hour, and they may see only their OWN child. Every
+ * other lesson is real, occupies real time, and is labelled `Booked` — the time
+ * is honest, the person is not disclosed.
+ *
+ * ENFORCED HERE, NOT ON THE PAGES. A page that forgets is a page that shows a
+ * stranger another family's child, and "remember to relabel it" is not a
+ * boundary. A test asserts that no other student's name survives a family
+ * audience.
+ */
+export type Audience = 'tutor' | { readonly family: string };
+
+function labelFor(audience: Audience, student: DemoStudent, once: boolean): string {
+  if (audience === 'tutor') return once ? student.firstName + ' \u00b7 1\u00d7' : student.firstName;
+  if (student.slug === audience.family) return student.firstName;
+  return 'Booked';
+}
 
 function columnOf(days: readonly WeekDay[], at: Date): number {
   return days.findIndex((day) => at >= day.startAt && at < day.endAt);
@@ -349,68 +395,139 @@ function minutesInto(day: WeekDay, at: Date): number {
   return Math.round((at.getTime() - day.startAt.getTime()) / 60_000);
 }
 
-export interface StaceyWeekOptions {
-  /** Draw the time a pending request is holding, in clay. */
+/* ------------------------------------------------------------------ *
+ * One-off availability changes
+ * ------------------------------------------------------------------ */
+
+export interface DemoExceptionOccurrence {
+  readonly id: string;
+  readonly at: Date;
+  readonly endAt: Date;
+  readonly opens: boolean;
+  readonly reason: string;
+  readonly day: WeekDay;
+}
+
+/** The one-off changes that actually fall inside `days`. */
+export function exceptionsIn(
+  days: readonly WeekDay[],
+  now: Date = new Date(),
+): readonly DemoExceptionOccurrence[] {
+  return days.flatMap((day) =>
+    EXCEPTIONS.filter((exception) => weekdayOf(day) === exception.weekday).flatMap((exception) => {
+      const at = instantAt(day, exception.startMinutes);
+      const endAt = instantAt(day, exception.endMinutes);
+      if (endAt <= now) return [];
+      return [
+        {
+          id: exception.id + '-' + day.date,
+          at,
+          endAt,
+          opens: exception.opens,
+          reason: exception.reason,
+          day,
+        },
+      ];
+    }),
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * The week, for a given audience
+ * ------------------------------------------------------------------ */
+
+export interface WeekOptions {
+  readonly audience: Audience;
+  /** Draw the time a pending request is holding, in clay. Tutor-side only. */
   readonly includeHolds?: boolean;
+  /** Include one-off availability changes as bookable time. */
+  readonly includeExceptions?: boolean;
   /** An extra confirmed lesson the story has just created. */
-  readonly extraLesson?: { readonly at: Date; readonly durationMinutes: number; readonly label: string } | null;
+  readonly extraLesson?:
+    | { readonly at: Date; readonly durationMinutes: number; readonly label: string }
+    | null;
+}
+
+interface Claim {
+  readonly at: Date;
+  readonly endAt: Date;
+  readonly label: string;
+  readonly role: 'lesson' | 'hold';
 }
 
 /**
- * Stacey's week as the calendar draws it.
+ * Stacey's week as a calendar draws it, for whoever is looking.
  *
  * A committed lesson does not sit ON TOP of the availability it consumed — it
  * REPLACES that hour, and the band around it is split. Drawing both would
  * overstate the time she has free and would render as a tinted smudge rather
  * than as a lesson.
  */
-export function staceyWeekBlocks(
+export function weekBlocks(
   days: readonly WeekDay[],
-  now: Date = new Date(),
-  options: StaceyWeekOptions = {},
+  now: Date,
+  options: WeekOptions,
 ): readonly CalendarBlock[] {
-  const { includeHolds = false, extraLesson = null } = options;
+  const { audience, includeHolds = false, includeExceptions = true, extraLesson = null } = options;
 
-  const committed = committedLessons(days, now).map((lesson) => ({
+  const claims: Claim[] = committedLessons(days, now).map((lesson) => ({
     at: lesson.at,
     endAt: lesson.endAt,
-    label: lesson.student.firstName,
-    once: lesson.kind !== 'weekly',
+    label: labelFor(audience, lesson.student, lesson.kind !== 'weekly'),
+    role: 'lesson' as const,
   }));
 
   if (extraLesson !== null) {
-    committed.push({
+    claims.push({
       at: extraLesson.at,
       endAt: new Date(extraLesson.at.getTime() + extraLesson.durationMinutes * 60_000),
       label: extraLesson.label,
-      once: true,
+      role: 'lesson',
     });
   }
 
-  const holds = includeHolds
-    ? inboxRequests(now).flatMap((request) => {
-        const first = request.offered[0];
-        if (first === undefined) return [];
-        return [
-          {
-            at: first.at,
-            endAt: new Date(first.at.getTime() + first.durationMinutes * 60_000),
-            label: 'Requested',
-          },
-        ];
-      })
-    : [];
+  if (includeHolds) {
+    for (const request of inboxRequests(now)) {
+      const first = request.offered[0];
+      if (first === undefined) continue;
+      claims.push({
+        at: first.at,
+        endAt: new Date(first.at.getTime() + first.durationMinutes * 60_000),
+        label: 'Requested',
+        role: 'hold',
+      });
+    }
+  }
 
-  const taken = [...committed, ...holds];
+  const openHours: CalendarBlock[] = [
+    ...bandBlocks(STACEY.bands, days, now),
+    ...(includeExceptions
+      ? exceptionsIn(days, now)
+          .filter((exception) => exception.opens)
+          .flatMap((exception) => {
+            const column = columnOf(days, exception.at);
+            const day = days[column];
+            if (column === -1 || day === undefined) return [];
+            return [
+              {
+                id: 'exception-' + exception.id,
+                dayIndex: column,
+                startMinutes: minutesInto(day, exception.at),
+                endMinutes: minutesInto(day, exception.endAt),
+                role: 'available_once' as const,
+              },
+            ];
+          })
+      : []),
+  ];
 
   // Availability, minus every hour that has been sold or is being held.
-  const availability = bandBlocks(STACEY.bands, days, now).flatMap((block) => {
+  const availability = openHours.flatMap((block) => {
     let pieces: CalendarBlock[] = [block];
-    for (const claim of taken) {
+    for (const claim of claims) {
       const column = columnOf(days, claim.at);
-      if (column === -1) continue;
       const day = days[column];
-      if (day === undefined) continue;
+      if (column === -1 || day === undefined) continue;
       const from = minutesInto(day, claim.at);
       const to = minutesInto(day, claim.endAt);
       pieces = pieces.flatMap((piece) => {
@@ -419,10 +536,10 @@ export function staceyWeekBlocks(
         }
         return [
           ...(piece.startMinutes < from
-            ? [{ ...piece, id: `${piece.id}-a${String(from)}`, endMinutes: from }]
+            ? [{ ...piece, id: piece.id + '-a' + String(from), endMinutes: from }]
             : []),
           ...(piece.endMinutes > to
-            ? [{ ...piece, id: `${piece.id}-b${String(to)}`, startMinutes: to }]
+            ? [{ ...piece, id: piece.id + '-b' + String(to), startMinutes: to }]
             : []),
         ];
       });
@@ -430,39 +547,42 @@ export function staceyWeekBlocks(
     return pieces;
   });
 
-  const lessonBlocks: CalendarBlock[] = committed.flatMap((lesson) => {
-    const column = columnOf(days, lesson.at);
+  const claimBlocks: CalendarBlock[] = claims.flatMap((claim) => {
+    const column = columnOf(days, claim.at);
     const day = days[column];
     if (column === -1 || day === undefined) return [];
     return [
       {
-        id: `lesson-${lesson.at.toISOString()}`,
+        id: claim.role + '-' + claim.at.toISOString(),
         dayIndex: column,
-        startMinutes: minutesInto(day, lesson.at),
-        endMinutes: minutesInto(day, lesson.endAt),
-        role: 'lesson' as const,
-        label: lesson.once ? `${lesson.label} · 1×` : lesson.label,
+        startMinutes: minutesInto(day, claim.at),
+        endMinutes: minutesInto(day, claim.endAt),
+        role: claim.role,
+        label: claim.label,
       },
     ];
   });
 
-  const holdBlocks: CalendarBlock[] = holds.flatMap((hold) => {
-    const column = columnOf(days, hold.at);
-    const day = days[column];
-    if (column === -1 || day === undefined) return [];
-    return [
-      {
-        id: `hold-${hold.at.toISOString()}`,
-        dayIndex: column,
-        startMinutes: minutesInto(day, hold.at),
-        endMinutes: minutesInto(day, hold.endAt),
-        role: 'hold' as const,
-        label: hold.label,
-      },
-    ];
-  });
+  return [...availability, ...claimBlocks];
+}
 
-  return [...availability, ...lessonBlocks, ...holdBlocks];
+/** Stacey's own view. A name, because it reads better at call sites. */
+export function staceyWeekBlocks(
+  days: readonly WeekDay[],
+  now: Date = new Date(),
+  options: Omit<WeekOptions, 'audience'> = {},
+): readonly CalendarBlock[] {
+  return weekBlocks(days, now, { ...options, audience: 'tutor' });
+}
+
+/** What a family sees of the same week: their own child, and `Booked` elsewhere. */
+export function familyWeekBlocks(
+  days: readonly WeekDay[],
+  now: Date = new Date(),
+  familySlug: string = JACOB.slug,
+  options: Omit<WeekOptions, 'audience' | 'includeHolds'> = {},
+): readonly CalendarBlock[] {
+  return weekBlocks(days, now, { ...options, audience: { family: familySlug } });
 }
 
 /** What Stacey earns across `days`, after Studdy's cut comes out of the price. */

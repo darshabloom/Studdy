@@ -124,15 +124,52 @@ export const STACEY = {
     'references_completed',
     'studdy_interviewed',
   ],
-  /** When she is WILLING to teach. What she has committed to lives in `schedule.ts`. */
+  /**
+   * When she is WILLING to teach, every week. What she has committed to lives
+   * in `schedule.ts`, and one-off changes live in `EXCEPTIONS` below.
+   *
+   * WEEKDAY AFTERNOONS ONLY, and that is a calendar decision as much as a
+   * fixture one. A single Saturday-morning band in here would drag the shared
+   * vertical axis of every calendar in the demo from 15:00–20:00 out to
+   * 09:00–20:00 — eleven hours, eight of them empty, on a tutor who teaches
+   * four. Her Saturday work is genuinely occasional, so it is modelled as what
+   * it actually is: a one-off change.
+   */
   bands: [
     { weekday: 'Mon' as Weekday, startMinutes: 15.5 * HOUR, endMinutes: 19.5 * HOUR },
     { weekday: 'Tue' as Weekday, startMinutes: 15.5 * HOUR, endMinutes: 19.5 * HOUR },
     { weekday: 'Wed' as Weekday, startMinutes: 15.5 * HOUR, endMinutes: 19.5 * HOUR },
     { weekday: 'Thu' as Weekday, startMinutes: 15.5 * HOUR, endMinutes: 19.5 * HOUR },
-    { weekday: 'Sat' as Weekday, startMinutes: 9 * HOUR, endMinutes: 12 * HOUR },
   ] as readonly DemoBand[],
 } as const;
+
+/**
+ * A one-off change to the regular week: a date opened or closed on its own,
+ * without touching the standing hours.
+ *
+ * `opens` widens the calendar's axis for that day only, which is exactly why
+ * the demo has one — it is the case the Availability page needs to explain, and
+ * the reason her Saturday is not a weekly band.
+ */
+export interface DemoException {
+  readonly id: string;
+  readonly weekday: Weekday;
+  readonly startMinutes: number;
+  readonly endMinutes: number;
+  readonly opens: boolean;
+  readonly reason: string;
+}
+
+export const EXCEPTIONS: readonly DemoException[] = [
+  {
+    id: 'exam-saturday',
+    weekday: 'Sat',
+    startMinutes: 9 * HOUR,
+    endMinutes: 12 * HOUR,
+    opens: true,
+    reason: 'Extra hours for exam season',
+  },
+];
 
 /* ------------------------------------------------------------------ *
  * THE STUDENTS — five relationships, five different shapes
@@ -432,6 +469,7 @@ export const REFERENCES = {
   discoveryTutor: 'TREQ-3XM7K1',
   leo: 'TREQ-6BN4T8',
   chloe: 'TREQ-2VD9L5',
+  mia: 'TREQ-5RK8W2',
 } as const;
 
 /** How long a chosen tutor's time is held while the family pays. */

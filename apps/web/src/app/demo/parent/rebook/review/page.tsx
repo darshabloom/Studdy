@@ -9,18 +9,25 @@ import {
   SectionLine,
 } from '@/components/demo/kit';
 import { JACOB, STACEY, money, serviceById } from '@/lib/demo/fixtures';
-import { intervalLabel, rebookStory } from '@/lib/demo/stories';
+import { chosenTimes, intervalLabel, rebookStory, withTimes } from '@/lib/demo/stories';
 
 export const metadata = { title: 'Check this over' };
 
-export default function RebookReviewPage() {
+export default async function RebookReviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ time?: string | string[] }>;
+}) {
+  const { time } = await searchParams;
+  const picked = chosenTimes(time);
   const now = new Date();
-  const story = rebookStory(now);
+  // The times the viewer actually chose, carried from the picker.
+  const story = rebookStory(now, picked);
   const service = serviceById(JACOB.serviceId);
 
   return (
     <ParentShell active="/demo/parent">
-      <DemoButton href="/demo/parent/rebook/times" tone="quiet" size="sm">
+      <DemoButton href={withTimes('/demo/parent/rebook/times', picked)} tone="quiet" size="sm">
         &larr; Back
       </DemoButton>
 
@@ -82,7 +89,7 @@ export default function RebookReviewPage() {
       </div>
 
       <div className="mt-7 flex flex-wrap items-center gap-4">
-        <DemoButton href="/demo/parent/rebook/sent" size="lg">
+        <DemoButton href={withTimes('/demo/parent/rebook/sent', picked)} size="lg">
           Send this request
         </DemoButton>
       </div>

@@ -1,74 +1,37 @@
 import { notFound } from 'next/navigation';
+import type { ReactNode } from 'react';
 import { TutorShell } from '@/components/demo/demo-shells';
 import {
   Chip,
   DemoButton,
   DemoNote,
   Disc,
+  EditAffordance,
   Fact,
   Facts,
-  PageHead,
-  SectionLine,
+  Panel,
+  PanelBody,
+  PanelHead,
 } from '@/components/demo/kit';
 import { formatLessonDateTime } from '@/components/requests/request-status';
 import { money } from '@/lib/demo/fixtures';
+import { lessonRecord } from '@/lib/demo/lesson-records';
 import { lessonById, serviceNameFor } from '@/lib/demo/schedule';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'Lesson' };
 
 /**
- * ONE TAUGHT LESSON — the post-lesson artefacts.
+ * ONE TAUGHT LESSON — the record it leaves behind.
  *
- * The summary and the homework are what a family actually gets between
- * sessions, and they are the clearest signal that Studdy is about the tutoring
- * rather than about the transaction. They are written by the tutor: nothing
- * here is generated, recorded or transcribed, and the demo says so.
+ * Five labelled parts rather than a paragraph, because the value of keeping a
+ * lesson record only becomes obvious when you can see it answering the
+ * questions a parent actually has: what did they do, did he get it, where is he
+ * stuck, and what happens next. A paragraph hides all four.
+ *
+ * Written by the tutor. Studdy does not record or transcribe lessons, and the
+ * page says so rather than letting anyone assume otherwise.
  */
-
-interface Artefact {
-  readonly summary: string;
-  readonly homework: readonly string[];
-  readonly went: string;
-}
-
-const ARTEFACTS: Readonly<Record<string, Artefact>> = {
-  'Quadratic equations': {
-    summary:
-      'Worked through factorising quadratics where the leading coefficient is not 1. Jacob had the method but was losing signs on the middle term, so we slowed down and wrote every expansion out in full before collecting. By the end he was getting them without the intermediate line.',
-    homework: [
-      'Exercise 7C, questions 1–8 — factorise only, no solving',
-      'Write out one full expansion for any question you get wrong',
-    ],
-    went: 'Better than last week. The sign errors are nearly gone.',
-  },
-  'Simultaneous equations': {
-    summary:
-      'Substitution and elimination side by side, on the same three problems, so Jacob could see when each one is less work. He defaults to substitution even when elimination is obviously faster — worth watching.',
-    homework: ['Exercise 6B, questions 4–10', 'For each, note which method you chose and why'],
-    went: 'Solid. Needs to trust elimination more.',
-  },
-  'Factorising practice': {
-    summary:
-      'Consolidation session. Difference of two squares, common factors, and simple trinomials mixed together so the choice of method is part of the question rather than given by the exercise heading.',
-    homework: ['Mixed set on the sheet — 12 questions, 20 minutes, timed'],
-    went: 'Good. Speed is the remaining gap.',
-  },
-  'Ratio word problems': {
-    summary:
-      'Sophie can do the arithmetic and stalls at turning a sentence into a ratio. We spent the lesson only on the translation step and did not solve a single one — deliberately.',
-    homework: ['Five worded problems: write the ratio, do not solve'],
-    went: 'A real shift. She saw the pattern by the fourth one.',
-  },
-};
-
-const DEFAULT_ARTEFACT: Artefact = {
-  summary:
-    'Covered the planned material and checked the previous week’s homework at the start. Nothing outstanding.',
-  homework: ['Practice set from the workbook'],
-  went: 'Steady.',
-};
-
 export default async function TutorLessonPage({
   params,
 }: {
@@ -79,7 +42,7 @@ export default async function TutorLessonPage({
   const lesson = lessonById(slug, now);
   if (lesson === null) notFound();
 
-  const artefact = (lesson.topic === null ? undefined : ARTEFACTS[lesson.topic]) ?? DEFAULT_ARTEFACT;
+  const record = lessonRecord(lesson.topic);
 
   return (
     <TutorShell active="/demo/tutor/lessons">
@@ -87,71 +50,135 @@ export default async function TutorLessonPage({
         &larr; All lessons
       </DemoButton>
 
-      <div className="mt-4 flex items-start gap-4">
-        <Disc initials={lesson.student.initials} size="lg" />
-        <div className="min-w-0 flex-1">
-          <PageHead
-            title={lesson.topic ?? 'Lesson'}
-            sub={`${lesson.student.firstName} · ${formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}`}
-          />
-        </div>
-        <Chip tone={lesson.status === 'completed' ? 'neutral' : 'current'}>
-          {lesson.status === 'completed' ? 'Completed' : 'Booked'}
-        </Chip>
-      </div>
-
-      <section className="mt-8 max-w-[68ch]">
-        <SectionLine title="Lesson summary" />
-        <p className="mt-3 text-[15px] leading-relaxed text-text-secondary">{artefact.summary}</p>
-      </section>
-
-      <section className="mt-8 max-w-[68ch]">
-        <SectionLine title="Homework set" />
-        <ul className="mt-3 flex flex-col gap-2">
-          {artefact.homework.map((task) => (
-            <li
-              key={task}
-              className="flex gap-3 border-b border-surface-border pb-2 text-[14.5px] text-text-secondary last:border-b-0"
-            >
-              <span aria-hidden className="text-brand">
-                &middot;
-              </span>
-              {task}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="mt-8 grid gap-x-10 sm:grid-cols-2">
-        <div>
-          <SectionLine title="How it went" />
-          <p className="mt-3 text-[14.5px] text-text-secondary">{artefact.went}</p>
-        </div>
-        <div>
-          <SectionLine title="The lesson" />
-          <div className="mt-3">
-            <Facts>
-              <Fact label="Service" value={serviceNameFor(lesson.student)} />
-              <Fact label="Length" value={`${String(lesson.durationMinutes)} minutes`} />
-              <Fact label="Format" value={lesson.format === 'online' ? 'Online' : 'In person'} />
-              <Fact label="Paid" value={money(lesson.priceMinor)} strong />
-            </Facts>
+      <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-4">
+          <Disc initials={lesson.student.initials} size="lg" />
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-muted">
+              {lesson.student.firstName} &middot; {formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}
+            </p>
+            <h1 className="mt-1.5 font-display text-[28px] font-semibold leading-tight tracking-[-0.018em] text-text-primary text-balance">
+              {lesson.topic ?? 'Lesson'}
+            </h1>
           </div>
         </div>
-      </section>
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip tone={lesson.status === 'completed' ? 'neutral' : 'current'}>
+            {lesson.status === 'completed' ? 'Completed' : 'Booked'}
+          </Chip>
+          <EditAffordance label="Edit notes">
+            <p>
+              In the product you write the summary and set the homework here, and the family sees
+              both as soon as you save.
+            </p>
+          </EditAffordance>
+        </div>
+      </header>
 
-      <div className="mt-9">
-        <DemoNote title="The family sees this too">
-          The summary and homework appear on {lesson.student.parentName}&rsquo;s side as soon as you
-          save them. Written by you &mdash; Studdy does not record or transcribe lessons.
-        </DemoNote>
-      </div>
+      {record === null ? null : (
+        <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
+          <div className="flex flex-col gap-5">
+            <Panel>
+              <PanelHead title="Lesson record" meta="Written after the lesson" />
+              <PanelBody className="flex flex-col gap-5">
+                <Part label="What we covered">{record.covered}</Part>
+                <Part label="Understood well" tone="good">
+                  {record.understood}
+                </Part>
+                <Part label="Struggled with" tone="watch">
+                  {record.struggled}
+                </Part>
+                <Part label="What changed in the lesson">{record.changed}</Part>
+                <Part label="Next focus">{record.next}</Part>
+              </PanelBody>
+            </Panel>
 
-      <div className="mt-6">
-        <DemoButton href={`/demo/tutor/students/${lesson.student.slug}`} tone="tertiary" size="sm">
-          Open {lesson.student.firstName}
-        </DemoButton>
-      </div>
+            <Panel tone="hero">
+              <PanelHead title="Homework set" meta={`${String(record.homework.length)} tasks`} />
+              <PanelBody>
+                <ul className="flex flex-col gap-2.5">
+                  {record.homework.map((task) => (
+                    <li key={task} className="flex gap-3 text-[14.5px] leading-relaxed text-text-primary">
+                      <span
+                        aria-hidden
+                        className="mt-[3px] flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-[3px] border border-brand/40 bg-surface-card text-[10px] text-brand"
+                      >
+                        ✓
+                      </span>
+                      {task}
+                    </li>
+                  ))}
+                </ul>
+              </PanelBody>
+            </Panel>
+          </div>
+
+          <div className="flex flex-col gap-5">
+            <Panel>
+              <PanelHead title="The lesson" />
+              <PanelBody>
+                <Facts>
+                  <Fact label="Student" value={lesson.student.firstName} />
+                  <Fact label="Service" value={serviceNameFor(lesson.student)} />
+                  <Fact label="Length" value={`${String(lesson.durationMinutes)} minutes`} />
+                  <Fact
+                    label="Format"
+                    value={lesson.format === 'online' ? 'Online' : 'In person'}
+                  />
+                  <Fact label="Paid" value={money(lesson.priceMinor)} strong />
+                </Facts>
+                <div className="mt-4">
+                  <DemoButton
+                    href={`/demo/tutor/students/${lesson.student.slug}`}
+                    tone="tertiary"
+                    size="sm"
+                  >
+                    Open {lesson.student.firstName}
+                  </DemoButton>
+                </div>
+              </PanelBody>
+            </Panel>
+
+            <DemoNote title="The family sees this too">
+              {lesson.student.parentName} gets the summary and the homework as soon as you save
+              them. Written by you &mdash; Studdy does not record or transcribe lessons.
+            </DemoNote>
+          </div>
+        </div>
+      )}
     </TutorShell>
+  );
+}
+
+/**
+ * One labelled part of the record.
+ *
+ * `good` and `watch` are the only two that carry any colour, and they are a
+ * left rule rather than a fill: what a parent scans for is where their child is
+ * strong and where they are stuck, and those two lines should be findable
+ * without reading the other three.
+ */
+function Part({
+  label,
+  tone = 'plain',
+  children,
+}: {
+  label: string;
+  tone?: 'plain' | 'good' | 'watch';
+  children: ReactNode;
+}): ReactNode {
+  const rule =
+    tone === 'good'
+      ? 'border-l-2 border-brand pl-4'
+      : tone === 'watch'
+        ? 'border-l-2 border-status-warning pl-4'
+        : 'pl-0';
+  return (
+    <div className={rule}>
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">{label}</p>
+      <p className="mt-1.5 max-w-[66ch] text-[14.5px] leading-relaxed text-text-secondary">
+        {children}
+      </p>
+    </div>
   );
 }

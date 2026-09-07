@@ -1,5 +1,5 @@
-import { WeekCalendar } from '@studdy/design-system';
 import { TutorShell } from '@/components/demo/demo-shells';
+import { DemoCalendar } from '@/components/demo/demo-calendar';
 import {
   Aside,
   Chip,
@@ -13,7 +13,6 @@ import {
   SectionLine,
 } from '@/components/demo/kit';
 import { formatDeadline, formatLessonDateTime } from '@/components/requests/request-status';
-import { profileCalendarWindow } from '@/lib/availability/calendar-projection';
 import { CADENCE_LABEL, money } from '@/lib/demo/fixtures';
 import {
   committedLessons,
@@ -76,15 +75,14 @@ export default function TutorBookingsPage() {
       <section className="mt-8">
         <SectionLine title="This week" meta={week.rangeLabel} />
         <div className="mt-4">
-          <WeekCalendar
-            blocks={blocks}
-            window={profileCalendarWindow(blocks)}
-            dayLabels={week.dayLabels}
-            ariaLabel={`Your bookings, ${week.rangeLabel}`}
-            {...(week.todayIndex >= 0
-              ? { now: { dayIndex: week.todayIndex, minutes: 9 * 60 } }
-              : {})}
-          />
+          <DemoCalendar
+              blocks={blocks}
+              dayLabels={week.dayLabels}
+              todayIndex={week.todayIndex}
+              size="comfortable"
+              ariaLabel={`Your bookings, ${week.rangeLabel}`}
+              legend={{ held: true, once: true }}
+            />
         </div>
         <p className="mt-3 text-[12.5px] tabular-nums text-text-muted">
           {totals.lessons} lessons &middot; {(totals.minutes / 60).toFixed(1)} hours &middot;{' '}

@@ -101,7 +101,17 @@ function Shell({
         </div>
       </div>
       <div className="flex flex-1">
-        <aside className="hidden w-[228px] shrink-0 border-r border-surface-border bg-surface-card md:block">
+        {/*
+         * STICKY, AND SCROLLING ONLY IF IT HAS TO.
+         *
+         * Navigation that leaves with the content is navigation you have to
+         * scroll back up to reach — on a workspace whose pages are deliberately
+         * long, that is most of them. It is pinned below the two bars above it
+         * (the demo bar and the workspace top bar, 42px and 45px), and given
+         * its own scroll ONLY as the fallback for a nav taller than the
+         * viewport, which nine items never is at these sizes.
+         */}
+        <aside className="sticky top-[87px] hidden h-[calc(100vh-87px)] w-[228px] shrink-0 overflow-y-auto border-r border-surface-border bg-surface-card md:block">
           <nav aria-label="Workspace" className="flex flex-col gap-0.5 p-3">
             {nav.map((entry) => (
               <NavItem key={entry.label} entry={entry} active={entry.href === active} />

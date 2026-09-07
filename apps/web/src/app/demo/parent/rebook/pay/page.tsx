@@ -11,7 +11,7 @@ import {
 } from '@/components/demo/kit';
 import { formatLessonDateTime } from '@/components/requests/request-status';
 import { JACOB, STACEY, money, serviceById } from '@/lib/demo/fixtures';
-import { rebookStory } from '@/lib/demo/stories';
+import { chosenTimes, rebookStory, withTimes } from '@/lib/demo/stories';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'Pay for your lesson' };
@@ -29,9 +29,15 @@ export const metadata = { title: 'Pay for your lesson' };
  * is exactly the figure shown when the tutor was chosen. Itemising a fee the
  * parent is not being charged would invent a cost.
  */
-export default function RebookPayPage() {
+export default async function RebookPayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ time?: string | string[] }>;
+}) {
+  const { time } = await searchParams;
+  const picked = chosenTimes(time);
   const now = new Date();
-  const story = rebookStory(now);
+  const story = rebookStory(now, picked);
   const total = money(story.priceMinor);
 
   return (
@@ -85,12 +91,12 @@ export default function RebookPayPage() {
         <section className="mt-9">
           <SectionLine title="Card details" />
           <div className="mt-4">
-            <DemoPaymentForm total={total} nextHref="/demo/parent/rebook/booked" />
+            <DemoPaymentForm total={total} nextHref={withTimes('/demo/parent/rebook/booked', picked)} />
           </div>
         </section>
 
         <div className="mt-7">
-          <DemoButton href="/demo/parent/rebook/sent" tone="quiet" size="sm">
+          <DemoButton href={withTimes('/demo/parent/rebook/sent', picked)} tone="quiet" size="sm">
             &larr; Back to your request
           </DemoButton>
         </div>

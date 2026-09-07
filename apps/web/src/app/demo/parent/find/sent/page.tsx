@@ -12,14 +12,20 @@ import {
 } from '@/components/demo/kit';
 import { formatDeadline } from '@/components/requests/request-status';
 import { JACOB, money } from '@/lib/demo/fixtures';
-import { discoveryStory, intervalLabel } from '@/lib/demo/stories';
+import { chosenTimes, discoveryStory, intervalLabel, withTimes } from '@/lib/demo/stories';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'Request sent' };
 
-export default function FindSentPage() {
+export default async function FindSentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ time?: string | string[] }>;
+}) {
+  const { time } = await searchParams;
+  const picked = chosenTimes(time);
   const now = new Date();
-  const story = discoveryStory(now);
+  const story = discoveryStory(now, picked);
 
   return (
     <ParentShell active="/demo/parent/tutors">
@@ -68,7 +74,7 @@ export default function FindSentPage() {
             the moment one accepts. Nothing is held or charged until then.
           </p>
           <div className="mt-3">
-            <DemoButton href="/demo/parent/find/pay">
+            <DemoButton href={withTimes('/demo/parent/find/pay', picked)}>
               Skip the wait &mdash; {story.tutor.firstName} accepts
             </DemoButton>
           </div>

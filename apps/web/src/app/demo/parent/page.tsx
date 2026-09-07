@@ -1,22 +1,29 @@
+import type { ReactNode } from 'react';
 import { ParentShell } from '@/components/demo/demo-shells';
+import { DemoCalendar } from '@/components/demo/demo-calendar';
 import {
   Chip,
   DemoButton,
   Disc,
   Fact,
   Facts,
-  PageHead,
+  Panel,
+  PanelBody,
+  PanelHead,
   Row,
   RowList,
   RowMain,
   RowMeta,
-  SectionLine,
+  Stat,
 } from '@/components/demo/kit';
 import { formatLessonDateTime } from '@/components/requests/request-status';
-import { JACOB, PRIYA, STACEY, money, priceFor } from '@/lib/demo/fixtures';
+import { JACOB, PRIYA, STACEY, money, priceFor, serviceById } from '@/lib/demo/fixtures';
+import { lessonRecord } from '@/lib/demo/lesson-records';
 import {
   committedLessons,
   demoFortnight,
+  demoWeek,
+  familyWeekBlocks,
   lessonsForStudent,
   serviceNameFor,
 } from '@/lib/demo/schedule';
@@ -37,55 +44,100 @@ const CLOCK = new Intl.DateTimeFormat('en-NZ', {
 });
 
 /**
- * PRIYA'S HOME — one lesson and one action.
+ * PRIYA'S HOME — an account she has been using since March.
  *
- * The richness comes from HISTORY rather than from a second child: fourteen
- * lessons since March, a standing Tuesday, a named tutor. That is what makes an
- * account feel lived in, and it is what a schema demonstration cannot fake.
+ * Five visible areas, each a panel with its own weight, rather than a column of
+ * ruled lists on an open page. The previous pass read as a well-set article;
+ * what makes this a workspace is that a glance lands on the next lesson, then
+ * the relationship and the week, then the last lesson — without any of them
+ * being read.
  *
- * There is no "nothing needs you" panel. A section that renders only when it
- * has something to say is the difference between a workspace and a dashboard
- * filling its own space.
+ * THE CALENDAR IS A FAMILY PROJECTION. Priya sees Jacob by name and every other
+ * family's lesson as `Booked`. That is enforced in `familyWeekBlocks`, not
+ * here, and covered by a test — a page that has to remember is a page that
+ * eventually forgets.
  */
 export default function ParentHomePage() {
   const now = new Date();
+  const week = demoWeek(now);
   const upcoming = committedLessons(demoFortnight(now), now).filter(
     (lesson) => lesson.student.slug === JACOB.slug,
   );
   const next = upcoming[0] ?? null;
   const { past } = lessonsForStudent(JACOB.slug, now);
+  const latest = past[0] ?? null;
+  const record = lessonRecord(latest?.topic ?? null);
+  const blocks = familyWeekBlocks(week.days, now);
+  const service = serviceById(JACOB.serviceId);
+  const spentMinor = past.reduce((total, lesson) => total + lesson.priceMinor, 0n);
 
   return (
     <ParentShell active="/demo/parent">
-      {/* TIER 1 — the next lesson, and the one action worth taking. */}
-      <section className="border-b border-surface-border pb-8">
-        <PageHead
-          eyebrow={`${JACOB.firstName}’s next lesson`}
-          title={next === null ? 'Nothing booked yet' : WEEKDAY.format(next.at)}
-          sub={next === null ? undefined : `${CLOCK.format(next.at)} · your weekly slot`}
-        />
-
-        <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-4">
-          <Disc initials={STACEY.initials} size="lg" />
-          <div className="min-w-[190px] flex-1">
-            <p className="font-display text-[21px] font-medium leading-tight text-text-primary">
-              {serviceNameFor(JACOB)} with {STACEY.firstName}
-            </p>
-            <p className="mt-1 text-[12.5px] text-text-muted">
-              {JACOB.format === 'online' ? 'Online' : 'In person'} &middot;{' '}
-              {JACOB.durationMinutes} minutes &middot; {JACOB.standing}
-            </p>
-          </div>
-          <DemoButton href="/demo/parent/rebook" size="lg">
-            Book another lesson
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-muted">
+            {PRIYA.name}
+          </p>
+          <h1 className="mt-1.5 font-display text-[30px] font-semibold leading-tight tracking-[-0.018em] text-text-primary">
+            Your family
+          </h1>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <DemoButton href="/demo/parent/rebook">Book another lesson</DemoButton>
+          <DemoButton href="/demo/parent/tutors" tone="secondary">
+            Find another tutor
           </DemoButton>
         </div>
-      </section>
+      </header>
 
-      {/* TIER 3 — the relationship, as context rather than as a record. */}
-      <section className="mt-9 grid gap-x-10 gap-y-6 sm:grid-cols-2">
-        <div>
-          <SectionLine
+      {/* TIER 1 — the next lesson, the one thing the page is about. */}
+      <div className="mt-6">
+        <Panel tone="hero">
+          <PanelBody className="flex flex-wrap items-center gap-x-7 gap-y-5">
+            <div className="min-w-[136px]">
+              <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-brand-strong">
+                {JACOB.firstName}&rsquo;s next lesson
+              </p>
+              {next === null ? (
+                <p className="mt-2 font-display text-[22px] text-text-primary">Nothing booked</p>
+              ) : (
+                <>
+                  <p className="mt-2 font-display text-[23px] font-semibold leading-tight text-text-primary">
+                    {WEEKDAY.format(next.at)}
+                  </p>
+                  <p className="mt-1 text-[26px] font-semibold leading-none tabular-nums text-brand-strong">
+                    {CLOCK.format(next.at)}
+                  </p>
+                </>
+              )}
+            </div>
+
+            <span aria-hidden className="hidden h-16 w-px bg-brand/20 sm:block" />
+
+            <div className="flex min-w-[210px] flex-1 items-center gap-3.5">
+              <Disc initials={STACEY.initials} size="lg" />
+              <div className="min-w-0">
+                <p className="font-display text-[19px] font-medium leading-tight text-text-primary">
+                  {serviceNameFor(JACOB)} with {STACEY.firstName}
+                </p>
+                <p className="mt-1 text-[12.5px] text-text-muted">
+                  {JACOB.format === 'online' ? 'Online' : 'In person'} &middot;{' '}
+                  {JACOB.durationMinutes} minutes &middot; {money(priceFor(JACOB.durationMinutes))}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Chip tone="current">Weekly slot</Chip>
+                  <Chip tone="neutral">Paid</Chip>
+                </div>
+              </div>
+            </div>
+          </PanelBody>
+        </Panel>
+      </div>
+
+      {/* TIER 2 — the relationship, and the week it sits in. */}
+      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <Panel>
+          <PanelHead
             title={JACOB.firstName}
             meta={`Year ${String(JACOB.schoolYear)}`}
             action={
@@ -94,80 +146,152 @@ export default function ParentHomePage() {
               </DemoButton>
             }
           />
-          <div className="mt-3">
-            <Facts>
-              <Fact label="Subject" value={serviceNameFor(JACOB)} />
-              <Fact label="Tutor" value={STACEY.firstName} />
-              <Fact label="Since" value={`March · ${String(JACOB.lessonsSoFar)} lessons`} />
-              {/* Through the rate card, never a literal — see fixtures.RATE_MINOR. */}
-              <Fact label="Cost per lesson" value={money(priceFor(JACOB.durationMinutes))} />
-            </Facts>
-          </div>
-        </div>
+          <PanelBody>
+            <div className="flex flex-wrap gap-x-8 gap-y-5">
+              <Stat label="Lessons" value={String(JACOB.lessonsSoFar)} detail="since March" />
+              <Stat label="Tutor" value={STACEY.firstName} detail="4.9 · 340 lessons" />
+              <Stat label="Invested" value={money(spentMinor)} detail="paid to date" />
+            </div>
+            <div className="mt-5 border-t border-surface-border pt-3">
+              <Facts>
+                <Fact label="Subject" value={service?.name ?? 'Maths'} />
+                <Fact label="Standing lesson" value="Tuesdays at 4:00 pm" />
+                <Fact label="Format" value={JACOB.format === 'online' ? 'Online' : 'In person'} />
+              </Facts>
+            </div>
+          </PanelBody>
+        </Panel>
 
-        <div>
-          <SectionLine title="Coming up" meta={`${upcoming.length}`} />
-          <div className="mt-1">
+        <Panel className="min-w-0">
+          <PanelHead
+            title={`${STACEY.firstName}'s week`}
+            meta={week.rangeLabel}
+            action={
+              <DemoButton href="/demo/parent/rebook/times" tone="quiet" size="sm">
+                Find a time
+              </DemoButton>
+            }
+          />
+          <PanelBody>
+            <DemoCalendar
+              blocks={blocks}
+              dayLabels={week.dayLabels}
+              todayIndex={week.todayIndex}
+              size="compact"
+              ariaLabel={`${STACEY.firstName}'s week, ${week.rangeLabel}`}
+              legend={{ once: true }}
+            />
+            <p className="mt-3 text-[12px] text-text-muted">
+              Other families&rsquo; lessons show as booked time only.
+            </p>
+          </PanelBody>
+        </Panel>
+      </div>
+
+      {/* TIER 3 — what is booked. */}
+      <div className="mt-5">
+        <Panel>
+          <PanelHead
+            title="Upcoming lessons"
+            meta={`${upcoming.length} booked`}
+            action={
+              <DemoButton href="/demo/parent/lessons" tone="quiet" size="sm">
+                All lessons
+              </DemoButton>
+            }
+          />
+          <PanelBody className="py-1">
             <RowList>
-              {upcoming.slice(0, 3).map((lesson) => (
+              {upcoming.map((lesson) => (
                 <Row key={lesson.id}>
+                  <span className="w-[92px] shrink-0 text-[13.5px] font-semibold tabular-nums text-text-primary">
+                    {CLOCK.format(lesson.at)}
+                  </span>
                   <RowMain
-                    name={formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}
-                    detail={`${String(lesson.durationMinutes)} min · ${lesson.format === 'online' ? 'Online' : 'In person'}`}
+                    name={WEEKDAY.format(lesson.at)}
+                    detail={`${serviceNameFor(lesson.student)} with ${STACEY.firstName} · ${lesson.format === 'online' ? 'Online' : 'In person'}`}
                   />
                   <Chip tone="current">Booked</Chip>
+                  <RowMeta>{money(lesson.priceMinor)}</RowMeta>
                 </Row>
               ))}
             </RowList>
-          </div>
-        </div>
-      </section>
+          </PanelBody>
+        </Panel>
+      </div>
 
-      {/* TIER 4 — history. Cheap to build, and it is what makes it feel real. */}
-      <section className="mt-9">
-        <SectionLine
-          title="Recent lessons"
-          meta={`${past.length} taught`}
-          action={
-            <DemoButton href="/demo/parent/lessons" tone="quiet" size="sm">
-              All lessons
-            </DemoButton>
-          }
-        />
-        <div className="mt-1">
-          <RowList>
-            {past.slice(0, 4).map((lesson) => (
-              <Row key={lesson.id} href="/demo/parent/lessons">
-                <RowMain
-                  name={lesson.topic ?? 'Lesson'}
-                  detail={formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}
-                />
-                {/* Generic completion stays colourless. */}
-                <Chip tone="neutral">Completed</Chip>
-                <RowMeta>{lesson.durationMinutes} min</RowMeta>
-              </Row>
-            ))}
-          </RowList>
+      {/* TIER 4 — what happened last time. The reason a record is worth keeping. */}
+      {latest !== null && record !== null ? (
+        <div className="mt-5">
+          <Panel>
+            <PanelHead
+              title="Last lesson"
+              meta={formatLessonDateTime(latest.at, PLATFORM_TIME_ZONE)}
+              action={
+                <DemoButton href="/demo/parent/lessons" tone="quiet" size="sm">
+                  Full summary
+                </DemoButton>
+              }
+            />
+            <PanelBody>
+              <h3 className="font-display text-[19px] font-medium text-text-primary">
+                {latest.topic}
+              </h3>
+              <dl className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                <Note label="Understood well">{record.understood}</Note>
+                <Note label="Struggled with">{record.struggled}</Note>
+              </dl>
+              <div className="mt-5 border-t border-surface-border pt-4">
+                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
+                  Homework set
+                </p>
+                <ul className="mt-2 flex flex-col gap-1.5">
+                  {record.homework.map((task) => (
+                    <li key={task} className="flex gap-2.5 text-[13.5px] text-text-secondary">
+                      <span aria-hidden className="text-brand">
+                        &middot;
+                      </span>
+                      {task}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </PanelBody>
+          </Panel>
         </div>
-      </section>
+      ) : null}
 
-      {/* TIER 5 — quiet. Secondary weight, no green. */}
-      <div className="mt-9 border-t border-surface-border pt-5">
-        <p className="text-[13.5px] text-text-muted">
-          {JACOB.firstName} needs help with a subject {STACEY.firstName} does not teach?{' '}
-          <a
-            href="/demo/parent/tutors"
-            className="text-brand underline decoration-brand/40 underline-offset-4"
-          >
-            Find a tutor
-          </a>{' '}
-          &mdash; she teaches Maths and Calculus only.
-        </p>
-        <p className="mt-2 text-[12.5px] text-text-muted">
-          Signed in as {PRIYA.name}. Payment deadlines and tutor replies arrive by email; nothing is
-          sent in this demo.
-        </p>
+      {/* TIER 5 — history, quiet. */}
+      <div className="mt-5">
+        <Panel tone="quiet">
+          <PanelHead title="Earlier lessons" meta={`${Math.max(past.length - 1, 0)} more`} />
+          <PanelBody className="py-1">
+            <RowList>
+              {past.slice(1, 5).map((lesson) => (
+                <Row key={lesson.id} href="/demo/parent/lessons">
+                  <RowMain
+                    name={lesson.topic ?? 'Lesson'}
+                    detail={formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}
+                  />
+                  <Chip tone="neutral">Completed</Chip>
+                  <RowMeta>{money(lesson.priceMinor)}</RowMeta>
+                </Row>
+              ))}
+            </RowList>
+          </PanelBody>
+        </Panel>
       </div>
     </ParentShell>
+  );
+}
+
+function Note({ label, children }: { label: string; children: ReactNode }): ReactNode {
+  return (
+    <div>
+      <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
+        {label}
+      </dt>
+      <dd className="mt-1 text-[13.5px] leading-relaxed text-text-secondary">{children}</dd>
+    </div>
   );
 }

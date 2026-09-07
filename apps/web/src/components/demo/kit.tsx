@@ -400,3 +400,167 @@ export function ComingSoon({
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * Panels — the application structure
+ * ------------------------------------------------------------------ */
+
+/**
+ * A contained, raised area of a screen.
+ *
+ * THE MIDDLE GROUND the demo was missing. Ruled lists on an open page read as
+ * an article; a grid of identical bordered cards reads as a dashboard template.
+ * A panel is neither: it groups one subject, carries its own heading and its
+ * own actions, and is sized by what it holds rather than by a column count. A
+ * screen is then two or three panels of visibly different weight, which is what
+ * makes it scannable in a couple of seconds.
+ *
+ * `tone` is the whole vocabulary. `hero` for the one thing a screen is about,
+ * `attention` for the one thing a clock is running on, `quiet` for reference.
+ */
+export type PanelTone = 'default' | 'hero' | 'quiet' | 'attention' | 'confirmed';
+
+const panelTone: Record<PanelTone, string> = {
+  default: 'bg-surface-card border-surface-border',
+  hero: 'bg-brand-tint/45 border-brand/20',
+  quiet: 'bg-surface-card-secondary border-surface-border',
+  attention: 'bg-status-warning-bg border-status-warning-border',
+  confirmed: 'bg-brand border-brand text-brand-contrast',
+};
+
+export function Panel({
+  tone = 'default',
+  className = '',
+  children,
+}: {
+  tone?: PanelTone;
+  className?: string;
+  children: ReactNode;
+}): ReactNode {
+  return (
+    <section className={`rounded-[6px] border ${panelTone[tone]} ${className}`}>{children}</section>
+  );
+}
+
+/** A panel's own heading row: what it is, how much of it, and what you can do. */
+export function PanelHead({
+  title,
+  meta,
+  action,
+  tone = 'default',
+}: {
+  title: string;
+  meta?: ReactNode;
+  action?: ReactNode;
+  tone?: 'default' | 'onBrand';
+}): ReactNode {
+  return (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3 ${
+        tone === 'onBrand' ? 'border-brand-contrast/20' : 'border-surface-border'
+      }`}
+    >
+      <div className="flex items-baseline gap-3">
+        <h2
+          className={`font-display text-[16px] font-semibold ${
+            tone === 'onBrand' ? 'text-brand-contrast' : 'text-text-primary'
+          }`}
+        >
+          {title}
+        </h2>
+        {meta === undefined ? null : (
+          <span
+            className={`text-[12.5px] ${
+              tone === 'onBrand' ? 'text-brand-contrast/75' : 'text-text-muted'
+            }`}
+          >
+            {meta}
+          </span>
+        )}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/** The padded interior of a panel. Separate so a list can sit flush to the edges. */
+export function PanelBody({
+  className = '',
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}): ReactNode {
+  return <div className={`px-5 py-4 ${className}`}>{children}</div>;
+}
+
+/**
+ * A figure that matters, sized by how much it matters.
+ *
+ * Deliberately NOT a tile with a border. Three of these sit in a row inside one
+ * panel and share its frame, so they read as three facts about one thing rather
+ * than as three separate cards competing to be read first.
+ */
+export function Stat({
+  label,
+  value,
+  detail,
+  size = 'md',
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  size?: 'md' | 'lg';
+}): ReactNode {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">{label}</p>
+      <p
+        className={`mt-1 font-semibold tabular-nums leading-none tracking-[-0.02em] text-text-primary ${
+          size === 'lg' ? 'text-[30px]' : 'text-[21px]'
+        }`}
+      >
+        {value}
+      </p>
+      {detail === undefined ? null : (
+        <p className="mt-1.5 text-[12px] text-text-muted">{detail}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * An inert control that says "you own this".
+ *
+ * The demo does not simulate editing, and pretending otherwise would be the one
+ * dishonest thing in it. But a Services page with no Edit button reads as a
+ * report about a tutor rather than as her own workspace, so the affordance is
+ * shown and the truth is one click away.
+ */
+export function EditAffordance({
+  label,
+  children,
+}: {
+  label: string;
+  children?: ReactNode;
+}): ReactNode {
+  return (
+    <details className="group">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-[5px] border border-surface-border bg-surface-card px-3 py-1.5 text-[13px] font-medium text-text-secondary transition-colors hover:border-brand/40 hover:text-brand-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+        <span aria-hidden className="text-brand">
+          ✎
+        </span>
+        {label}
+      </summary>
+      <div className="mt-3 rounded-[4px] border border-dashed border-brand/35 bg-brand-tint/40 p-4 text-[13.5px] text-text-secondary">
+        <p className="mb-1.5 font-semibold text-brand-strong">Not simulated in this demo</p>
+        {children ?? (
+          <p>
+            In the product this opens an editor and saves against your account. The demo has no
+            backend to write to, so the control is shown but does nothing.
+          </p>
+        )}
+      </div>
+    </details>
+  );
+}

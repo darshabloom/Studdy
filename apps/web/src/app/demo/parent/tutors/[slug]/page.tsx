@@ -1,5 +1,4 @@
 import { notFound } from 'next/navigation';
-import { WeekCalendar } from '@studdy/design-system';
 import {
   availabilityLabel,
   formatLabel,
@@ -8,6 +7,7 @@ import {
   yearLevelRangeLabel,
 } from '@studdy/domain/discovery';
 import { ParentShell } from '@/components/demo/demo-shells';
+import { DemoCalendar } from '@/components/demo/demo-calendar';
 import {
   Aside,
   Chip,
@@ -18,7 +18,6 @@ import {
   PageHead,
   SectionLine,
 } from '@/components/demo/kit';
-import { profileCalendarWindow } from '@/lib/availability/calendar-projection';
 import { DISCOVERY_TUTOR_SLUG, JACOB, money, physicsTutor } from '@/lib/demo/fixtures';
 import { demoWeek } from '@/lib/demo/schedule';
 import { tutorBands } from '@/lib/demo/stories';
@@ -83,16 +82,15 @@ export default async function DiscoveryProfilePage({
           60-minute lessons, shown in New Zealand time.
         </p>
         <div className="mt-4">
-          <WeekCalendar
-            blocks={blocks}
-            window={profileCalendarWindow(blocks)}
-            dayLabels={week.dayLabels}
-            familySafe
-            ariaLabel={`Bookable times for ${tutor.firstName}, ${week.rangeLabel}`}
-            {...(week.todayIndex >= 0
-              ? { now: { dayIndex: week.todayIndex, minutes: 9 * 60 } }
-              : {})}
-          />
+          <DemoCalendar
+              blocks={blocks}
+              dayLabels={week.dayLabels}
+              todayIndex={week.todayIndex}
+              size="comfortable"
+              familySafe
+              ariaLabel={`Bookable times for ${tutor.firstName}`}
+              legend={{}}
+            />
         </div>
 
         {isStoryTutor ? (

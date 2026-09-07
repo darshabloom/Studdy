@@ -4,14 +4,20 @@ import { DemoPaymentForm } from '@/components/demo/demo-payment-form';
 import { Aside, Disc, Fact, Facts, PageHead, SectionLine } from '@/components/demo/kit';
 import { formatLessonDateTime } from '@/components/requests/request-status';
 import { JACOB, money } from '@/lib/demo/fixtures';
-import { discoveryStory } from '@/lib/demo/stories';
+import { chosenTimes, discoveryStory, withTimes } from '@/lib/demo/stories';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'Pay for your lesson' };
 
-export default function FindPayPage() {
+export default async function FindPayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ time?: string | string[] }>;
+}) {
+  const { time } = await searchParams;
+  const picked = chosenTimes(time);
   const now = new Date();
-  const story = discoveryStory(now);
+  const story = discoveryStory(now, picked);
   const total = money(story.priceMinor);
 
   return (
@@ -58,7 +64,7 @@ export default function FindPayPage() {
         <section className="mt-9">
           <SectionLine title="Card details" />
           <div className="mt-4">
-            <DemoPaymentForm total={total} nextHref="/demo/parent/find/booked" />
+            <DemoPaymentForm total={total} nextHref={withTimes('/demo/parent/find/booked', picked)} />
           </div>
         </section>
       </div>

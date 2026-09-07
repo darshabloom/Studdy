@@ -1,8 +1,10 @@
-import { WeekCalendar } from '@studdy/design-system';
 import { TutorShell } from '@/components/demo/demo-shells';
+import { DemoCalendar } from '@/components/demo/demo-calendar';
 import {
   Aside,
+  Chip,
   DemoButton,
+  EditAffordance,
   Fact,
   Facts,
   PageHead,
@@ -12,11 +14,11 @@ import {
   RowMeta,
   SectionLine,
 } from '@/components/demo/kit';
-import { profileCalendarWindow } from '@/lib/availability/calendar-projection';
 import { STACEY } from '@/lib/demo/fixtures';
-import { demoWeek } from '@/lib/demo/schedule';
+import { demoWeek, exceptionsIn } from '@/lib/demo/schedule';
+import { formatLessonDateTime } from '@/components/requests/request-status';
+import { AVAILABILITY_WINDOW_DAYS, PLATFORM_TIME_ZONE } from '@/lib/time';
 import { bandBlocks, clock } from '@/lib/demo/timeline';
-import { AVAILABILITY_WINDOW_DAYS } from '@/lib/time';
 
 export const metadata = { title: 'Availability' };
 
@@ -41,6 +43,7 @@ export default function TutorAvailabilityPage() {
   const now = new Date();
   const week = demoWeek(now);
   const blocks = bandBlocks(STACEY.bands, week.days, now);
+  const exceptions = exceptionsIn(week.days, now);
   const weeklyHours =
     STACEY.bands.reduce((total, band) => total + (band.endMinutes - band.startMinutes), 0) / 60;
 
@@ -50,9 +53,18 @@ export default function TutorAvailabilityPage() {
         title="Availability"
         sub="When you are willing to teach. What you have committed to lives under Bookings."
         action={
-          <DemoButton href="/demo/tutor/bookings" tone="tertiary" size="sm">
-            See bookings
-          </DemoButton>
+          <div className="flex flex-wrap gap-2">
+            <EditAffordance label="Edit availability">
+              <p>
+                In the product you drag on the calendar to add or trim your regular hours. Existing
+                bookings are never moved by a change to availability &mdash; they are already
+                agreed.
+              </p>
+            </EditAffordance>
+            <DemoButton href="/demo/tutor/bookings" tone="tertiary" size="sm">
+              See bookings
+            </DemoButton>
+          </div>
         }
       />
 
@@ -89,15 +101,14 @@ export default function TutorAvailabilityPage() {
           are not shown, because nothing in the past is bookable.
         </p>
         <div className="mt-4">
-          <WeekCalendar
-            blocks={blocks}
-            window={profileCalendarWindow(blocks)}
-            dayLabels={week.dayLabels}
-            ariaLabel={`Your published availability, ${week.rangeLabel}`}
-            {...(week.todayIndex >= 0
-              ? { now: { dayIndex: week.todayIndex, minutes: 9 * 60 } }
-              : {})}
-          />
+          <DemoCalendar
+              blocks={blocks}
+              dayLabels={week.dayLabels}
+              todayIndex={week.todayIndex}
+              size="comfortable"
+              ariaLabel={`Your published availability, ${week.rangeLabel}`}
+              legend={{ once: true }}
+            />
         </div>
       </section>
 
@@ -108,17 +119,54 @@ export default function TutorAvailabilityPage() {
             <Facts>
               <Fact label="Published horizon" value={`${String(AVAILABILITY_WINDOW_DAYS)} days`} />
               <Fact label="Time zone" value="Pacific/Auckland" />
-              <Fact label="One-off changes ahead" value="None" />
+              <Fact label="One-off changes ahead" value={String(exceptions.length)} />
             </Facts>
           </div>
         </div>
         <div>
-          <SectionLine title="One-off changes" />
+          <SectionLine
+            title="One-off changes"
+            action={
+              <EditAffordance label="Add a change">
+                <p>
+                  A one-off change opens or closes a single date without touching your regular
+                  hours.
+                </p>
+              </EditAffordance>
+            }
+          />
           <div className="mt-3">
-            <Aside title="Nothing scheduled">
-              A one-off change closes or opens a single date without touching your regular hours —
-              a Thursday away, or a Sunday you are willing to take on before an exam.
-            </Aside>
+            {exceptions.length === 0 ? (
+              <Aside title="Nothing scheduled">
+                A one-off change closes or opens a single date without touching your regular hours
+                &mdash; a Thursday away, or a Saturday you are willing to take on before an exam.
+              </Aside>
+            ) : (
+              <RowList>
+                {exceptions.map((exception) => (
+                  <Row key={exception.id}>
+                    <RowMain
+                      name={exception.reason}
+                      detail={formatLessonDateTime(exception.at, PLATFORM_TIME_ZONE).split(' at ')[0]}
+                    />
+                    <Chip tone={exception.opens ? 'current' : 'ghost'}>
+                      {exception.opens ? 'Extra hours' : 'Closed'}
+                    </Chip>
+                    <RowMeta>
+                      {clock(
+                        Math.round((exception.at.getTime() - exception.day.startAt.getTime()) / 60_000),
+                      )}{' '}
+                      &ndash;{' '}
+                      {clock(
+                        Math.round(
+                          (exception.endAt.getTime() - exception.day.startAt.getTime()) / 60_000,
+                        ),
+                      )}
+                    </RowMeta>
+                  </Row>
+                ))}
+              </RowList>
+            )}
           </div>
         </div>
       </section>

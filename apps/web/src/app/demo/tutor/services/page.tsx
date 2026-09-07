@@ -3,6 +3,7 @@ import {
   Aside,
   Chip,
   DemoButton,
+  EditAffordance,
   PageHead,
   Row,
   RowList,
@@ -34,6 +35,21 @@ export default function TutorServicesPage() {
       <PageHead
         title="Services"
         sub="The levels you teach, the lengths you offer, and what each one costs."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <EditAffordance label="Add service">
+              <p>
+                In the product this adds a level, its lengths and its prices to your public profile.
+              </p>
+            </EditAffordance>
+            <EditAffordance label="Edit rates">
+              <p>
+                Changing a rate in the product affects new requests only. Lessons already booked
+                keep the price the family agreed to.
+              </p>
+            </EditAffordance>
+          </div>
+        }
       />
 
       <section className="mt-8">

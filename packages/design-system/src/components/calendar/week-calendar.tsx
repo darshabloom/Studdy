@@ -91,6 +91,18 @@ export interface WeekCalendarProps {
   stepMinutes?: number;
   /** Column headings, e.g. ['Mon 1', 'Tue 2', …]. Defaults to weekday names. */
   dayLabels?: readonly string[];
+  /**
+   * How many day columns to draw. Defaults to however many headings there are,
+   * which is seven everywhere in the product today — so this changes nothing
+   * unless a caller deliberately passes fewer.
+   *
+   * It exists for narrow screens. Seven columns need roughly 44rem to stay
+   * legible, and below that the week has to scroll sideways; showing three days
+   * or one, with the caller paging between them, keeps the same geometry
+   * readable on a phone instead. The alternative — letting the columns squeeze —
+   * makes a lesson block narrower than its own label.
+   */
+  dayCount?: number;
   selectedIds?: readonly string[];
   /** Refuse tutor-private roles. Set on every family-facing calendar. */
   familySafe?: boolean;
@@ -142,6 +154,7 @@ export function WeekCalendar({
   hourHeight,
   stepMinutes = 30,
   dayLabels,
+  dayCount,
   selectedIds = [],
   familySafe = false,
   ariaLabel,
@@ -161,7 +174,11 @@ export function WeekCalendar({
 
   const mini = density === 'mini';
   const marks = hourMarks(window);
-  const labels = dayLabels ?? WEEKDAY_COLUMN_LABELS;
+  const allLabels = dayLabels ?? WEEKDAY_COLUMN_LABELS;
+  // Never more columns than there are headings: a column with no heading is a
+  // day the calendar cannot name, and the header and body share one template.
+  const columnCount = Math.max(1, Math.min(dayCount ?? allLabels.length, allLabels.length));
+  const labels = allLabels.slice(0, columnCount);
   const spanMinutes = Math.max(window.dayEndMinutes - window.dayStartMinutes, 1);
   const bodyHeight = mini
     ? MINI_BODY_HEIGHT
@@ -169,7 +186,14 @@ export function WeekCalendar({
   const editable = mode === 'edit';
 
   // One template for both grids, so a heading always sits above its own column.
-  const columnTemplate = `${mini ? '0px' : '3.5rem'} repeat(7, minmax(0, 1fr))`;
+  const columnTemplate = `${mini ? '0px' : '3.5rem'} repeat(${String(columnCount)}, minmax(0, 1fr))`;
+  /*
+   * The width below which columns stop being legible, scaled to how many are
+   * actually drawn. At seven this is the 44rem the week has always reserved; at
+   * three or one it shrinks with them, so a narrow view fits its container
+   * instead of scrolling sideways to reach empty tracks.
+   */
+  const bodyMinWidth = mini ? undefined : `calc(3.5rem + ${String(columnCount)} * 5.8rem)`;
 
   const minutesFromEvent = (event: ReactPointerEvent, dayIndex: number): number => {
     const column = columnRefs.current[dayIndex];
@@ -230,7 +254,7 @@ export function WeekCalendar({
     >
       {/* Seven columns need room to stay legible; below that the week scrolls. */}
       <div className={clsx('overflow-x-auto', mini && 'text-[10px]')}>
-        <div className={mini ? '' : 'min-w-[44rem]'}>
+        <div {...(bodyMinWidth === undefined ? {} : { style: { minWidth: bodyMinWidth } })}>
           {/* Day headings, held above the scrolling hours. */}
           <div
             className="sticky top-0 z-10 grid border-b border-surface-border bg-surface-card-secondary"

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
-import { WeekCalendar } from '@studdy/design-system';
 import { TutorShell } from '@/components/demo/demo-shells';
+import { DemoCalendar } from '@/components/demo/demo-calendar';
 import {
   Chip,
   DemoButton,
@@ -11,7 +11,6 @@ import {
   SectionLine,
 } from '@/components/demo/kit';
 import { formatDeadline, formatLessonDateTime } from '@/components/requests/request-status';
-import { profileCalendarWindow } from '@/lib/availability/calendar-projection';
 import { money, serviceById } from '@/lib/demo/fixtures';
 import { demoWeek, requestBySlug, staceyWeekBlocks } from '@/lib/demo/schedule';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
@@ -96,15 +95,14 @@ export default async function TutorAcceptedPage({
       <section className="mt-9">
         <SectionLine title="Your week, with the hold on it" meta={week.rangeLabel} />
         <div className="mt-4">
-          <WeekCalendar
-            blocks={blocks}
-            window={profileCalendarWindow(blocks)}
-            dayLabels={week.dayLabels}
-            ariaLabel={`Your week, ${week.rangeLabel}`}
-            {...(week.todayIndex >= 0
-              ? { now: { dayIndex: week.todayIndex, minutes: 9 * 60 } }
-              : {})}
-          />
+          <DemoCalendar
+              blocks={blocks}
+              dayLabels={week.dayLabels}
+              todayIndex={week.todayIndex}
+              size="comfortable"
+              ariaLabel={`Your week, ${week.rangeLabel}`}
+              legend={{ held: true, once: true }}
+            />
         </div>
       </section>
 

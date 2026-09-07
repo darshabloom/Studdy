@@ -1,5 +1,5 @@
-import { WeekCalendar } from '@studdy/design-system';
 import { ParentShell } from '@/components/demo/demo-shells';
+import { DemoCalendar } from '@/components/demo/demo-calendar';
 import { JourneyProgress } from '@/components/demo/demo-journey';
 import {
   Chip,
@@ -13,9 +13,8 @@ import {
   SectionLine,
 } from '@/components/demo/kit';
 import { formatLessonDateTime } from '@/components/requests/request-status';
-import { profileCalendarWindow } from '@/lib/availability/calendar-projection';
 import { JACOB, STACEY, money } from '@/lib/demo/fixtures';
-import { discoveryStory, tutorBands } from '@/lib/demo/stories';
+import { chosenTimes, discoveryStory, tutorBands } from '@/lib/demo/stories';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'This lesson is booked' };
@@ -28,9 +27,14 @@ export const metadata = { title: 'This lesson is booked' };
  * between them is the argument: joining costs a family a real search, and after
  * that it is four screens.
  */
-export default function FindBookedPage() {
+export default async function FindBookedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ time?: string | string[] }>;
+}) {
+  const { time } = await searchParams;
   const now = new Date();
-  const story = discoveryStory(now);
+  const story = discoveryStory(now, chosenTimes(time));
   const bands = tutorBands(story.tutor, story.week.days, now);
 
   // The booked hour REPLACES the availability it consumed rather than sitting on
@@ -108,14 +112,13 @@ export default function FindBookedPage() {
             The confirmed lesson, on the time it took out of his availability.
           </p>
           <div className="mt-4">
-            <WeekCalendar
+            <DemoCalendar
               blocks={blocks}
-              window={profileCalendarWindow(blocks)}
               dayLabels={story.week.dayLabels}
-              ariaLabel={`${story.tutor.firstName}'s week, ${story.week.rangeLabel}`}
-              {...(story.week.todayIndex >= 0
-                ? { now: { dayIndex: story.week.todayIndex, minutes: 9 * 60 } }
-                : {})}
+              todayIndex={story.week.todayIndex}
+              size="comfortable"
+              ariaLabel={`${story.tutor.firstName}`}
+              legend={{}}
             />
           </div>
         </section>

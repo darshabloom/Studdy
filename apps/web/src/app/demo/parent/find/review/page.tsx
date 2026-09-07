@@ -10,12 +10,18 @@ import {
   SectionLine,
 } from '@/components/demo/kit';
 import { JACOB, money } from '@/lib/demo/fixtures';
-import { discoveryStory, intervalLabel } from '@/lib/demo/stories';
+import { chosenTimes, discoveryStory, intervalLabel, withTimes } from '@/lib/demo/stories';
 
 export const metadata = { title: 'Check this over' };
 
-export default function FindReviewPage() {
-  const story = discoveryStory();
+export default async function FindReviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ time?: string | string[] }>;
+}) {
+  const { time } = await searchParams;
+  const picked = chosenTimes(time);
+  const story = discoveryStory(new Date(), picked);
 
   return (
     <ParentShell active="/demo/parent/tutors">
@@ -71,7 +77,7 @@ export default function FindReviewPage() {
       </div>
 
       <div className="mt-7 flex flex-wrap items-center gap-4">
-        <DemoButton href="/demo/parent/find/sent" size="lg">
+        <DemoButton href={withTimes('/demo/parent/find/sent', picked)} size="lg">
           Send this request
         </DemoButton>
         <p className="text-[13.5px] text-text-secondary">

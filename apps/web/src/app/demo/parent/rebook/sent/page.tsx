@@ -11,7 +11,7 @@ import {
 } from '@/components/demo/kit';
 import { formatDeadline } from '@/components/requests/request-status';
 import { JACOB, STACEY, money } from '@/lib/demo/fixtures';
-import { intervalLabel, rebookStory } from '@/lib/demo/stories';
+import { chosenTimes, intervalLabel, rebookStory, withTimes } from '@/lib/demo/stories';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'Request sent' };
@@ -23,9 +23,15 @@ export const metadata = { title: 'Request sent' };
  * the following hours; here that is a button, and the note beside it says so
  * rather than letting a reviewer think the product works that way.
  */
-export default function RebookSentPage() {
+export default async function RebookSentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ time?: string | string[] }>;
+}) {
+  const { time } = await searchParams;
+  const picked = chosenTimes(time);
   const now = new Date();
-  const story = rebookStory(now);
+  const story = rebookStory(now, picked);
 
   return (
     <ParentShell active="/demo/parent">
@@ -78,7 +84,7 @@ export default function RebookSentPage() {
             emailed the moment she does. Nothing is held or charged until then.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <DemoButton href="/demo/parent/rebook/pay">
+            <DemoButton href={withTimes('/demo/parent/rebook/pay', picked)}>
               Skip the wait &mdash; {STACEY.firstName} accepts
             </DemoButton>
             <DemoButton href="/demo/tutor/requests/jacob-extra-session" tone="quiet">

@@ -17,6 +17,7 @@ import {
 import {
   committedLessons,
   demoWeek,
+  exceptionsIn,
   requestBySlug,
   type DemoLesson,
   type DemoRequest,
@@ -71,18 +72,39 @@ export interface RebookStory {
   readonly reference: string;
 }
 
-export function rebookStory(now: Date = new Date()): RebookStory {
+export function rebookStory(now: Date = new Date(), chosen: readonly string[] = []): RebookStory {
   const request = requestBySlug('jacob-extra-session', now);
   // The request is defined in this module's own sibling, so a miss is a fixture
   // bug rather than a runtime condition.
   if (request === null) throw new Error('stories: the rebooking request is missing');
 
   const week = demoWeek(now);
-  const accepted = request.offered[0]?.at;
+
+  /*
+   * WHAT THE VIEWER ACTUALLY PICKED, when they picked anything.
+   *
+   * The times step writes its selection into the URL and every screen after it
+   * reads it back through here, so review, payment and the confirmed booking
+   * describe the lesson that was chosen rather than a scripted one. An empty or
+   * unrecognised list falls back to the script, which is what keeps an
+   * untouched walkthrough identical every time — and stops a hand-edited URL
+   * from producing a broken screen mid-presentation.
+   */
+  const picked = chosen
+    .map((iso) => new Date(iso))
+    .filter((at) => !Number.isNaN(at.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  const offered =
+    picked.length > 0
+      ? picked.map((at) => ({ id: at.toISOString(), at, durationMinutes: request.durationMinutes }))
+      : request.offered;
+
+  const accepted = offered[0]?.at;
   if (accepted === undefined) throw new Error('stories: the rebooking request offers no times');
 
   return {
-    request,
+    request: { ...request, offered },
     week,
     standing:
       committedLessons(week.days, now).find((lesson) => lesson.student.slug === JACOB.slug) ?? null,
@@ -92,6 +114,20 @@ export function rebookStory(now: Date = new Date()): RebookStory {
     paymentDeadlineAt: new Date(now.getTime() + PAYMENT_WINDOW_MINUTES * 60_000),
     reference: REFERENCES.rebook,
   };
+}
+
+/** `?time=` as a list, from a Next.js search-params object. */
+export function chosenTimes(raw: string | readonly string[] | undefined): readonly string[] {
+  if (raw === undefined) return [];
+  return Array.isArray(raw) ? [...raw] : [raw as string];
+}
+
+/** Carry a selection onto the next link, so the journey keeps it. */
+export function withTimes(href: string, times: readonly string[]): string {
+  if (times.length === 0) return href;
+  const query = new URLSearchParams();
+  for (const iso of times) query.append('time', iso);
+  return `${href}?${query.toString()}`;
 }
 
 /**
@@ -105,9 +141,30 @@ export function rebookStory(now: Date = new Date()): RebookStory {
 export function rebookStarts(now: Date = new Date()): readonly BookableStart[] {
   const week = demoWeek(now);
   const taken = committedLessons(week.days, now);
-  return bookableStarts(STACEY.bands, week.days, JACOB.durationMinutes, now).filter(
+  const exceptionBands = exceptionsIn(week.days, now)
+    .filter((exception) => exception.opens)
+    .map((exception) => ({
+      weekday: weekdayOf(exception.day),
+      startMinutes: Math.round(
+        (exception.at.getTime() - exception.day.startAt.getTime()) / 60_000,
+      ),
+      endMinutes: Math.round(
+        (exception.endAt.getTime() - exception.day.startAt.getTime()) / 60_000,
+      ),
+    }));
+
+  return bookableStarts(
+    [...STACEY.bands, ...exceptionBands],
+    week.days,
+    JACOB.durationMinutes,
+    now,
+  ).filter(
     (start) =>
-      !taken.some((lesson) => start.at < lesson.endAt && lesson.at < new Date(start.at.getTime() + JACOB.durationMinutes * 60_000)),
+      !taken.some(
+        (lesson) =>
+          start.at < lesson.endAt &&
+          lesson.at < new Date(start.at.getTime() + JACOB.durationMinutes * 60_000),
+      ),
   );
 }
 
@@ -136,7 +193,10 @@ export interface DiscoveryStory {
   readonly reference: string;
 }
 
-export function discoveryStory(now: Date = new Date()): DiscoveryStory {
+export function discoveryStory(
+  now: Date = new Date(),
+  chosen: readonly string[] = [],
+): DiscoveryStory {
   const tutor = physicsTutor(DISCOVERY_TUTOR_SLUG);
   if (tutor === null) throw new Error('stories: the discovery tutor is missing');
 
@@ -153,13 +213,19 @@ export function discoveryStory(now: Date = new Date()): DiscoveryStory {
     throw new Error('stories: not enough bookable time in the discovery week');
   }
 
-  const accepted = first.at;
+  const picked = chosen
+    .map((iso) => new Date(iso))
+    .filter((at) => !Number.isNaN(at.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  const offeredTimes = picked.length > 0 ? picked : [first.at, second.at];
+  const accepted = offeredTimes[0] ?? first.at;
   const dayBefore = new Date(accepted.getTime() - 86_400_000);
 
   return {
     tutor,
     week,
-    offered: [first.at, second.at],
+    offered: offeredTimes,
     accepted,
     durationMinutes: 60,
     priceMinor: tutor.hourlyMinor,
