@@ -110,6 +110,7 @@ export default async function RebookBookedPage({
               blocks={blocks}
               dayLabels={story.week.dayLabels}
               todayIndex={story.week.todayIndex}
+              pastCount={story.week.pastCount}
               size="comfortable"
               ariaLabel={`Stacey's week, ${story.week.rangeLabel}`}
               legend={{ once: true }}

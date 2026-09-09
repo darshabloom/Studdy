@@ -49,7 +49,7 @@ export default async function TutorAcceptedPage({
     request.offered.find((option) => option.at.toISOString() === time) ?? request.offered[0];
   if (accepted === undefined) notFound();
 
-  const week = demoWeek(now);
+  const week = demoWeek(now, { dayCount: 7 });
   const blocks = staceyWeekBlocks(week.days, now, { includeHolds: true });
   const holdExpiry = new Date(accepted.at.getTime() - 12 * 60 * 60 * 1000);
 
@@ -99,6 +99,7 @@ export default async function TutorAcceptedPage({
               blocks={blocks}
               dayLabels={week.dayLabels}
               todayIndex={week.todayIndex}
+              pastCount={week.pastCount}
               size="comfortable"
               ariaLabel={`Your week, ${week.rangeLabel}`}
               legend={{ held: true, once: true }}

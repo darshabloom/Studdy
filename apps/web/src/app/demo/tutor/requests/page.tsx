@@ -13,9 +13,9 @@ import {
   RowMeta,
   SectionLine,
 } from '@/components/demo/kit';
-import { formatDeadline, formatLessonDateTime } from '@/components/requests/request-status';
+import { formatLessonDateTime } from '@/components/requests/request-status';
 import { money, serviceById } from '@/lib/demo/fixtures';
-import { inboxRequests } from '@/lib/demo/schedule';
+import { inboxRequests, shortDeadline } from '@/lib/demo/schedule';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'Lesson requests' };
@@ -65,7 +65,7 @@ export default function TutorRequestsPage() {
                 />
                 {request.urgent ? (
                   <Chip tone="attention">
-                    Reply by {formatDeadline(request.respondByAt, PLATFORM_TIME_ZONE)}
+                    Reply by {shortDeadline(request.respondByAt)}
                   </Chip>
                 ) : request.isExistingStudent ? (
                   <Chip tone="current">Your student</Chip>

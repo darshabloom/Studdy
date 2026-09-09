@@ -65,6 +65,7 @@ export default function RebookTimesPage() {
               blocks={starts.map((start) => start.block)}
               dayLabels={story.week.dayLabels}
               todayIndex={story.week.todayIndex}
+              pastCount={story.week.pastCount}
               defaultSelected={story.request.offered.map((option) => option.at.toISOString())}
               continueHref="/demo/parent/rebook/review"
               labelFor={labels}

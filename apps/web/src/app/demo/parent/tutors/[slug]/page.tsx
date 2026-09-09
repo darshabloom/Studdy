@@ -86,6 +86,7 @@ export default async function DiscoveryProfilePage({
               blocks={blocks}
               dayLabels={week.dayLabels}
               todayIndex={week.todayIndex}
+              pastCount={week.pastCount}
               size="comfortable"
               familySafe
               ariaLabel={`Bookable times for ${tutor.firstName}`}

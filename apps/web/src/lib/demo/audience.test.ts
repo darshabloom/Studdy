@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STUDENTS, JACOB } from './fixtures';
-import { demoWeek, familyWeekBlocks, staceyWeekBlocks } from './schedule';
+import { demoFortnight, demoWeek, familyLessons, familyWeekBlocks, staceyWeekBlocks } from './schedule';
 
 /**
  * THE PRIVACY BOUNDARY, ASSERTED.
@@ -69,5 +69,26 @@ describe('family calendar projection', () => {
       labels.some((label) => label.startsWith(name)),
     );
     expect(named.length).toBeGreaterThan(0);
+  });
+
+  it('never lists another family s lesson to a family', () => {
+    // The sibling boundary to the calendar one, and it leaked separately: the
+    // parent dashboard enumerated every lesson the tutor teaches, so Leo
+    // appeared in Priya's upcoming lessons while the calendar beside it was
+    // correctly anonymised.
+    for (const now of SAMPLE_DAYS) {
+      const lessons = familyLessons(demoFortnight(now), now);
+      const names = lessons.map((lesson) => lesson.student.firstName);
+      for (const name of OTHER_NAMES) {
+        expect(names, `leaked ${name} into a family lesson list`).not.toContain(name);
+      }
+    }
+  });
+
+  it('still lists the family their own lessons', () => {
+    const now = new Date('2026-09-07T09:00:00+12:00');
+    const lessons = familyLessons(demoFortnight(now), now);
+    expect(lessons.length).toBeGreaterThan(0);
+    expect(lessons.every((lesson) => lesson.student.slug === JACOB.slug)).toBe(true);
   });
 });

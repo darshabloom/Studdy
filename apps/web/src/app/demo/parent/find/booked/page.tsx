@@ -116,6 +116,7 @@ export default async function FindBookedPage({
               blocks={blocks}
               dayLabels={story.week.dayLabels}
               todayIndex={story.week.todayIndex}
+              pastCount={story.week.pastCount}
               size="comfortable"
               ariaLabel={`${story.tutor.firstName}`}
               legend={{}}

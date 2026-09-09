@@ -41,8 +41,33 @@ const WEEKDAY_NAMES: Record<string, string> = {
  */
 export default function TutorAvailabilityPage() {
   const now = new Date();
-  const week = demoWeek(now);
-  const blocks = bandBlocks(STACEY.bands, week.days, now);
+  // Monday to Sunday here, unlike the working-week views: this is the page
+  // that has to be able to show the Saturday one-off.
+  const week = demoWeek(now, { dayCount: 7 });
+  const blocks = [
+    ...bandBlocks(STACEY.bands, week.days, now),
+    // The one-off, drawn as the exception it is rather than folded into the
+    // regular hours — this page exists to tell them apart.
+    ...exceptionsIn(week.days, now)
+      .filter((exception) => exception.opens)
+      .flatMap((exception) => {
+        const column = week.days.findIndex((day) => day.date === exception.day.date);
+        if (column === -1) return [];
+        return [
+          {
+            id: `exception-${exception.id}`,
+            dayIndex: column,
+            startMinutes: Math.round(
+              (exception.at.getTime() - exception.day.startAt.getTime()) / 60_000,
+            ),
+            endMinutes: Math.round(
+              (exception.endAt.getTime() - exception.day.startAt.getTime()) / 60_000,
+            ),
+            role: 'available_once' as const,
+          },
+        ];
+      }),
+  ];
   const exceptions = exceptionsIn(week.days, now);
   const weeklyHours =
     STACEY.bands.reduce((total, band) => total + (band.endMinutes - band.startMinutes), 0) / 60;
@@ -105,6 +130,7 @@ export default function TutorAvailabilityPage() {
               blocks={blocks}
               dayLabels={week.dayLabels}
               todayIndex={week.todayIndex}
+              pastCount={week.pastCount}
               size="comfortable"
               ariaLabel={`Your published availability, ${week.rangeLabel}`}
               legend={{ once: true }}

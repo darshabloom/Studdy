@@ -100,7 +100,9 @@ export function Chip({
 }): ReactNode {
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium ${chipTone[tone]}`}
+      // No `whitespace-nowrap`: a chip carrying a date is wider than a phone,
+      // and a chip that cannot wrap takes the whole page sideways with it.
+      className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium ${chipTone[tone]}`}
     >
       {children}
     </span>
@@ -228,7 +230,7 @@ export function Row({
 }): ReactNode {
   const inner = (
     <div
-      className={`flex items-center gap-3.5 border-b border-surface-border py-3 last:border-b-0 ${
+      className={`flex flex-wrap items-center gap-x-3.5 gap-y-1.5 border-b border-surface-border py-3 last:border-b-0 ${
         attention ? 'border-status-warning-border bg-status-warning-bg px-3' : ''
       } ${muted ? 'opacity-60' : ''} ${href === undefined ? '' : 'transition-colors hover:bg-brand-tint/40'}`}
     >
@@ -277,7 +279,9 @@ export function RowMain({
 
 export function RowMeta({ children }: { children: ReactNode }): ReactNode {
   return (
-    <span className="shrink-0 text-right text-[12.5px] tabular-nums text-text-secondary">
+    // `ml-auto` rather than `shrink-0`: a long date must be allowed to drop to
+    // its own line on a narrow row instead of pushing the page sideways.
+    <span className="ml-auto max-w-full text-right text-[12.5px] tabular-nums text-text-secondary">
       {children}
     </span>
   );
@@ -430,15 +434,55 @@ const panelTone: Record<PanelTone, string> = {
 
 export function Panel({
   tone = 'default',
+  href,
   className = '',
   children,
 }: {
   tone?: PanelTone;
+  /**
+   * Makes the whole card the way in.
+   *
+   * A CLICKABLE CARD MUST NOT LOOK LIKE A STATIC ONE. Given an href, the card
+   * lifts on hover, its border takes the brand, and it grows a chevron — so a
+   * reader can tell at a glance which surfaces are objects they can open and
+   * which are just information. Cards without one stay flat and are not
+   * focusable, which is the other half of the same promise.
+   */
+  href?: string;
   className?: string;
   children: ReactNode;
 }): ReactNode {
+  const base = `rounded-[6px] border ${panelTone[tone]} ${className}`;
+  if (href === undefined) return <section className={base}>{children}</section>;
+
   return (
-    <section className={`rounded-[6px] border ${panelTone[tone]} ${className}`}>{children}</section>
+    <Link
+      href={href}
+      className={`group/card block transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-px hover:border-brand/45 hover:shadow-[0_2px_10px_rgb(20_51_42/0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${base}`}
+    >
+      {children}
+    </Link>
+  );
+}
+
+/**
+ * The chevron on a card that opens something.
+ *
+ * Sits in a `PanelHead`'s action slot. Moves on hover, which is the cheapest
+ * possible confirmation that the whole card — not just this mark — is the
+ * target.
+ */
+export function OpenMark({ label }: { label?: string }): ReactNode {
+  return (
+    <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-brand">
+      {label ?? 'Open'}
+      <span
+        aria-hidden
+        className="transition-transform duration-150 group-hover/card:translate-x-0.5"
+      >
+        →
+      </span>
+    </span>
   );
 }
 

@@ -56,7 +56,9 @@ export default function DiscoveryPage() {
               tutor={tutor}
               blocks={blocks}
               window={sharedWindow}
-              dayLabels={week.compactDayLabels}
+              // Weekday only: a card divides its width by seven, which leaves
+              // no room for a date, and the range beside the calendar names it.
+              dayLabels={week.dayLabels.map((label) => label.slice(0, 3))}
               rangeLabel={week.rangeLabel}
               todayIndex={week.todayIndex}
             />

@@ -31,6 +31,7 @@ export function DemoTimePicker({
   blocks,
   dayLabels,
   todayIndex,
+  pastCount,
   defaultSelected,
   continueHref,
   labelFor,
@@ -40,6 +41,8 @@ export function DemoTimePicker({
   blocks: readonly CalendarBlock[];
   dayLabels: readonly string[];
   todayIndex: number;
+  /** Days already gone. Drawn dim so an empty Monday is not read as "busy". */
+  pastCount: number;
   /** The scripted choice. Keeps an untouched walkthrough repeatable. */
   defaultSelected: readonly string[];
   continueHref: string;
@@ -81,6 +84,7 @@ export function DemoTimePicker({
         blocks={blocks}
         dayLabels={dayLabels}
         todayIndex={todayIndex}
+        pastCount={pastCount}
         size="picker"
         mode="select"
         familySafe

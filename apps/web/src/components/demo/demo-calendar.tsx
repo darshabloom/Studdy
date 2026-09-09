@@ -1,39 +1,43 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { WeekCalendar, type CalendarBlock, type CalendarWindow } from '@studdy/design-system';
 
 /**
  * EVERY CALENDAR IN THE DEMO, THROUGH ONE DOOR.
  *
- * Three rules the pages used to each get wrong on their own:
+ * Four rules the pages used to each get wrong on their own:
  *
  * 1. THE WINDOW IS THE HOURS THAT ARE USED, not a default day. The production
  *    `profileCalendarWindow` only ever WIDENS from an 8am–9pm base, so a tutor
  *    who teaches 15:30–19:30 was drawn on a 7am–9pm axis: fifteen hour labels,
- *    eleven of them empty. Here the axis is fitted to the blocks, rounded out
- *    to the hour with a little context, and only stretched to a floor so a
- *    single lesson does not fill the frame.
+ *    eleven of them empty.
  *
- * 2. THE CALENDAR FITS THE VIEWPORT. Its height is a budget divided by the
- *    hours on screen, not a fixed pixels-per-hour multiplied by however many
- *    hours the data happens to span — which is how the times picker reached
- *    1,618 pixels. NEVER SOLVED WITH A NESTED SCROLLBAR: a calendar that
- *    scrolls inside a page that scrolls is two scrollbars competing for the
- *    same gesture. The page may scroll; this may not.
+ * 2. IT FITS ITS CONTAINER, NOT THE VIEWPORT. This is what was actually broken:
+ *    the column count came from `window.innerWidth`, so a 1060px browser asked
+ *    for seven columns inside a 558px panel and got a horizontal scrollbar. The
+ *    width is now measured off this component's own wrapper, which also fixes
+ *    every future placement — a calendar in a narrow grid column simply gets
+ *    fewer days without anyone having to notice.
  *
- * 3. SEVEN COLUMNS NEED ROOM. Below roughly 1024px the week becomes three days,
- *    and below 640px a single day, with the caller paging between them. The
- *    alternative is columns narrower than the words inside them.
+ * 3. COMPRESS BEFORE DROPPING DAYS. Squeezing columns and narrowing the hour
+ *    gutter costs a little legibility; removing Thursday costs Thursday. So the
+ *    fit is attempted at full width, then tight, and only then at three days
+ *    and one, with paging.
+ *
+ * 4. NEVER A NESTED SCROLLBAR, on either axis. A calendar that scrolls inside a
+ *    page that scrolls is two scrollbars competing for one gesture. Height is a
+ *    budget divided by the hours on screen; width is whatever the container
+ *    gives, with the day count chosen to suit. The page may scroll; this may not.
  */
 
 export type CalendarSize = 'compact' | 'comfortable' | 'picker';
 
 /** Height budgets, in pixels. Chosen so the calendar plus its page chrome fits a laptop. */
 const BUDGET: Record<CalendarSize, number> = {
-  compact: 300,
-  comfortable: 400,
-  picker: 460,
+  compact: 290,
+  comfortable: 380,
+  picker: 440,
 };
 
 /** Below this an hour row stops being a usable target; above it, wasted space. */
@@ -44,6 +48,19 @@ const MAX_HOUR_HEIGHT = 96;
 const CONTEXT_MINUTES = 30;
 /** A window narrower than this reads as one block filling the frame. */
 const MINIMUM_SPAN_MINUTES = 4 * 60;
+
+/** The hour axis, at its usual width and squeezed. */
+const GUTTER_WIDE = 56;
+const GUTTER_TIGHT = 42;
+/**
+ * Narrower than this and a column stops being usable.
+ *
+ * Not the width at which text technically fits — 66 pixels holds "Mon" and a
+ * lesson block, and reads as a barcode. This is the width at which a column is
+ * worth having, which is what decides whether a phone gets five cramped days or
+ * three legible ones.
+ */
+const MIN_COLUMN = 78;
 
 /**
  * The hours actually in use, rounded out to whole hours with a little context.
@@ -76,11 +93,36 @@ export function demoWindow(blocks: readonly CalendarBlock[]): CalendarWindow {
   return { dayStartMinutes: Math.max(start, 0), dayEndMinutes: Math.min(end, 24 * 60) };
 }
 
-/** How many columns fit at this width. */
-function columnsFor(width: number): number {
-  if (width >= 1024) return 7;
-  if (width >= 640) return 3;
-  return 1;
+interface Fit {
+  readonly columns: number;
+  readonly gutter: number;
+  readonly perColumn: number;
+}
+
+/**
+ * How many days fit, and how tightly.
+ *
+ * Tries the whole week at a comfortable gutter, then at a tight one, then three
+ * days, then one — taking the first arrangement whose columns clear the legible
+ * minimum. Nothing here is allowed to return a width the container cannot hold.
+ */
+function fitFor(width: number, total: number): Fit {
+  for (const columns of [total, 3, 1]) {
+    if (columns > total) continue;
+    for (const gutter of [GUTTER_WIDE, GUTTER_TIGHT]) {
+      const perColumn = (width - gutter) / columns;
+      if (perColumn >= MIN_COLUMN) return { columns, gutter, perColumn };
+    }
+  }
+  return { columns: 1, gutter: GUTTER_TIGHT, perColumn: Math.max(width - GUTTER_TIGHT, MIN_COLUMN) };
+}
+
+/** 'Mon 14 Sept' → 'Mon 14' → 'Mon', by how much room a column has. */
+function labelAt(label: string, perColumn: number): string {
+  if (perColumn >= 96) return label;
+  const parts = label.split(' ');
+  if (perColumn >= 72) return parts.slice(0, 2).join(' ');
+  return parts[0] ?? label;
 }
 
 export interface DemoCalendarProps {
@@ -89,19 +131,14 @@ export interface DemoCalendarProps {
   readonly ariaLabel: string;
   readonly size?: CalendarSize;
   readonly todayIndex?: number;
+  /** How many leading days have already gone. Drawn dim, never dropped. */
+  readonly pastCount?: number;
   readonly familySafe?: boolean;
   /** Selection, for the booking pickers. */
   readonly mode?: 'read' | 'select';
   readonly selectedIds?: readonly string[];
   readonly onToggleBlock?: (block: CalendarBlock) => void;
-  /**
-   * Which roles to explain under the grid, or omitted for none.
-   *
-   * A description rather than an element. Passing the legend in as JSX meant a
-   * server component handing a React element to a client one on every page,
-   * which React warns about and which buys nothing — the legend belongs to the
-   * calendar, and the calendar knows what it is drawing.
-   */
+  /** Which roles to explain under the grid, or omitted for none. */
   readonly legend?: { readonly held?: boolean; readonly once?: boolean };
 }
 
@@ -111,41 +148,50 @@ export function DemoCalendar({
   ariaLabel,
   size = 'comfortable',
   todayIndex = -1,
+  pastCount = 0,
   familySafe = false,
   mode = 'read',
   selectedIds = [],
   onToggleBlock,
   legend,
 }: DemoCalendarProps): ReactNode {
+  const frame = useRef<HTMLDivElement>(null);
   /*
-   * Starts at the full week and narrows once mounted.
+   * Null until measured, and the full week until then.
    *
-   * Server-rendered markup has no viewport, so it renders the desktop week and
-   * the first client pass corrects it. Guessing narrow instead would make every
-   * desktop load flash a one-day calendar, which is the more visible wrong
-   * answer of the two.
+   * Server-rendered markup has no container to measure, so the first paint is
+   * the whole week and the first client pass corrects it. Guessing narrow
+   * instead would make every desktop load flash a one-day calendar, which is
+   * the more visible of the two wrong answers.
    */
-  const [columns, setColumns] = useState(7);
+  const [width, setWidth] = useState<number | null>(null);
   const [offset, setOffset] = useState(0);
 
   useEffect(() => {
-    const measure = (): void => {
-      setColumns(columnsFor(window.innerWidth));
-    };
-    measure();
-    window.addEventListener('resize', measure);
+    const element = frame.current;
+    if (element === null) return;
+    const observer = new ResizeObserver((entries) => {
+      const measured = entries[0]?.contentRect.width;
+      if (measured !== undefined && measured > 0) setWidth(measured);
+    });
+    observer.observe(element);
     return () => {
-      window.removeEventListener('resize', measure);
+      observer.disconnect();
     };
   }, []);
 
   const total = dayLabels.length;
-  const visible = Math.min(columns, total);
-  // Keep the page from paging past the end when the viewport widens.
+  const fit = width === null ? null : fitFor(width, total);
+  const visible = fit === null ? total : Math.min(fit.columns, total);
+
+  // Keep the view from paging past the end when the container widens.
   const maxOffset = Math.max(0, total - visible);
   const start = Math.min(offset, maxOffset);
 
-  const shownLabels = dayLabels.slice(start, start + visible);
+  const shownLabels = dayLabels
+    .slice(start, start + visible)
+    .map((label) => (fit === null ? label : labelAt(label, fit.perColumn)));
+
   const shownBlocks = blocks
     .filter((block) => block.dayIndex >= start && block.dayIndex < start + visible)
     .map((block) => ({ ...block, dayIndex: block.dayIndex - start }));
@@ -162,9 +208,10 @@ export function DemoCalendar({
   );
 
   const relativeToday = todayIndex - start;
+  const relativePast = Math.max(0, Math.min(pastCount - start, visible));
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={frame} className="flex min-w-0 flex-col gap-3">
       {visible < total ? (
         <div className="flex items-center justify-between gap-3">
           <button
@@ -173,13 +220,13 @@ export function DemoCalendar({
             onClick={() => {
               setOffset(Math.max(0, start - visible));
             }}
-            className="rounded-[4px] border border-surface-border px-3 py-1.5 text-[13px] font-medium text-text-secondary transition-colors hover:border-brand/40 hover:text-text-primary disabled:opacity-40"
+            className="rounded-[4px] border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-text-secondary transition-colors hover:border-brand/40 hover:text-text-primary disabled:opacity-40"
           >
             ← Earlier
           </button>
-          <p className="text-[12.5px] font-medium tabular-nums text-text-secondary">
-            {shownLabels[0]}
-            {visible > 1 ? ` – ${shownLabels[shownLabels.length - 1] ?? ''}` : ''}
+          <p className="min-w-0 truncate text-[12.5px] font-medium tabular-nums text-text-secondary">
+            {dayLabels[start]}
+            {visible > 1 ? ` – ${dayLabels[start + visible - 1] ?? ''}` : ''}
           </p>
           <button
             type="button"
@@ -187,7 +234,7 @@ export function DemoCalendar({
             onClick={() => {
               setOffset(Math.min(maxOffset, start + visible));
             }}
-            className="rounded-[4px] border border-surface-border px-3 py-1.5 text-[13px] font-medium text-text-secondary transition-colors hover:border-brand/40 hover:text-text-primary disabled:opacity-40"
+            className="rounded-[4px] border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-text-secondary transition-colors hover:border-brand/40 hover:text-text-primary disabled:opacity-40"
           >
             Later →
           </button>
@@ -199,6 +246,11 @@ export function DemoCalendar({
         window={calendarWindow}
         dayLabels={shownLabels}
         dayCount={visible}
+        // The count was chosen from the space available, so a minimum here
+        // could only reintroduce the overflow it exists to prevent.
+        minColumnWidth={null}
+        gutterWidth={`${String(fit?.gutter ?? GUTTER_WIDE)}px`}
+        pastDayCount={relativePast}
         hourHeight={hourHeight}
         mode={mode}
         selectedIds={selectedIds}
@@ -218,13 +270,7 @@ export function DemoCalendar({
 }
 
 /** What the colours mean. Rendered by `DemoCalendar` when it is asked for. */
-function CalendarLegend({
-  held = false,
-  once = false,
-}: {
-  held?: boolean;
-  once?: boolean;
-}): ReactNode {
+function CalendarLegend({ held, once }: { held: boolean; once: boolean }): ReactNode {
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-text-secondary">
       <Key className="border border-brand/25 bg-brand-tint">Bookable</Key>

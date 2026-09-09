@@ -1,5 +1,5 @@
 import type { CalendarBlock } from '@studdy/design-system';
-import type { WeekDay } from '@/lib/availability/calendar-time';
+import { mondayOf, shiftDate, weekDays, type WeekDay } from '@/lib/availability/calendar-time';
 import { availabilityView, type AvailabilityView } from '@/lib/discovery/availability-view';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 import {
@@ -79,16 +79,70 @@ export interface DemoRequest {
  * Days
  * ------------------------------------------------------------------ */
 
-/** The seven days every demo calendar shares, starting today. */
-export function demoWeek(now: Date = new Date()): AvailabilityView {
+/**
+ * A MONDAY-FIRST WEEK — which is not what production's `availabilityView`
+ * gives, and deliberately so on both sides.
+ *
+ * Discovery anchors its week on TODAY, because a stranger arriving on a
+ * Saturday should not spend five of seven columns on days that have gone. That
+ * is right for a cold search and wrong for everything else in this demo: a week
+ * that starts on Wednesday because it happens to be Wednesday reads as broken,
+ * and a tutor arranging a repeating week thinks in Mondays.
+ *
+ * So the demo builds its own. Elapsed days keep their column and are drawn as
+ * past rather than dropped — the honest answer to "why is Monday empty" is
+ * "Monday has gone", and removing it would make the week lie about which day
+ * each column is.
+ */
+export interface DemoWeek {
+  readonly days: readonly WeekDay[];
+  /** 'Mon 14 Sept' */
+  readonly dayLabels: readonly string[];
+  /** 'Mon 14 Sept – Sun 20 Sept' */
+  readonly rangeLabel: string;
+  /** Which column is today, or -1 when the week shown is not the current one. */
+  readonly todayIndex: number;
+  /** How many leading columns are already in the past. */
+  readonly pastCount: number;
+}
+
+export interface DemoWeekOptions {
+  /** 5 for a working week, 7 to reach the weekend. */
+  readonly dayCount?: 5 | 7;
+  /** 0 is this week, 1 the next. */
+  readonly weekOffset?: number;
+}
+
+export function demoWeek(now: Date = new Date(), options: DemoWeekOptions = {}): DemoWeek {
+  const { dayCount = 7, weekOffset = 0 } = options;
+  const monday = shiftDate(mondayOf(now, PLATFORM_TIME_ZONE), weekOffset * 7);
+  const days = weekDays(monday, PLATFORM_TIME_ZONE).slice(0, dayCount);
+
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (first === undefined || last === undefined) {
+    throw new Error('schedule: could not build a demo week');
+  }
+
+  return {
+    days,
+    dayLabels: days.map((day) => day.label),
+    rangeLabel: `${first.label} – ${last.label}`,
+    todayIndex: days.findIndex((day) => day.startAt <= now && now < day.endAt),
+    pastCount: days.filter((day) => day.endAt <= now).length,
+  };
+}
+
+/** The discovery week, still anchored on today — a cold search is the one case that wants it. */
+export function discoveryWeek(now: Date = new Date()): AvailabilityView {
   return availabilityView(1, now, PLATFORM_TIME_ZONE);
 }
 
-/** Fourteen days, for the bookings horizon. */
+/** Fourteen days from this Monday, for the bookings horizon. */
 export function demoFortnight(now: Date = new Date()): readonly WeekDay[] {
   return [
-    ...availabilityView(1, now, PLATFORM_TIME_ZONE).days,
-    ...availabilityView(2, now, PLATFORM_TIME_ZONE).days,
+    ...demoWeek(now, { dayCount: 7 }).days,
+    ...demoWeek(now, { dayCount: 7, weekOffset: 1 }).days,
   ];
 }
 
@@ -155,7 +209,7 @@ export function committedLessons(
  * flat seven days cannot land on the wrong hour here.
  */
 export function pastLessons(now: Date = new Date(), limit = 8): readonly DemoLesson[] {
-  const week = demoWeek(now);
+  const week = demoWeek(now, { dayCount: 7 });
   const lessons: DemoLesson[] = [];
 
   for (const student of STUDENTS) {
@@ -200,8 +254,8 @@ export function nextLesson(now: Date = new Date()): DemoLesson | null {
  * keeps it.
  */
 export function lessonsToday(now: Date = new Date()): readonly DemoLesson[] {
-  const week = demoWeek(now);
-  const today = week.days[0];
+  const week = demoWeek(now, { dayCount: 7 });
+  const today = week.days[week.todayIndex];
   if (today === undefined) return [];
   return committedLessons(week.days, now, true).filter(
     (lesson) => lesson.at >= today.startAt && lesson.at < today.endAt,
@@ -442,6 +496,15 @@ export interface WeekOptions {
   readonly includeHolds?: boolean;
   /** Include one-off availability changes as bookable time. */
   readonly includeExceptions?: boolean;
+  /**
+   * Keep lessons that have already been taught.
+   *
+   * A Monday-first week opened on a Wednesday still has Monday and Tuesday in
+   * it, and a tutor expects to see what she taught on them. Bookable time is a
+   * different question and is always clamped to the future — nobody can sell
+   * Monday afternoon on Wednesday.
+   */
+  readonly includePast?: boolean;
   /** An extra confirmed lesson the story has just created. */
   readonly extraLesson?:
     | { readonly at: Date; readonly durationMinutes: number; readonly label: string }
@@ -468,9 +531,15 @@ export function weekBlocks(
   now: Date,
   options: WeekOptions,
 ): readonly CalendarBlock[] {
-  const { audience, includeHolds = false, includeExceptions = true, extraLesson = null } = options;
+  const {
+    audience,
+    includeHolds = false,
+    includeExceptions = true,
+    includePast = false,
+    extraLesson = null,
+  } = options;
 
-  const claims: Claim[] = committedLessons(days, now).map((lesson) => ({
+  const claims: Claim[] = committedLessons(days, now, includePast).map((lesson) => ({
     at: lesson.at,
     endAt: lesson.endAt,
     label: labelFor(audience, lesson.student, lesson.kind !== 'weekly'),
@@ -601,4 +670,111 @@ export function weekTotals(days: readonly WeekDay[], now: Date = new Date()): {
 
 export function serviceNameFor(student: DemoStudent): string {
   return serviceById(student.serviceId)?.name ?? 'Maths';
+}
+
+
+/* ------------------------------------------------------------------ *
+ * The family's side of the relationships
+ * ------------------------------------------------------------------ */
+
+export interface FamilyRelationship {
+  readonly id: string;
+  readonly tutorFirstName: string;
+  readonly tutorInitials: string;
+  readonly subject: string;
+  readonly student: DemoStudent;
+  readonly cadence: Cadence;
+  readonly standing: string;
+  readonly lessonsSoFar: number;
+  readonly rateMinor: bigint;
+  readonly href: string;
+  readonly bookHref: string;
+}
+
+/**
+ * Every tutoring arrangement this family has, as a LIST.
+ *
+ * One entry today. It is a list because Priya could perfectly well have Stacey
+ * for Maths and somebody else for Physics — the discovery journey in this very
+ * demo ends with exactly that — and a dashboard built around the assumption of
+ * a single tutor has to be rebuilt the day a second one appears. Rendering
+ * `.map()` over one item costs nothing now and is the difference between the
+ * structure being right and being lucky.
+ */
+export function familyRelationships(): readonly FamilyRelationship[] {
+  return [
+    {
+      id: 'jacob-stacey-maths',
+      tutorFirstName: STACEY.firstName,
+      tutorInitials: STACEY.initials,
+      subject: serviceById(JACOB.serviceId)?.name ?? 'Maths',
+      student: JACOB,
+      cadence: JACOB.cadence,
+      standing: JACOB.standing,
+      lessonsSoFar: JACOB.lessonsSoFar,
+      rateMinor: priceFor(JACOB.durationMinutes),
+      href: '/demo/parent/student',
+      bookHref: '/demo/parent/rebook',
+    },
+  ];
+}
+
+/**
+ * Anything genuinely waiting on the family.
+ *
+ * Empty in the demo's current state, and deliberately not padded: everything is
+ * paid and nothing has a deadline. The dashboard renders nothing at all when
+ * this is empty rather than an "all clear" card, so the slot stays honest and
+ * is ready the moment the state has something in it.
+ */
+export interface FamilyAction {
+  readonly id: string;
+  readonly title: string;
+  readonly detail: string;
+  readonly href: string;
+  readonly urgent: boolean;
+}
+
+export function familyActions(): readonly FamilyAction[] {
+  return [];
+}
+
+
+/**
+ * The lessons a FAMILY may see: their own children's, and nobody else's.
+ *
+ * The sibling of `familyWeekBlocks`, and it exists for the same reason. The
+ * parent dashboard listed `committedLessons` directly for one build and put
+ * another family's child in Priya's upcoming lessons — the calendar was
+ * projected and the list was not, so the boundary held in one place and leaked
+ * in the other. Anything family-facing that enumerates lessons goes through
+ * here.
+ */
+export function familyLessons(
+  days: readonly WeekDay[],
+  now: Date = new Date(),
+  familySlugs: readonly string[] = [JACOB.slug],
+): readonly DemoLesson[] {
+  return committedLessons(days, now).filter((lesson) =>
+    familySlugs.includes(lesson.student.slug),
+  );
+}
+
+
+/**
+ * 'Wed 5:33 pm' — a deadline short enough to sit in a chip.
+ *
+ * The full form ("Wednesday, 9 September 2026 at 5:33 pm") is right in a
+ * sentence and 275 pixels wide inside a pill, which is wider than a phone. It
+ * took the whole page sideways before this existed.
+ */
+export function shortDeadline(at: Date): string {
+  return new Intl.DateTimeFormat('en-NZ', {
+    timeZone: PLATFORM_TIME_ZONE,
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+    .format(at)
+    .replace(',', '');
 }

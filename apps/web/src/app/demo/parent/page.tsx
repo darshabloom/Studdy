@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 import { ParentShell } from '@/components/demo/demo-shells';
-import { DemoCalendar } from '@/components/demo/demo-calendar';
 import {
   Chip,
   DemoButton,
   Disc,
   Fact,
   Facts,
+  OpenMark,
   Panel,
   PanelBody,
   PanelHead,
@@ -17,25 +17,30 @@ import {
   Stat,
 } from '@/components/demo/kit';
 import { formatLessonDateTime } from '@/components/requests/request-status';
-import { JACOB, PRIYA, STACEY, money, priceFor, serviceById } from '@/lib/demo/fixtures';
+import { CADENCE_LABEL, JACOB, PRIYA, money } from '@/lib/demo/fixtures';
 import { lessonRecord } from '@/lib/demo/lesson-records';
 import {
-  committedLessons,
   demoFortnight,
-  demoWeek,
-  familyWeekBlocks,
+  familyActions,
+  familyLessons,
+  familyRelationships,
   lessonsForStudent,
-  serviceNameFor,
 } from '@/lib/demo/schedule';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'Your family' };
 
-const WEEKDAY = new Intl.DateTimeFormat('en-NZ', {
+const DAY = new Intl.DateTimeFormat('en-NZ', {
   timeZone: PLATFORM_TIME_ZONE,
   weekday: 'long',
   day: 'numeric',
   month: 'long',
+});
+const SHORT_DAY = new Intl.DateTimeFormat('en-NZ', {
+  timeZone: PLATFORM_TIME_ZONE,
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
 });
 const CLOCK = new Intl.DateTimeFormat('en-NZ', {
   timeZone: PLATFORM_TIME_ZONE,
@@ -44,32 +49,34 @@ const CLOCK = new Intl.DateTimeFormat('en-NZ', {
 });
 
 /**
- * PRIYA'S HOME — an account she has been using since March.
+ * PRIYA'S HOME — cards of deliberately different weight.
  *
- * Five visible areas, each a panel with its own weight, rather than a column of
- * ruled lists on an open page. The previous pass read as a well-set article;
- * what makes this a workspace is that a glance lands on the next lesson, then
- * the relationship and the week, then the last lesson — without any of them
- * being read.
+ * NO TUTOR CALENDAR HERE. A family home cannot privilege one tutor's whole
+ * week: Priya could have two children with three tutors between them, and
+ * whose calendar would it be? Availability is a booking question and lives in
+ * the booking flow, where it is about a lesson somebody is actually arranging.
  *
- * THE CALENDAR IS A FAMILY PROJECTION. Priya sees Jacob by name and every other
- * family's lesson as `Booked`. That is enforced in `familyWeekBlocks`, not
- * here, and covered by a test — a page that has to remember is a page that
- * eventually forgets.
+ * EVERY RELATIONSHIP IS A LIST ENTRY. There is one today. The upcoming rows
+ * carry tutor and subject as columns rather than assuming them, so a second
+ * tutor appears without a single layout change — which is the point of
+ * structuring it this way while there is still only one.
+ *
+ * The attention card renders NOTHING when nothing is waiting. An "all clear"
+ * card is filler, and filler is what makes software feel automated.
  */
 export default function ParentHomePage() {
   const now = new Date();
-  const week = demoWeek(now);
-  const upcoming = committedLessons(demoFortnight(now), now).filter(
-    (lesson) => lesson.student.slug === JACOB.slug,
-  );
+  const relationships = familyRelationships();
+  const actions = familyActions();
+  // THROUGH THE FAMILY PROJECTION. Listing every lesson Stacey teaches put
+  // another family's child on Priya's dashboard once already.
+  const upcoming = familyLessons(demoFortnight(now), now);
   const next = upcoming[0] ?? null;
   const { past } = lessonsForStudent(JACOB.slug, now);
   const latest = past[0] ?? null;
   const record = lessonRecord(latest?.topic ?? null);
-  const blocks = familyWeekBlocks(week.days, now);
-  const service = serviceById(JACOB.serviceId);
   const spentMinor = past.reduce((total, lesson) => total + lesson.priceMinor, 0n);
+  const primary = relationships[0] ?? null;
 
   return (
     <ParentShell active="/demo/parent">
@@ -82,118 +89,84 @@ export default function ParentHomePage() {
             Your family
           </h1>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <DemoButton href="/demo/parent/rebook">Book another lesson</DemoButton>
-          <DemoButton href="/demo/parent/tutors" tone="secondary">
-            Find another tutor
-          </DemoButton>
-        </div>
+        <DemoButton href="/demo/parent/rebook">Book another lesson</DemoButton>
       </header>
 
-      {/* TIER 1 — the next lesson, the one thing the page is about. */}
+      {/* Renders only when something genuinely needs Priya. Empty today. */}
+      {actions.length > 0 ? (
+        <div className="mt-6 flex flex-col gap-3">
+          {actions.map((action) => (
+            <Panel key={action.id} tone="attention" href={action.href}>
+              <PanelBody className="flex flex-wrap items-center gap-4">
+                <span aria-hidden className="w-[3px] self-stretch rounded-full bg-status-warning" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-display text-[17px] font-medium text-text-primary">
+                    {action.title}
+                  </span>
+                  <span className="mt-0.5 block text-[13px] text-text-secondary">
+                    {action.detail}
+                  </span>
+                </span>
+                <OpenMark label="Sort it" />
+              </PanelBody>
+            </Panel>
+          ))}
+        </div>
+      ) : null}
+
+      {/* ── HERO: the next lesson ─────────────────────────────────────── */}
       <div className="mt-6">
         <Panel tone="hero">
-          <PanelBody className="flex flex-wrap items-center gap-x-7 gap-y-5">
-            <div className="min-w-[136px]">
+          <PanelBody className="flex flex-wrap items-center gap-x-8 gap-y-6 py-6">
+            <div className="min-w-[150px]">
               <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-brand-strong">
-                {JACOB.firstName}&rsquo;s next lesson
+                Next lesson
               </p>
               {next === null ? (
-                <p className="mt-2 font-display text-[22px] text-text-primary">Nothing booked</p>
+                <p className="mt-2 font-display text-[24px] text-text-primary">Nothing booked</p>
               ) : (
                 <>
-                  <p className="mt-2 font-display text-[23px] font-semibold leading-tight text-text-primary">
-                    {WEEKDAY.format(next.at)}
+                  <p className="mt-2 font-display text-[25px] font-semibold leading-tight text-text-primary">
+                    {DAY.format(next.at)}
                   </p>
-                  <p className="mt-1 text-[26px] font-semibold leading-none tabular-nums text-brand-strong">
+                  <p className="mt-1 text-[30px] font-semibold leading-none tabular-nums text-brand-strong">
                     {CLOCK.format(next.at)}
                   </p>
                 </>
               )}
             </div>
 
-            <span aria-hidden className="hidden h-16 w-px bg-brand/20 sm:block" />
+            <span aria-hidden className="hidden h-20 w-px bg-brand/20 sm:block" />
 
-            <div className="flex min-w-[210px] flex-1 items-center gap-3.5">
-              <Disc initials={STACEY.initials} size="lg" />
-              <div className="min-w-0">
-                <p className="font-display text-[19px] font-medium leading-tight text-text-primary">
-                  {serviceNameFor(JACOB)} with {STACEY.firstName}
-                </p>
-                <p className="mt-1 text-[12.5px] text-text-muted">
-                  {JACOB.format === 'online' ? 'Online' : 'In person'} &middot;{' '}
-                  {JACOB.durationMinutes} minutes &middot; {money(priceFor(JACOB.durationMinutes))}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Chip tone="current">Weekly slot</Chip>
-                  <Chip tone="neutral">Paid</Chip>
+            {next === null ? null : (
+              <div className="flex min-w-[230px] flex-1 items-center gap-4">
+                <Disc initials={primary?.tutorInitials ?? '—'} size="lg" />
+                <div className="min-w-0">
+                  <p className="font-display text-[20px] font-medium leading-tight text-text-primary">
+                    {primary?.subject ?? 'Lesson'} with {primary?.tutorFirstName ?? 'your tutor'}
+                  </p>
+                  <p className="mt-1 text-[12.5px] text-text-muted">
+                    For {next.student.firstName} &middot;{' '}
+                    {next.format === 'online' ? 'Online' : 'In person'} &middot;{' '}
+                    {next.durationMinutes} minutes &middot; {money(next.priceMinor)}
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    <Chip tone="current">{CADENCE_LABEL[next.kind]}</Chip>
+                    <Chip tone="neutral">Paid</Chip>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </PanelBody>
         </Panel>
       </div>
 
-      {/* TIER 2 — the relationship, and the week it sits in. */}
-      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <Panel>
-          <PanelHead
-            title={JACOB.firstName}
-            meta={`Year ${String(JACOB.schoolYear)}`}
-            action={
-              <DemoButton href="/demo/parent/student" tone="quiet" size="sm">
-                Open
-              </DemoButton>
-            }
-          />
-          <PanelBody>
-            <div className="flex flex-wrap gap-x-8 gap-y-5">
-              <Stat label="Lessons" value={String(JACOB.lessonsSoFar)} detail="since March" />
-              <Stat label="Tutor" value={STACEY.firstName} detail="4.9 · 340 lessons" />
-              <Stat label="Invested" value={money(spentMinor)} detail="paid to date" />
-            </div>
-            <div className="mt-5 border-t border-surface-border pt-3">
-              <Facts>
-                <Fact label="Subject" value={service?.name ?? 'Maths'} />
-                <Fact label="Standing lesson" value="Tuesdays at 4:00 pm" />
-                <Fact label="Format" value={JACOB.format === 'online' ? 'Online' : 'In person'} />
-              </Facts>
-            </div>
-          </PanelBody>
-        </Panel>
-
-        <Panel className="min-w-0">
-          <PanelHead
-            title={`${STACEY.firstName}'s week`}
-            meta={week.rangeLabel}
-            action={
-              <DemoButton href="/demo/parent/rebook/times" tone="quiet" size="sm">
-                Find a time
-              </DemoButton>
-            }
-          />
-          <PanelBody>
-            <DemoCalendar
-              blocks={blocks}
-              dayLabels={week.dayLabels}
-              todayIndex={week.todayIndex}
-              size="compact"
-              ariaLabel={`${STACEY.firstName}'s week, ${week.rangeLabel}`}
-              legend={{ once: true }}
-            />
-            <p className="mt-3 text-[12px] text-text-muted">
-              Other families&rsquo; lessons show as booked time only.
-            </p>
-          </PanelBody>
-        </Panel>
-      </div>
-
-      {/* TIER 3 — what is booked. */}
-      <div className="mt-5">
+      {/* ── Upcoming (wide) + Tutors (narrow) ─────────────────────────── */}
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <Panel>
           <PanelHead
             title="Upcoming lessons"
-            meta={`${upcoming.length} booked`}
+            meta={`${String(upcoming.length)} booked`}
             action={
               <DemoButton href="/demo/parent/lessons" tone="quiet" size="sm">
                 All lessons
@@ -202,44 +175,118 @@ export default function ParentHomePage() {
           />
           <PanelBody className="py-1">
             <RowList>
-              {upcoming.map((lesson) => (
-                <Row key={lesson.id}>
-                  <span className="w-[92px] shrink-0 text-[13.5px] font-semibold tabular-nums text-text-primary">
-                    {CLOCK.format(lesson.at)}
-                  </span>
-                  <RowMain
-                    name={WEEKDAY.format(lesson.at)}
-                    detail={`${serviceNameFor(lesson.student)} with ${STACEY.firstName} · ${lesson.format === 'online' ? 'Online' : 'In person'}`}
-                  />
-                  <Chip tone="current">Booked</Chip>
-                  <RowMeta>{money(lesson.priceMinor)}</RowMeta>
-                </Row>
-              ))}
+              {upcoming.map((lesson) => {
+                const relationship = relationships.find(
+                  (entry) => entry.student.slug === lesson.student.slug,
+                );
+                return (
+                  <Row key={lesson.id} href="/demo/parent/lessons">
+                    <span className="w-[96px] shrink-0">
+                      <span className="block text-[13.5px] font-semibold tabular-nums text-text-primary">
+                        {CLOCK.format(lesson.at)}
+                      </span>
+                      <span className="block text-[11.5px] text-text-muted">
+                        {SHORT_DAY.format(lesson.at)}
+                      </span>
+                    </span>
+                    <Disc initials={relationship?.tutorInitials ?? '—'} size="sm" />
+                    <RowMain
+                      name={`${relationship?.subject ?? 'Lesson'} · ${relationship?.tutorFirstName ?? ''}`}
+                      detail={`${lesson.student.firstName} · ${lesson.format === 'online' ? 'Online' : 'In person'} · ${String(lesson.durationMinutes)} min`}
+                    />
+                    <Chip tone="current">Booked</Chip>
+                    <RowMeta>{money(lesson.priceMinor)}</RowMeta>
+                  </Row>
+                );
+              })}
             </RowList>
           </PanelBody>
         </Panel>
+
+        <div className="flex flex-col gap-5">
+          <PanelHeadless title="Tutors" count={relationships.length} />
+          {relationships.map((relationship) => (
+            <Panel key={relationship.id} href={relationship.href}>
+              <PanelBody className="flex flex-col gap-3">
+                <div className="flex items-start gap-3">
+                  <Disc initials={relationship.tutorInitials} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display text-[18px] font-medium leading-tight text-text-primary">
+                      {relationship.tutorFirstName}
+                    </p>
+                    <p className="mt-0.5 text-[12.5px] text-text-muted">
+                      {relationship.subject} &middot; {relationship.student.firstName}
+                    </p>
+                  </div>
+                  <OpenMark />
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Chip tone="current">{CADENCE_LABEL[relationship.cadence]}</Chip>
+                  <Chip tone="neutral">
+                    {relationship.lessonsSoFar} lessons
+                  </Chip>
+                </div>
+                <p className="text-[12.5px] text-text-secondary">{relationship.standing}</p>
+              </PanelBody>
+            </Panel>
+          ))}
+
+          <Panel tone="quiet" href="/demo/parent/tutors">
+            <PanelBody className="flex items-center gap-3">
+              <span className="min-w-0 flex-1">
+                <span className="block font-display text-[16px] font-medium text-text-primary">
+                  Find another tutor
+                </span>
+                <span className="mt-0.5 block text-[12.5px] text-text-muted">
+                  For a subject your current tutors do not teach
+                </span>
+              </span>
+              <OpenMark label="Search" />
+            </PanelBody>
+          </Panel>
+        </div>
       </div>
 
-      {/* TIER 4 — what happened last time. The reason a record is worth keeping. */}
-      {latest !== null && record !== null ? (
-        <div className="mt-5">
-          <Panel>
+      {/* ── Jacob (narrow) + Recent activity (wide) ───────────────────── */}
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)]">
+        <Panel href="/demo/parent/student">
+          <PanelHead
+            title={JACOB.firstName}
+            meta={`Year ${String(JACOB.schoolYear)}`}
+            action={<OpenMark />}
+          />
+          <PanelBody>
+            <div className="flex flex-wrap gap-x-7 gap-y-4">
+              <Stat label="Lessons" value={String(JACOB.lessonsSoFar)} detail="since March" />
+              <Stat label="Invested" value={money(spentMinor)} detail="paid to date" />
+            </div>
+            <div className="mt-4 border-t border-surface-border pt-3">
+              <Facts>
+                <Fact label="Subjects" value={primary?.subject ?? '—'} />
+                <Fact label="Tutors" value={String(relationships.length)} />
+              </Facts>
+            </div>
+          </PanelBody>
+        </Panel>
+
+        {latest !== null && record !== null ? (
+          <Panel href="/demo/parent/lessons">
             <PanelHead
               title="Last lesson"
               meta={formatLessonDateTime(latest.at, PLATFORM_TIME_ZONE)}
-              action={
-                <DemoButton href="/demo/parent/lessons" tone="quiet" size="sm">
-                  Full summary
-                </DemoButton>
-              }
+              action={<OpenMark label="Full record" />}
             />
             <PanelBody>
               <h3 className="font-display text-[19px] font-medium text-text-primary">
                 {latest.topic}
               </h3>
               <dl className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2">
-                <Note label="Understood well">{record.understood}</Note>
-                <Note label="Struggled with">{record.struggled}</Note>
+                <Note label="Understood well" tone="good">
+                  {record.understood}
+                </Note>
+                <Note label="Struggled with" tone="watch">
+                  {record.struggled}
+                </Note>
               </dl>
               <div className="mt-5 border-t border-surface-border pt-4">
                 <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
@@ -258,20 +305,20 @@ export default function ParentHomePage() {
               </div>
             </PanelBody>
           </Panel>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
-      {/* TIER 5 — history, quiet. */}
+      {/* ── Earlier lessons, quiet ────────────────────────────────────── */}
       <div className="mt-5">
         <Panel tone="quiet">
-          <PanelHead title="Earlier lessons" meta={`${Math.max(past.length - 1, 0)} more`} />
+          <PanelHead title="Earlier lessons" meta={`${String(Math.max(past.length - 1, 0))} more`} />
           <PanelBody className="py-1">
             <RowList>
               {past.slice(1, 5).map((lesson) => (
                 <Row key={lesson.id} href="/demo/parent/lessons">
                   <RowMain
                     name={lesson.topic ?? 'Lesson'}
-                    detail={formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}
+                    detail={`${lesson.student.firstName} · ${formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}`}
                   />
                   <Chip tone="neutral">Completed</Chip>
                   <RowMeta>{money(lesson.priceMinor)}</RowMeta>
@@ -285,9 +332,27 @@ export default function ParentHomePage() {
   );
 }
 
-function Note({ label, children }: { label: string; children: ReactNode }): ReactNode {
+/** A heading for a column of cards that has no card of its own to sit in. */
+function PanelHeadless({ title, count }: { title: string; count: number }): ReactNode {
   return (
-    <div>
+    <div className="flex items-baseline justify-between gap-3">
+      <h2 className="font-display text-[16px] font-semibold text-text-primary">{title}</h2>
+      <span className="text-[12.5px] text-text-muted">{count}</span>
+    </div>
+  );
+}
+
+function Note({
+  label,
+  tone,
+  children,
+}: {
+  label: string;
+  tone: 'good' | 'watch';
+  children: ReactNode;
+}): ReactNode {
+  return (
+    <div className={tone === 'good' ? 'border-l-2 border-brand pl-3.5' : 'border-l-2 border-status-warning pl-3.5'}>
       <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
         {label}
       </dt>

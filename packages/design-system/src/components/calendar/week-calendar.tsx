@@ -103,6 +103,28 @@ export interface WeekCalendarProps {
    * makes a lesson block narrower than its own label.
    */
   dayCount?: number;
+  /**
+   * The narrowest a day column may be before the week has to scroll sideways,
+   * or `null` to let columns compress freely.
+   *
+   * Defaults to the 5.8rem the product has always reserved, so nothing changes
+   * unless a caller opts out. `null` is for a caller that measures its own
+   * container and picks `dayCount` to fit — once the count is chosen from the
+   * space available, a minimum can only reintroduce the overflow it was there
+   * to prevent.
+   */
+  minColumnWidth?: string | null;
+  /** The hour-axis gutter. Narrower where horizontal room is scarce. */
+  gutterWidth?: string;
+  /**
+   * How many leading columns are days that have already gone.
+   *
+   * Drawn dimmer rather than dropped: a family looking at a Monday-first week on
+   * a Wednesday needs to see that Monday has PASSED, not to find a week whose
+   * first column is Wednesday, and certainly not an empty Monday that reads as
+   * the tutor being unavailable.
+   */
+  pastDayCount?: number;
   selectedIds?: readonly string[];
   /** Refuse tutor-private roles. Set on every family-facing calendar. */
   familySafe?: boolean;
@@ -155,6 +177,9 @@ export function WeekCalendar({
   stepMinutes = 30,
   dayLabels,
   dayCount,
+  minColumnWidth = '5.8rem',
+  gutterWidth = '3.5rem',
+  pastDayCount = 0,
   selectedIds = [],
   familySafe = false,
   ariaLabel,
@@ -186,14 +211,18 @@ export function WeekCalendar({
   const editable = mode === 'edit';
 
   // One template for both grids, so a heading always sits above its own column.
-  const columnTemplate = `${mini ? '0px' : '3.5rem'} repeat(${String(columnCount)}, minmax(0, 1fr))`;
+  const gutter = mini ? '0px' : gutterWidth;
+  const columnTemplate = `${gutter} repeat(${String(columnCount)}, minmax(0, 1fr))`;
   /*
    * The width below which columns stop being legible, scaled to how many are
    * actually drawn. At seven this is the 44rem the week has always reserved; at
    * three or one it shrinks with them, so a narrow view fits its container
    * instead of scrolling sideways to reach empty tracks.
    */
-  const bodyMinWidth = mini ? undefined : `calc(3.5rem + ${String(columnCount)} * 5.8rem)`;
+  const bodyMinWidth =
+    mini || minColumnWidth === null
+      ? undefined
+      : `calc(${gutter} + ${String(columnCount)} * ${minColumnWidth})`;
 
   const minutesFromEvent = (event: ReactPointerEvent, dayIndex: number): number => {
     const column = columnRefs.current[dayIndex];
@@ -281,6 +310,7 @@ export function WeekCalendar({
                   'min-w-0 truncate border-l border-surface-border text-center font-medium first:border-l-0',
                   mini ? 'py-1 text-[10px] text-text-muted' : 'py-2 text-xs text-text-secondary',
                   now !== undefined && now.dayIndex === dayIndex && 'text-brand-purple-deep',
+                  dayIndex < pastDayCount && 'opacity-45',
                 )}
               >
                 {label}
@@ -342,6 +372,9 @@ export function WeekCalendar({
                 className={clsx(
                   'relative min-w-0 border-l border-surface-border first:border-l-0',
                   editable && 'cursor-crosshair',
+                  // A day that has gone, kept in place so the week still reads
+                  // Monday-first, but visibly not somewhere anything can happen.
+                  dayIndex < pastDayCount && 'bg-surface-card-secondary/50',
                 )}
                 onPointerDown={(event) => {
                   onColumnPointerDown(event, dayIndex);

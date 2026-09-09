@@ -12,7 +12,7 @@ import {
   RowMeta,
   SectionLine,
 } from '@/components/demo/kit';
-import { formatDeadline, formatLessonDateTime } from '@/components/requests/request-status';
+import { formatLessonDateTime } from '@/components/requests/request-status';
 import { CADENCE_LABEL, money } from '@/lib/demo/fixtures';
 import {
   committedLessons,
@@ -22,6 +22,7 @@ import {
   serviceNameFor,
   staceyWeekBlocks,
   weekTotals,
+  shortDeadline,
 } from '@/lib/demo/schedule';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
@@ -46,10 +47,13 @@ const DAY_LABEL = new Intl.DateTimeFormat('en-NZ', {
  */
 export default function TutorBookingsPage() {
   const now = new Date();
-  const week = demoWeek(now);
+  // A WORKING WEEK, Monday first. Stacey teaches Monday to Thursday; her one
+  // Saturday is a one-off change and has its own home on Availability, where
+  // it can be explained instead of stretching every week view to reach it.
+  const week = demoWeek(now, { dayCount: 5 });
   const fortnight = demoFortnight(now);
   const lessons = committedLessons(fortnight, now);
-  const blocks = staceyWeekBlocks(week.days, now, { includeHolds: true });
+  const blocks = staceyWeekBlocks(week.days, now, { includeHolds: true, includePast: true });
   const totals = weekTotals(week.days, now);
   const held = inboxRequests(now).filter((request) => request.urgent === false).slice(0, 1);
 
@@ -79,6 +83,7 @@ export default function TutorBookingsPage() {
               blocks={blocks}
               dayLabels={week.dayLabels}
               todayIndex={week.todayIndex}
+              pastCount={week.pastCount}
               size="comfortable"
               ariaLabel={`Your bookings, ${week.rangeLabel}`}
               legend={{ held: true, once: true }}
@@ -147,7 +152,7 @@ export default function TutorBookingsPage() {
                       }
                     />
                     <Chip tone="attention">
-                      Reply by {formatDeadline(request.respondByAt, PLATFORM_TIME_ZONE)}
+                      Reply by {shortDeadline(request.respondByAt)}
                     </Chip>
                   </Row>
                 );

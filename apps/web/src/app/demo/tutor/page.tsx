@@ -4,6 +4,7 @@ import {
   Chip,
   DemoButton,
   Disc,
+  OpenMark,
   Panel,
   PanelBody,
   PanelHead,
@@ -13,7 +14,7 @@ import {
   RowMeta,
   Stat,
 } from '@/components/demo/kit';
-import { formatDeadline, formatLessonDateTime } from '@/components/requests/request-status';
+import { formatLessonDateTime } from '@/components/requests/request-status';
 import { CADENCE_LABEL, STUDENTS, money, serviceById } from '@/lib/demo/fixtures';
 import {
   committedLessons,
@@ -22,6 +23,7 @@ import {
   lessonsToday,
   nextLesson,
   serviceNameFor,
+  shortDeadline,
   staceyWeekBlocks,
   weekTotals,
   type DemoRequest,
@@ -53,11 +55,14 @@ const CLOCK = new Intl.DateTimeFormat('en-NZ', {
  */
 export default function TutorDashboardPage() {
   const now = new Date();
-  const week = demoWeek(now);
+  // A WORKING WEEK, Monday first. Stacey teaches Monday to Thursday; her one
+  // Saturday is a one-off change and has its own home on Availability, where
+  // it can be explained instead of stretching every week view to reach it.
+  const week = demoWeek(now, { dayCount: 5 });
   const today = lessonsToday(now);
   const next = nextLesson(now);
   const requests = inboxRequests(now);
-  const blocks = staceyWeekBlocks(week.days, now, { includeHolds: true });
+  const blocks = staceyWeekBlocks(week.days, now, { includeHolds: true, includePast: true });
   const totals = weekTotals(week.days, now);
   const upcoming = committedLessons(week.days, now);
 
@@ -89,8 +94,8 @@ export default function TutorDashboardPage() {
       {/* TIER 1 — the next lesson. */}
       {next === null ? null : (
         <div className="mt-6">
-          <Panel tone="hero">
-            <PanelBody className="flex flex-wrap items-center gap-x-7 gap-y-5">
+          <Panel tone="hero" href={`/demo/tutor/students/${next.student.slug}`}>
+            <PanelBody className="flex flex-wrap items-center gap-x-7 gap-y-6 py-6">
               <div className="min-w-[124px]">
                 <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-brand-strong">
                   {remaining.length > 0 ? 'Next up' : 'Next lesson'}
@@ -125,9 +130,7 @@ export default function TutorDashboardPage() {
                 </div>
               </div>
 
-              <DemoButton href={`/demo/tutor/students/${next.student.slug}`} size="lg">
-                Open {next.student.firstName}
-              </DemoButton>
+              <OpenMark label={`Open ${next.student.firstName}`} />
             </PanelBody>
           </Panel>
         </div>
@@ -186,6 +189,7 @@ export default function TutorDashboardPage() {
               blocks={blocks}
               dayLabels={week.dayLabels}
               todayIndex={week.todayIndex}
+              pastCount={week.pastCount}
               size="comfortable"
               ariaLabel={`Your week, ${week.rangeLabel}`}
               legend={{ held: true, once: true }}
@@ -194,9 +198,9 @@ export default function TutorDashboardPage() {
         </Panel>
       </div>
 
-      {/* TIER 4 — the roster, for reference. */}
-      <div className="mt-5">
-        <Panel tone="quiet">
+      {/* TIER 4 — the roster, and the things she owns. */}
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+        <Panel>
           <PanelHead
             title="Your students"
             meta={`${String(STUDENTS.length)} relationships`}
@@ -245,8 +249,51 @@ export default function TutorDashboardPage() {
             </RowList>
           </PanelBody>
         </Panel>
+
+        <div className="flex flex-col gap-5">
+          <QuickCard
+            href="/demo/tutor/services"
+            title="Services"
+            detail="Levels, lengths and prices you offer"
+          />
+          <QuickCard
+            href="/demo/tutor/availability"
+            title="Availability"
+            detail="Your regular hours and one-off changes"
+          />
+          <QuickCard
+            href="/demo/tutor/lessons"
+            title="Lesson records"
+            detail="Summaries and homework you have written"
+          />
+        </div>
       </div>
     </TutorShell>
+  );
+}
+
+/** A small card that is entirely a way into somewhere else. */
+function QuickCard({
+  href,
+  title,
+  detail,
+}: {
+  href: string;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <Panel href={href} tone="quiet">
+      <PanelBody className="flex items-center gap-3 py-3.5">
+        <span className="min-w-0 flex-1">
+          <span className="block font-display text-[16px] font-medium text-text-primary">
+            {title}
+          </span>
+          <span className="mt-0.5 block text-[12.5px] text-text-muted">{detail}</span>
+        </span>
+        <OpenMark label="" />
+      </PanelBody>
+    </Panel>
   );
 }
 
@@ -259,7 +306,7 @@ export default function TutorDashboardPage() {
  */
 function RequestRow({ request }: { request: DemoRequest }) {
   const context = request.urgent
-    ? { tone: 'attention' as const, label: `Reply by ${formatDeadline(request.respondByAt, PLATFORM_TIME_ZONE)}` }
+    ? { tone: 'attention' as const, label: `Reply by ${shortDeadline(request.respondByAt)}` }
     : request.student === null
       ? { tone: 'ghost' as const, label: 'New family' }
       : request.student.cadence === 'trial'

@@ -49,6 +49,7 @@ export default function FindTimesPage() {
               blocks={starts.map((start) => start.block)}
               dayLabels={story.week.dayLabels}
               todayIndex={story.week.todayIndex}
+              pastCount={story.week.pastCount}
               defaultSelected={story.offered.map((at) => at.toISOString())}
               continueHref="/demo/parent/find/review"
               labelFor={labels}
