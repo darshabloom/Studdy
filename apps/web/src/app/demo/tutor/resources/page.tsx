@@ -14,7 +14,12 @@ import {
 export const metadata = { title: 'Resources' };
 
 const RESOURCES = [
-  { name: 'Factorising quadratics — mixed set', type: 'Worksheet', level: 'NCEA Level 1', used: 24 },
+  {
+    name: 'Factorising quadratics — mixed set',
+    type: 'Worksheet',
+    level: 'NCEA Level 1',
+    used: 24,
+  },
   { name: 'Simultaneous equations, worded', type: 'Worksheet', level: 'NCEA Level 1', used: 18 },
   { name: '2024 external — annotated', type: 'Past paper', level: 'NCEA Level 2', used: 11 },
   { name: 'Ratio starters', type: 'Warm-up', level: 'Years 8–10', used: 31 },

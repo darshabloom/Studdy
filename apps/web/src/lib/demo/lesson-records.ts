@@ -137,7 +137,8 @@ export const LESSON_RECORDS: Readonly<Record<string, LessonRecord>> = {
     homework: ['Exercise 4D, questions 1–9'],
   },
   'Solving inequalities': {
-    covered: 'Linear inequalities, including the sign flip when multiplying or dividing by a negative.',
+    covered:
+      'Linear inequalities, including the sign flip when multiplying or dividing by a negative.',
     understood: 'The mechanics, and representing the solution on a number line.',
     struggled: 'Remembering to flip. He knows the rule and does not always notice it applies.',
     changed: 'Circling the negative coefficient before starting made it visible enough to catch.',

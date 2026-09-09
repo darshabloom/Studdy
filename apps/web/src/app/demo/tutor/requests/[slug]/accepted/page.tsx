@@ -5,14 +5,17 @@ import {
   Chip,
   DemoButton,
   DemoNote,
+  Disc,
+  EarningsSplit,
   Fact,
   Facts,
-  PageHead,
-  SectionLine,
+  Panel,
+  PanelBody,
+  PanelHead,
 } from '@/components/demo/kit';
-import { formatDeadline, formatLessonDateTime } from '@/components/requests/request-status';
-import { money, serviceById } from '@/lib/demo/fixtures';
-import { demoWeek, requestBySlug, staceyWeekBlocks } from '@/lib/demo/schedule';
+import { formatDeadline } from '@/components/requests/request-status';
+import { serviceById } from '@/lib/demo/fixtures';
+import { demoWeek, requestBySlug, spanLabel, staceyWeekBlocks } from '@/lib/demo/schedule';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'You accepted this time' };
@@ -59,43 +62,64 @@ export default async function TutorAcceptedPage({
         &larr; Back to the request
       </DemoButton>
 
+      {/* ── The state, said plainly, in the colour that means "a clock" ── */}
       <div className="mt-4">
-        <p className="text-[12.5px] text-text-muted">{request.reference}</p>
-        <PageHead
-          title={`Held for ${request.studentFirstName}`}
-          sub={formatLessonDateTime(accepted.at, PLATFORM_TIME_ZONE)}
-          action={<Chip tone="attention">Awaiting the family</Chip>}
-        />
+        <Panel tone="attention">
+          <PanelBody className="flex flex-wrap items-start gap-x-7 gap-y-5 py-5">
+            <span aria-hidden className="w-[3px] self-stretch rounded-full bg-status-warning" />
+            <Disc initials={request.studentInitials} size="lg" />
+            <div className="min-w-[230px] flex-1">
+              <p className="text-[12.5px] text-text-muted">{request.reference}</p>
+              <h1 className="mt-1 font-display text-[27px] font-semibold leading-tight tracking-[-0.018em] text-text-primary">
+                Held for {request.studentFirstName}
+              </h1>
+              <p className="mt-1.5 text-[14px] font-medium tabular-nums text-text-primary">
+                {spanLabel(accepted.at, accepted.durationMinutes)}
+              </p>
+              <p className="mt-2 max-w-[60ch] text-[13px] leading-relaxed text-text-secondary">
+                This time is held, not booked. It sits on your calendar until{' '}
+                {formatDeadline(holdExpiry, PLATFORM_TIME_ZONE)} &mdash; the family is choosing now,
+                and the hold is released either way when it expires.
+              </p>
+            </div>
+            <Chip tone="attention">Awaiting the family</Chip>
+          </PanelBody>
+        </Panel>
       </div>
 
-      <div className="mt-6 border-l-2 border-status-warning bg-status-warning-bg px-5 py-4">
-        <p className="text-[13.5px] font-semibold text-status-warning">
-          This time is held, not booked
-        </p>
-        <p className="mt-1.5 max-w-[68ch] text-[13.5px] leading-relaxed text-text-primary">
-          It sits on your calendar until {formatDeadline(holdExpiry, PLATFORM_TIME_ZONE)}. The
-          family is choosing now &mdash; this may or may not become a booking, and the hold is
-          released either way when it expires.
-        </p>
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Panel>
+          <PanelHead title="If this becomes a lesson" />
+          <PanelBody>
+            <Facts>
+              <Fact
+                label="Student"
+                value={`${request.studentFirstName} · Year ${String(request.schoolYear)}`}
+              />
+              <Fact label="Service" value={serviceById(request.serviceId)?.name ?? 'Maths'} />
+              <Fact label="Length" value={`${String(request.durationMinutes)} minutes`} />
+              <Fact label="Format" value={request.format === 'online' ? 'Online' : 'In person'} />
+            </Facts>
+          </PanelBody>
+        </Panel>
+
+        <Panel tone="quiet">
+          <PanelHead title="What it would pay" />
+          <PanelBody>
+            <EarningsSplit grossMinor={request.priceMinor} label="You would earn" />
+            <p className="mt-3 text-[12px] leading-relaxed text-text-muted">
+              Nothing is owed to you yet. A held hour is not income until the family has paid and
+              the lesson is booked.
+            </p>
+          </PanelBody>
+        </Panel>
       </div>
 
-      <section className="mt-8">
-        <SectionLine title="If this becomes a lesson" />
-        <div className="mt-3 max-w-md">
-          <Facts>
-            <Fact label="Student" value={`${request.studentFirstName} · Year ${String(request.schoolYear)}`} />
-            <Fact label="Service" value={serviceById(request.serviceId)?.name ?? 'Maths'} />
-            <Fact label="Length" value={`${String(request.durationMinutes)} minutes`} />
-            <Fact label="Format" value={request.format === 'online' ? 'Online' : 'In person'} />
-            <Fact label="You would be paid" value={money(request.priceMinor)} strong />
-          </Facts>
-        </div>
-      </section>
-
-      <section className="mt-9">
-        <SectionLine title="Your week, with the hold on it" meta={week.rangeLabel} />
-        <div className="mt-4">
-          <DemoCalendar
+      <div className="mt-5">
+        <Panel className="min-w-0">
+          <PanelHead title="Your week, with the hold on it" meta={week.rangeLabel} />
+          <PanelBody>
+            <DemoCalendar
               blocks={blocks}
               dayLabels={week.dayLabels}
               todayIndex={week.todayIndex}
@@ -104,8 +128,9 @@ export default async function TutorAcceptedPage({
               ariaLabel={`Your week, ${week.rangeLabel}`}
               legend={{ held: true, once: true }}
             />
-        </div>
-      </section>
+          </PanelBody>
+        </Panel>
+      </div>
 
       <div className="mt-9">
         <DemoNote title="Now the family pays">

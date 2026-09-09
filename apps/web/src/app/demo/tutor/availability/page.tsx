@@ -7,12 +7,10 @@ import {
   EditAffordance,
   Fact,
   Facts,
-  PageHead,
-  Row,
-  RowList,
-  RowMain,
-  RowMeta,
-  SectionLine,
+  Panel,
+  PanelBody,
+  PanelHead,
+  Stat,
 } from '@/components/demo/kit';
 import { STACEY } from '@/lib/demo/fixtures';
 import { demoWeek, exceptionsIn } from '@/lib/demo/schedule';
@@ -38,6 +36,11 @@ const WEEKDAY_NAMES: Record<string, string> = {
  * This calendar shows her hours WITHOUT her bookings subtracted, which is the
  * whole reason it is a different page from Bookings. Availability is a standing
  * statement about her week; bookings are what has happened to it.
+ *
+ * Three cards, in the order she would change them: the standing pattern, the
+ * week that pattern produces, and the one-off changes sitting on top of it.
+ * Each carries its own edit affordance, so it reads as something she owns
+ * rather than a report about her.
  */
 export default function TutorAvailabilityPage() {
   const now = new Date();
@@ -74,59 +77,94 @@ export default function TutorAvailabilityPage() {
 
   return (
     <TutorShell active="/demo/tutor/availability">
-      <PageHead
-        title="Availability"
-        sub="When you are willing to teach. What you have committed to lives under Bookings."
-        action={
-          <div className="flex flex-wrap gap-2">
-            <EditAffordance label="Edit availability">
-              <p>
-                In the product you drag on the calendar to add or trim your regular hours. Existing
-                bookings are never moved by a change to availability &mdash; they are already
-                agreed.
-              </p>
-            </EditAffordance>
-            <DemoButton href="/demo/tutor/bookings" tone="tertiary" size="sm">
-              See bookings
-            </DemoButton>
-          </div>
-        }
-      />
-
-      <section className="mt-8">
-        <SectionLine title="Your regular hours" meta={`${String(weeklyHours)} hours a week`} />
-        <div className="mt-1">
-          <RowList>
-            {STACEY.bands.map((band) => (
-              <Row key={band.weekday}>
-                <RowMain
-                  name={WEEKDAY_NAMES[band.weekday] ?? band.weekday}
-                  detail={
-                    band.weekday === 'Sat'
-                      ? 'Weekend mornings, mostly senior exam preparation'
-                      : 'After school'
-                  }
-                />
-                <RowMeta>
-                  {clock(band.startMinutes)} &ndash; {clock(band.endMinutes)}
-                  <span className="mt-0.5 block text-text-muted">
-                    {(band.endMinutes - band.startMinutes) / 60} hours
-                  </span>
-                </RowMeta>
-              </Row>
-            ))}
-          </RowList>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-muted">
+            {String(weeklyHours)} hours a week &middot; Pacific/Auckland
+          </p>
+          <h1 className="mt-1.5 font-display text-[30px] font-semibold leading-tight tracking-[-0.018em] text-text-primary">
+            Availability
+          </h1>
+          <p className="mt-1.5 max-w-[62ch] text-[13.5px] text-text-muted">
+            When you are willing to teach. What you have committed to lives under Bookings.
+          </p>
         </div>
-      </section>
+        <DemoButton href="/demo/tutor/bookings" tone="tertiary" size="sm">
+          See bookings
+        </DemoButton>
+      </header>
 
-      <section className="mt-9">
-        <SectionLine title="The next seven days" meta={week.rangeLabel} />
-        <p className="mt-3 text-[13.5px] text-text-secondary">
-          Your published hours, before bookings are taken out. Hours that have already passed today
-          are not shown, because nothing in the past is bookable.
-        </p>
-        <div className="mt-4">
-          <DemoCalendar
+      {/* ── The standing pattern, and the horizon it publishes into ────── */}
+      <div className="mt-6 grid items-start gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <Panel>
+          <PanelHead
+            title="Your regular hours"
+            meta={`${String(weeklyHours)} hours a week`}
+            action={
+              <EditAffordance label="Edit hours">
+                <p>
+                  In the product you drag on the calendar to add or trim your regular hours.
+                  Existing bookings are never moved by a change to availability &mdash; they are
+                  already agreed.
+                </p>
+              </EditAffordance>
+            }
+          />
+          <PanelBody className="grid gap-3 sm:grid-cols-2">
+            {STACEY.bands.map((band) => (
+              <div
+                key={band.weekday}
+                className="rounded-[5px] border border-surface-border bg-surface-card-secondary px-4 py-3"
+              >
+                <p className="font-display text-[15.5px] font-medium text-text-primary">
+                  {WEEKDAY_NAMES[band.weekday] ?? band.weekday}
+                </p>
+                <p className="mt-1 text-[15px] font-semibold tabular-nums text-brand-strong">
+                  {clock(band.startMinutes)} &ndash; {clock(band.endMinutes)}
+                </p>
+                <p className="mt-1 text-[12px] text-text-muted">
+                  {(band.endMinutes - band.startMinutes) / 60} hours &middot; after school
+                </p>
+              </div>
+            ))}
+          </PanelBody>
+        </Panel>
+
+        <Panel tone="quiet">
+          <PanelHead title="How far ahead" />
+          <PanelBody>
+            <div className="flex flex-wrap gap-x-8 gap-y-4">
+              <Stat
+                label="Published"
+                value={`${String(AVAILABILITY_WINDOW_DAYS)} days`}
+                detail="rolling horizon"
+              />
+              <Stat
+                label="One-off changes"
+                value={String(exceptions.length)}
+                detail="in the next week"
+              />
+            </div>
+            <div className="mt-4 border-t border-surface-border pt-3">
+              <Facts>
+                <Fact label="Time zone" value="Pacific/Auckland" />
+                <Fact label="Teaching days" value={`${String(STACEY.bands.length)} a week`} />
+              </Facts>
+            </div>
+          </PanelBody>
+        </Panel>
+      </div>
+
+      {/* ── What that produces, as a week ─────────────────────────────── */}
+      <div className="mt-5">
+        <Panel className="min-w-0">
+          <PanelHead title="The next seven days" meta={week.rangeLabel} />
+          <PanelBody>
+            <p className="mb-4 max-w-[70ch] text-[13px] text-text-secondary">
+              Your published hours, before bookings are taken out. Hours that have already passed
+              today are not shown, because nothing in the past is bookable.
+            </p>
+            <DemoCalendar
               blocks={blocks}
               dayLabels={week.dayLabels}
               todayIndex={week.todayIndex}
@@ -135,23 +173,16 @@ export default function TutorAvailabilityPage() {
               ariaLabel={`Your published availability, ${week.rangeLabel}`}
               legend={{ once: true }}
             />
-        </div>
-      </section>
+          </PanelBody>
+        </Panel>
+      </div>
 
-      <section className="mt-9 grid gap-8 md:grid-cols-2">
-        <div>
-          <SectionLine title="How far ahead" />
-          <div className="mt-3">
-            <Facts>
-              <Fact label="Published horizon" value={`${String(AVAILABILITY_WINDOW_DAYS)} days`} />
-              <Fact label="Time zone" value="Pacific/Auckland" />
-              <Fact label="One-off changes ahead" value={String(exceptions.length)} />
-            </Facts>
-          </div>
-        </div>
-        <div>
-          <SectionLine
+      {/* ── The exceptions, which are the reason this page exists ──────── */}
+      <div className="mt-5">
+        <Panel>
+          <PanelHead
             title="One-off changes"
+            meta={`${String(exceptions.length)}`}
             action={
               <EditAffordance label="Add a change">
                 <p>
@@ -161,26 +192,34 @@ export default function TutorAvailabilityPage() {
               </EditAffordance>
             }
           />
-          <div className="mt-3">
+          <PanelBody>
             {exceptions.length === 0 ? (
               <Aside title="Nothing scheduled">
                 A one-off change closes or opens a single date without touching your regular hours
                 &mdash; a Thursday away, or a Saturday you are willing to take on before an exam.
               </Aside>
             ) : (
-              <RowList>
+              <div className="grid gap-4 sm:grid-cols-2">
                 {exceptions.map((exception) => (
-                  <Row key={exception.id}>
-                    <RowMain
-                      name={exception.reason}
-                      detail={formatLessonDateTime(exception.at, PLATFORM_TIME_ZONE).split(' at ')[0]}
-                    />
-                    <Chip tone={exception.opens ? 'current' : 'ghost'}>
-                      {exception.opens ? 'Extra hours' : 'Closed'}
-                    </Chip>
-                    <RowMeta>
+                  <div
+                    key={exception.id}
+                    className="flex flex-col gap-2 rounded-[5px] border border-dashed border-brand/40 bg-brand-tint/30 px-4 py-3.5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-display text-[16px] font-medium leading-tight text-text-primary">
+                        {exception.reason}
+                      </p>
+                      <Chip tone={exception.opens ? 'current' : 'ghost'}>
+                        {exception.opens ? 'Extra hours' : 'Closed'}
+                      </Chip>
+                    </div>
+                    <p className="text-[13px] tabular-nums text-text-secondary">
+                      {formatLessonDateTime(exception.at, PLATFORM_TIME_ZONE).split(' at ')[0]}
+                      {' · '}
                       {clock(
-                        Math.round((exception.at.getTime() - exception.day.startAt.getTime()) / 60_000),
+                        Math.round(
+                          (exception.at.getTime() - exception.day.startAt.getTime()) / 60_000,
+                        ),
                       )}{' '}
                       &ndash;{' '}
                       {clock(
@@ -188,14 +227,17 @@ export default function TutorAvailabilityPage() {
                           (exception.endAt.getTime() - exception.day.startAt.getTime()) / 60_000,
                         ),
                       )}
-                    </RowMeta>
-                  </Row>
+                    </p>
+                    <p className="text-[12.5px] text-text-muted">
+                      Does not change your standing hours. It applies to this date only.
+                    </p>
+                  </div>
                 ))}
-              </RowList>
+              </div>
             )}
-          </div>
-        </div>
-      </section>
+          </PanelBody>
+        </Panel>
+      </div>
     </TutorShell>
   );
 }

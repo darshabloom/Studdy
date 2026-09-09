@@ -11,6 +11,7 @@ import {
   STUDENTS,
   priceFor,
   serviceById,
+  split,
   studentBySlug,
   type Cadence,
   type DemoStudent,
@@ -34,6 +35,16 @@ const WEEK_MS = 7 * 86_400_000;
 
 export type LessonStatus = 'scheduled' | 'completed';
 
+/**
+ * Whether the family still owes for this lesson.
+ *
+ * Almost everything is `paid` — a lesson is only booked once the money has
+ * cleared, so a settled state is the normal one. `due` is the single lesson the
+ * demo holds in the gap between a tutor accepting and a family paying, and it
+ * is what makes `Needs attention` render with something real in it.
+ */
+export type PaymentState = 'paid' | 'due';
+
 export interface DemoLesson {
   readonly id: string;
   readonly student: DemoStudent;
@@ -46,6 +57,9 @@ export interface DemoLesson {
   readonly kind: Cadence;
   /** What the lesson covered, or will. Null for a trial nobody has taught yet. */
   readonly topic: string | null;
+  readonly payment: PaymentState;
+  /** When the payment window closes. Null once there is nothing to pay. */
+  readonly payBy: Date | null;
 }
 
 export interface DemoOfferedTime {
@@ -54,7 +68,19 @@ export interface DemoOfferedTime {
   readonly durationMinutes: number;
 }
 
+/**
+ * WHERE A REQUEST HAS GOT TO.
+ *
+ * `awaiting_tutor` is Stacey's inbox. `awaiting_family` is the stage after she
+ * has accepted: the hour is held, the lesson is not booked, and the family owes
+ * for it. Both are real states of the same object, and modelling the second one
+ * is what lets a single extra session appear as an unpaid lesson on Priya's
+ * dashboard and as a hold on Stacey's calendar without being two things.
+ */
+export type RequestStage = 'awaiting_tutor' | 'awaiting_family';
+
 export interface DemoRequest {
+  readonly stage: RequestStage;
   readonly reference: string;
   readonly slug: string;
   /** An existing student, or null when the family is new to Stacey. */
@@ -150,7 +176,12 @@ export function demoFortnight(now: Date = new Date()): readonly WeekDay[] {
  * Lessons
  * ------------------------------------------------------------------ */
 
-function lessonAt(student: DemoStudent, day: WeekDay, status: LessonStatus, topic: string | null): DemoLesson {
+function lessonAt(
+  student: DemoStudent,
+  day: WeekDay,
+  status: LessonStatus,
+  topic: string | null,
+): DemoLesson {
   const at = instantAt(day, student.startMinutes);
   return {
     id: `${student.slug}-${day.date}`,
@@ -163,6 +194,10 @@ function lessonAt(student: DemoStudent, day: WeekDay, status: LessonStatus, topi
     status,
     kind: student.cadence,
     topic,
+    // A standing lesson is on the books because it was paid for. The one
+    // unsettled lesson in the demo is built in `extraSession`, not here.
+    payment: 'paid',
+    payBy: null,
   };
 }
 
@@ -232,6 +267,8 @@ export function pastLessons(now: Date = new Date(), limit = 8): readonly DemoLes
         status: 'completed',
         kind: student.cadence,
         topic,
+        payment: 'paid',
+        payBy: null,
       });
     });
   }
@@ -262,20 +299,40 @@ export function lessonsToday(now: Date = new Date()): readonly DemoLesson[] {
   );
 }
 
-/** One student's lessons, past and upcoming. */
-export function lessonsForStudent(slug: string, now: Date = new Date()): {
+/**
+ * One student's lessons, past and upcoming.
+ *
+ * `family` decides whether the unsettled extra session is in the list. It is a
+ * real obligation on the family's side and belongs on their screens; on the
+ * tutor's it is a HOLD, not a booking, and is drawn on her calendar and listed
+ * under held time rather than counted among the lessons she has sold.
+ */
+export function lessonsForStudent(
+  slug: string,
+  now: Date = new Date(),
+  options: { readonly family?: boolean; readonly paid?: boolean } = {},
+): {
   readonly upcoming: readonly DemoLesson[];
   readonly past: readonly DemoLesson[];
 } {
+  const days = demoFortnight(now);
+  const upcoming =
+    options.family === true
+      ? familyLessons(days, now, [slug], { paid: options.paid ?? false })
+      : committedLessons(days, now).filter((lesson) => lesson.student.slug === slug);
   return {
-    upcoming: committedLessons(demoFortnight(now), now).filter(
-      (lesson) => lesson.student.slug === slug,
-    ),
+    upcoming,
     past: pastLessons(now, 40).filter((lesson) => lesson.student.slug === slug),
   };
 }
 
-export function lessonById(id: string, now: Date = new Date()): DemoLesson | null {
+export function lessonById(
+  id: string,
+  now: Date = new Date(),
+  options: { readonly paid?: boolean } = {},
+): DemoLesson | null {
+  const extra = extraSession(now, options.paid ?? false);
+  if (extra !== null && extra.id === id) return extra;
   return (
     pastLessons(now, 40).find((lesson) => lesson.id === id) ??
     committedLessons(demoFortnight(now), now).find((lesson) => lesson.id === id) ??
@@ -303,16 +360,19 @@ function offered(at: Date, durationMinutes: number): DemoOfferedTime {
 }
 
 /**
- * The three requests in Stacey's inbox — deliberately three different decisions.
+ * EVERY REQUEST IN PLAY, at whatever stage it has reached.
  *
+ * Three are waiting on Stacey and are deliberately three different decisions —
  * Leo's is the only one carrying a real deadline, so it is the only row on the
  * dashboard that gets clay. If all three shouted, none of them would.
  *
- * Jacob's is the request the parent's rebooking journey sends. It is the same
- * object seen from the other side, which is the reason both journeys are worth
- * showing together.
+ * Jacob's has moved on: Stacey has accepted it, so it has left her inbox and is
+ * now waiting on his family to pay. It is the same object the parent's
+ * rebooking journey sends, seen at a later stage, and that single shared object
+ * is what keeps the unpaid lesson on Priya's dashboard, the payment screen and
+ * the hold on Stacey's calendar describing one session rather than three.
  */
-export function inboxRequests(now: Date = new Date()): readonly DemoRequest[] {
+function allRequests(now: Date = new Date()): readonly DemoRequest[] {
   const days = demoFortnight(now);
   const noonTomorrow = new Date(now.getTime() + 86_400_000);
   noonTomorrow.setHours(12, 0, 0, 0);
@@ -325,6 +385,7 @@ export function inboxRequests(now: Date = new Date()): readonly DemoRequest[] {
 
   return [
     {
+      stage: 'awaiting_tutor',
       reference: REFERENCES.leo,
       slug: 'leo-second-session',
       student: leo,
@@ -337,15 +398,14 @@ export function inboxRequests(now: Date = new Date()): readonly DemoRequest[] {
       format: 'online',
       priceMinor: priceFor(90),
       note: 'Leo wants one more session on integration before the external. Either of these would work for us.',
-      offered: [
-        offered(slot(days, 'Mon', 17, now), 90),
-        offered(slot(days, 'Sat', 9, now), 90),
-      ],
+      offered: [offered(slot(days, 'Mon', 17, now), 90), offered(slot(days, 'Sat', 9, now), 90)],
       respondByAt: new Date(now.getTime() + 3 * 60 * 60 * 1000),
       urgent: true,
       isExistingStudent: true,
     },
     {
+      // ACCEPTED ALREADY. Stacey took the Thursday; the family owes for it.
+      stage: 'awaiting_family',
       reference: REFERENCES.rebookTutor,
       slug: 'jacob-extra-session',
       student: JACOB,
@@ -358,15 +418,13 @@ export function inboxRequests(now: Date = new Date()): readonly DemoRequest[] {
       format: 'online',
       priceMinor: priceFor(60),
       note: 'Jacob has his algebra assessment in three weeks and would like one extra session on top of his Tuesday lesson. Either of these suits us.',
-      offered: [
-        offered(slot(days, 'Thu', 18, now), 60),
-        offered(slot(days, 'Sat', 10, now), 60),
-      ],
+      offered: [offered(slot(days, 'Thu', 18, now), 60), offered(slot(days, 'Sat', 10, now), 60)],
       respondByAt: noonTomorrow,
       urgent: false,
       isExistingStudent: true,
     },
     {
+      stage: 'awaiting_tutor',
       reference: REFERENCES.mia,
       slug: 'mia-follow-up',
       student: mia,
@@ -385,6 +443,7 @@ export function inboxRequests(now: Date = new Date()): readonly DemoRequest[] {
       isExistingStudent: true,
     },
     {
+      stage: 'awaiting_tutor',
       reference: REFERENCES.chloe,
       slug: 'chloe-first-lesson',
       student: null,
@@ -409,10 +468,19 @@ export function inboxRequests(now: Date = new Date()): readonly DemoRequest[] {
   ];
 }
 
-export function requestBySlug(slug: string, now: Date = new Date()): DemoRequest | null {
-  return inboxRequests(now).find((request) => request.slug === slug) ?? null;
+/** What is actually waiting on Stacey to answer. The inbox, and its badge. */
+export function inboxRequests(now: Date = new Date()): readonly DemoRequest[] {
+  return allRequests(now).filter((request) => request.stage === 'awaiting_tutor');
 }
 
+/** Accepted, held, and waiting on a family to pay. */
+export function heldRequests(now: Date = new Date()): readonly DemoRequest[] {
+  return allRequests(now).filter((request) => request.stage === 'awaiting_family');
+}
+
+export function requestBySlug(slug: string, now: Date = new Date()): DemoRequest | null {
+  return allRequests(now).find((request) => request.slug === slug) ?? null;
+}
 
 /* ------------------------------------------------------------------ *
  * WHO IS LOOKING — the privacy boundary, crossed once and in one place
@@ -506,9 +574,11 @@ export interface WeekOptions {
    */
   readonly includePast?: boolean;
   /** An extra confirmed lesson the story has just created. */
-  readonly extraLesson?:
-    | { readonly at: Date; readonly durationMinutes: number; readonly label: string }
-    | null;
+  readonly extraLesson?: {
+    readonly at: Date;
+    readonly durationMinutes: number;
+    readonly label: string;
+  } | null;
 }
 
 interface Claim {
@@ -556,13 +626,22 @@ export function weekBlocks(
   }
 
   if (includeHolds) {
-    for (const request of inboxRequests(now)) {
+    for (const request of allRequests(now)) {
       const first = request.offered[0];
       if (first === undefined) continue;
       claims.push({
         at: first.at,
         endAt: new Date(first.at.getTime() + first.durationMinutes * 60_000),
-        label: 'Requested',
+        // Two different holds, and a tutor needs to tell them apart: one is a
+        // decision she still owes somebody, the other is an hour she has
+        // already promised and is waiting to be paid for. Neither names a
+        // student to a family audience.
+        label:
+          audience !== 'tutor'
+            ? 'Held'
+            : request.stage === 'awaiting_family'
+              ? `${request.studentFirstName} · unpaid`
+              : 'Requested',
         role: 'hold',
       });
     }
@@ -654,24 +733,52 @@ export function familyWeekBlocks(
   return weekBlocks(days, now, { ...options, audience: { family: familySlug } });
 }
 
-/** What Stacey earns across `days`, after Studdy's cut comes out of the price. */
-export function weekTotals(days: readonly WeekDay[], now: Date = new Date()): {
+/**
+ * What Stacey earns across `days`, after Studdy's cut comes out of the price.
+ *
+ * NET IS THE HEADLINE, and gross is kept beside it rather than dropped. A tutor
+ * asking "what did this week make me" is asking what lands in her account; a
+ * dashboard answering with the families' total spend overstates her income by
+ * fifteen per cent every time she looks at it. The gross figure still matters —
+ * it is what the families paid — so both travel together and the pages that
+ * show one can always show the breakdown.
+ */
+export function weekTotals(
+  days: readonly WeekDay[],
+  now: Date = new Date(),
+): {
   readonly lessons: number;
   readonly minutes: number;
   readonly grossMinor: bigint;
+  readonly feeMinor: bigint;
+  readonly netMinor: bigint;
 } {
-  const lessons = committedLessons(days, now);
+  /*
+   * THE WHOLE WEEK, INCLUDING WHAT SHE HAS ALREADY TAUGHT.
+   *
+   * This line answers "what does this week make me", and a tutor opening it on
+   * Thursday has not stopped earning from Monday. Counting only what is left
+   * showed her one lesson and $46.75 on a week with four lessons in it — a
+   * figure that shrank every afternoon and was never the number she wanted.
+   */
+  const lessons = committedLessons(days, now, true);
+  const grossMinor = lessons.reduce((total, lesson) => total + lesson.priceMinor, 0n);
+  // Summed per lesson, not taken off the total: the fee is rounded on each
+  // lesson, so a week's fee is the sum of the roundings rather than a rounding
+  // of the sum. The payout page and this line have to agree to the cent.
+  const feeMinor = lessons.reduce((total, lesson) => total + split(lesson.priceMinor).feeMinor, 0n);
   return {
     lessons: lessons.length,
     minutes: lessons.reduce((total, lesson) => total + lesson.durationMinutes, 0),
-    grossMinor: lessons.reduce((total, lesson) => total + lesson.priceMinor, 0n),
+    grossMinor,
+    feeMinor,
+    netMinor: grossMinor - feeMinor,
   };
 }
 
 export function serviceNameFor(student: DemoStudent): string {
   return serviceById(student.serviceId)?.name ?? 'Maths';
 }
-
 
 /* ------------------------------------------------------------------ *
  * The family's side of the relationships
@@ -719,26 +826,127 @@ export function familyRelationships(): readonly FamilyRelationship[] {
   ];
 }
 
+/* ------------------------------------------------------------------ *
+ * THE EXTRA SESSION — one lesson, four screens, one lifecycle
+ * ------------------------------------------------------------------ */
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * When the family has to pay by.
+ *
+ * A ROUND HOUR SOMEBODY WOULD ACTUALLY BE AWAKE FOR. Deadlines here were
+ * derived by adding an interval to `now`, which told a parent opening the demo
+ * at ten at night to pay by one in the morning — the same failure that once
+ * produced "choose a tutor by 4:00 am". So the candidates are written down as
+ * civil times (nine, midday, eight in the evening), projected onto real days
+ * through the same week machinery every calendar uses, and the first one at
+ * least two hours out and still comfortably before the lesson wins.
+ *
+ * The fallback is an hour before the lesson: not round, but true, and only
+ * reachable when the lesson itself is imminent.
+ */
+function payByFor(now: Date, lessonAt: Date): Date {
+  const soonest = new Date(now.getTime() + 2 * HOUR_MS);
+  const latest = new Date(lessonAt.getTime() - HOUR_MS);
+
+  const candidates = demoWeek(now, { dayCount: 7 }).days.flatMap((day) =>
+    [9, 12, 20].map((hour) => instantAt(day, hour * HOUR)),
+  );
+  return candidates.find((at) => at >= soonest && at <= latest) ?? latest;
+}
+
+/**
+ * THE ONE LESSON THE DEMO HOLDS MID-LIFECYCLE.
+ *
+ * Stacey has accepted Jacob's extra session before his algebra assessment, so
+ * the hour is hers to keep — but nobody has paid for it, and until they do it
+ * is not a booking. That single unsettled state is what the parent's
+ * `Needs attention` card, the payment screen and the confirmed screen are all
+ * describing, which is why it is projected once, here, from the request rather
+ * than written down three times.
+ *
+ * `paid` is the demo's simulated payment, carried in the URL. It does not
+ * create a second lesson; it settles this one.
+ */
+export function extraSession(now: Date = new Date(), paid = false): DemoLesson | null {
+  const request = requestBySlug('jacob-extra-session', now);
+  if (request === null) return null;
+  const accepted = request.offered[0];
+  if (accepted === undefined || accepted.at <= now) return null;
+
+  return {
+    id: 'jacob-extra-session',
+    student: JACOB,
+    at: accepted.at,
+    endAt: new Date(accepted.at.getTime() + accepted.durationMinutes * 60_000),
+    durationMinutes: accepted.durationMinutes,
+    format: request.format,
+    priceMinor: request.priceMinor,
+    status: 'scheduled',
+    kind: 'one_off',
+    topic: 'Algebra assessment preparation',
+    payment: paid ? 'paid' : 'due',
+    payBy: paid ? null : payByFor(now, accepted.at),
+  };
+}
+
+/** 'Thu 10 Sept, 6:00 – 7:00 pm'. Local to this module, to stay off `stories`. */
+export function spanLabel(at: Date, durationMinutes: number): string {
+  const date = new Intl.DateTimeFormat('en-NZ', {
+    timeZone: PLATFORM_TIME_ZONE,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+  const clock = new Intl.DateTimeFormat('en-NZ', {
+    timeZone: PLATFORM_TIME_ZONE,
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  const end = new Date(at.getTime() + durationMinutes * 60_000);
+  return `${date.format(at).replace(',', '')}, ${clock.format(at)} – ${clock.format(end)}`;
+}
+
 /**
  * Anything genuinely waiting on the family.
  *
- * Empty in the demo's current state, and deliberately not padded: everything is
- * paid and nothing has a deadline. The dashboard renders nothing at all when
- * this is empty rather than an "all clear" card, so the slot stays honest and
- * is ready the moment the state has something in it.
+ * STILL NOT PADDED. There is exactly one item and it is a real obligation with
+ * a real deadline: a tutor has held an hour and it is not booked until somebody
+ * pays for it. The moment the demo's payment succeeds this returns nothing
+ * again, the card disappears, and the dashboard is quiet — which is the honest
+ * behaviour and the reason the slot was built empty in the first place.
  */
 export interface FamilyAction {
   readonly id: string;
   readonly title: string;
   readonly detail: string;
+  readonly whenLabel: string;
+  readonly amountMinor: bigint;
+  readonly payByAt: Date;
   readonly href: string;
+  readonly actionLabel: string;
   readonly urgent: boolean;
 }
 
-export function familyActions(): readonly FamilyAction[] {
-  return [];
-}
+export function familyActions(now: Date = new Date(), paid = false): readonly FamilyAction[] {
+  const extra = extraSession(now, paid);
+  if (extra === null || extra.payment === 'paid' || extra.payBy === null) return [];
 
+  return [
+    {
+      id: extra.id,
+      title: 'Payment required',
+      detail: `${serviceNameFor(JACOB)} with ${STACEY.firstName} for ${JACOB.firstName} — an extra session before his assessment. ${STACEY.firstName} has accepted and is holding the time.`,
+      whenLabel: spanLabel(extra.at, extra.durationMinutes),
+      amountMinor: extra.priceMinor,
+      payByAt: extra.payBy,
+      href: '/demo/parent/rebook/pay',
+      actionLabel: 'Pay now',
+      urgent: true,
+    },
+  ];
+}
 
 /**
  * The lessons a FAMILY may see: their own children's, and nobody else's.
@@ -754,12 +962,52 @@ export function familyLessons(
   days: readonly WeekDay[],
   now: Date = new Date(),
   familySlugs: readonly string[] = [JACOB.slug],
+  options: { readonly paid?: boolean } = {},
 ): readonly DemoLesson[] {
-  return committedLessons(days, now).filter((lesson) =>
+  const standing = committedLessons(days, now).filter((lesson) =>
     familySlugs.includes(lesson.student.slug),
   );
+
+  /*
+   * The extra session is not a standing arrangement, so `committedLessons`
+   * cannot produce it — it comes from a request Stacey accepted. It is merged
+   * in HERE rather than on each page so that every family-facing list of
+   * lessons carries it with the same payment state, in the right place in the
+   * order.
+   */
+  const extra = extraSession(now, options.paid ?? false);
+  if (extra === null || !familySlugs.includes(extra.student.slug)) return standing;
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (first === undefined || last === undefined) return standing;
+  if (extra.at < first.startAt || extra.at >= last.endAt) return standing;
+
+  return [...standing, extra].sort((a, b) => a.at.getTime() - b.at.getTime());
 }
 
+/* ------------------------------------------------------------------ *
+ * THE PAID FLAG — the demo's only carried state
+ * ------------------------------------------------------------------ */
+
+/**
+ * Whether the viewer has been through the demo's payment screen.
+ *
+ * IN THE URL, AND NOWHERE ELSE. There is no store, no cookie and no database
+ * row: the confirmed screen sends the family home with `?paid=1` and the
+ * family's own navigation keeps carrying it, so the extra session shows as
+ * settled from then on. Open the demo fresh and it is unpaid again, which is
+ * exactly what a walkthrough needs.
+ */
+export function isPaid(raw: string | readonly string[] | undefined): boolean {
+  const value = Array.isArray(raw) ? raw[0] : (raw as string | undefined);
+  return value === '1';
+}
+
+/** Carry the flag onto a link, whatever query it already has. */
+export function withPaid(href: string, paid: boolean): string {
+  if (!paid) return href;
+  return href.includes('?') ? `${href}&paid=1` : `${href}?paid=1`;
+}
 
 /**
  * 'Wed 5:33 pm' — a deadline short enough to sit in a chip.

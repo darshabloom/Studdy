@@ -6,8 +6,9 @@ import {
   Disc,
   Fact,
   Facts,
-  PageHead,
-  SectionLine,
+  Panel,
+  PanelBody,
+  PanelHead,
 } from '@/components/demo/kit';
 import { formatDeadline } from '@/components/requests/request-status';
 import { JACOB, STACEY, money } from '@/lib/demo/fixtures';
@@ -35,46 +36,57 @@ export default async function RebookSentPage({
 
   return (
     <ParentShell active="/demo/parent">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-[12.5px] text-text-muted">{story.reference}</p>
-          <PageHead
-            title="Sent to Stacey"
-            sub={`An extra ${String(story.durationMinutes)}-minute session for ${JACOB.firstName}`}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <Panel>
+          <PanelHead
+            title="Request sent"
+            meta={story.reference}
+            action={<Chip tone="neutral">Awaiting a reply</Chip>}
           />
-        </div>
-        <Chip tone="neutral">Awaiting a reply</Chip>
-      </div>
+          <PanelBody className="py-5">
+            <div className="flex items-center gap-4">
+              <Disc initials={STACEY.initials} size="lg" />
+              <div className="min-w-0 flex-1">
+                <h1 className="font-display text-[24px] font-semibold leading-tight text-text-primary">
+                  Sent to {STACEY.firstName}
+                </h1>
+                <p className="mt-1 text-[12.5px] text-text-muted">
+                  An extra {story.durationMinutes}-minute session for {JACOB.firstName}
+                </p>
+              </div>
+              <span className="text-[19px] font-semibold tabular-nums text-text-primary">
+                {money(story.priceMinor)}
+              </span>
+            </div>
+            <div className="mt-5 border-t border-surface-border pt-3">
+              <Facts>
+                <Fact
+                  label="Reply due by"
+                  value={formatDeadline(story.request.respondByAt, PLATFORM_TIME_ZONE)}
+                />
+                <Fact label="Status" value="Nothing held or charged yet" />
+              </Facts>
+            </div>
+          </PanelBody>
+        </Panel>
 
-      <section className="mt-8">
-        <SectionLine title="What you asked for" />
-        <div className="mt-4 flex items-center gap-4">
-          <Disc initials={STACEY.initials} />
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-[17px] font-medium text-text-primary">
-              {STACEY.firstName}
-            </p>
-            <p className="mt-0.5 text-[12.5px] text-text-muted">
-              Reply due by {formatDeadline(story.request.respondByAt, PLATFORM_TIME_ZONE)}
-            </p>
-          </div>
-          <span className="text-[14px] font-semibold tabular-nums text-text-primary">
-            {money(story.priceMinor)}
-          </span>
-        </div>
-
-        <div className="mt-5 max-w-lg">
-          <Facts>
+        <Panel tone="quiet">
+          <PanelHead
+            title="What you asked for"
+            meta={`${String(story.request.offered.length)} times`}
+          />
+          <PanelBody className="flex flex-col gap-2">
             {story.request.offered.map((option) => (
-              <Fact
+              <div
                 key={option.id}
-                label="Offered"
-                value={intervalLabel(option.at, story.durationMinutes)}
-              />
+                className="rounded-[5px] border border-surface-border bg-surface-card px-3.5 py-2.5 text-[13px] font-medium tabular-nums text-text-primary"
+              >
+                {intervalLabel(option.at, story.durationMinutes)}
+              </div>
             ))}
-          </Facts>
-        </div>
-      </section>
+          </PanelBody>
+        </Panel>
+      </div>
 
       <div className="mt-9">
         <DemoNote title="In the real product you would wait here">

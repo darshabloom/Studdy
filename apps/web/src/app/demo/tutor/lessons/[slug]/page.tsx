@@ -6,6 +6,7 @@ import {
   DemoButton,
   DemoNote,
   Disc,
+  EarningsSplit,
   EditAffordance,
   Fact,
   Facts,
@@ -14,9 +15,9 @@ import {
   PanelHead,
 } from '@/components/demo/kit';
 import { formatLessonDateTime } from '@/components/requests/request-status';
-import { money } from '@/lib/demo/fixtures';
+import { serviceById } from '@/lib/demo/fixtures';
 import { lessonRecord } from '@/lib/demo/lesson-records';
-import { lessonById, serviceNameFor } from '@/lib/demo/schedule';
+import { lessonById, serviceNameFor, spanLabel } from '@/lib/demo/schedule';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'Lesson' };
@@ -32,17 +33,14 @@ export const metadata = { title: 'Lesson' };
  * Written by the tutor. Studdy does not record or transcribe lessons, and the
  * page says so rather than letting anyone assume otherwise.
  */
-export default async function TutorLessonPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function TutorLessonPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const now = new Date();
   const lesson = lessonById(slug, now);
   if (lesson === null) notFound();
 
   const record = lessonRecord(lesson.topic);
+  const service = serviceById(lesson.student.serviceId);
 
   return (
     <TutorShell active="/demo/tutor/lessons">
@@ -55,7 +53,8 @@ export default async function TutorLessonPage({
           <Disc initials={lesson.student.initials} size="lg" />
           <div className="min-w-0">
             <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-muted">
-              {lesson.student.firstName} &middot; {formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}
+              {lesson.student.firstName} &middot;{' '}
+              {formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}
             </p>
             <h1 className="mt-1.5 font-display text-[28px] font-semibold leading-tight tracking-[-0.018em] text-text-primary text-balance">
               {lesson.topic ?? 'Lesson'}
@@ -78,10 +77,26 @@ export default async function TutorLessonPage({
       {record === null ? null : (
         <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
           <div className="flex flex-col gap-5">
+            {/*
+             * FOUR PANELS, NOT ONE LIST OF FIVE.
+             *
+             * The five parts of a record are not five equal facts: one says
+             * what was done, three say how it went, and one says what happens
+             * next. Grouping them that way means a tutor rereading this before
+             * the next lesson finds the part she wants without reading the
+             * other four, which is the whole reason the record is structured
+             * rather than a paragraph.
+             */}
             <Panel>
-              <PanelHead title="Lesson record" meta="Written after the lesson" />
-              <PanelBody className="flex flex-col gap-5">
+              <PanelHead title="Summary" meta="Written after the lesson" />
+              <PanelBody>
                 <Part label="What we covered">{record.covered}</Part>
+              </PanelBody>
+            </Panel>
+
+            <Panel>
+              <PanelHead title="How it went" />
+              <PanelBody className="flex flex-col gap-5">
                 <Part label="Understood well" tone="good">
                   {record.understood}
                 </Part>
@@ -89,7 +104,6 @@ export default async function TutorLessonPage({
                   {record.struggled}
                 </Part>
                 <Part label="What changed in the lesson">{record.changed}</Part>
-                <Part label="Next focus">{record.next}</Part>
               </PanelBody>
             </Panel>
 
@@ -98,7 +112,10 @@ export default async function TutorLessonPage({
               <PanelBody>
                 <ul className="flex flex-col gap-2.5">
                   {record.homework.map((task) => (
-                    <li key={task} className="flex gap-3 text-[14.5px] leading-relaxed text-text-primary">
+                    <li
+                      key={task}
+                      className="flex gap-3 text-[14.5px] leading-relaxed text-text-primary"
+                    >
                       <span
                         aria-hidden
                         className="mt-[3px] flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-[3px] border border-brand/40 bg-surface-card text-[10px] text-brand"
@@ -111,6 +128,15 @@ export default async function TutorLessonPage({
                 </ul>
               </PanelBody>
             </Panel>
+
+            <Panel tone="quiet">
+              <PanelHead title="Next focus" />
+              <PanelBody>
+                <p className="max-w-[66ch] text-[14.5px] leading-relaxed text-text-secondary">
+                  {record.next}
+                </p>
+              </PanelBody>
+            </Panel>
           </div>
 
           <div className="flex flex-col gap-5">
@@ -120,13 +146,18 @@ export default async function TutorLessonPage({
                 <Facts>
                   <Fact label="Student" value={lesson.student.firstName} />
                   <Fact label="Service" value={serviceNameFor(lesson.student)} />
-                  <Fact label="Length" value={`${String(lesson.durationMinutes)} minutes`} />
+                  <Fact label="Level" value={service?.levels ?? '\u2014'} />
+                  <Fact label="When" value={spanLabel(lesson.at, lesson.durationMinutes)} />
                   <Fact
                     label="Format"
                     value={lesson.format === 'online' ? 'Online' : 'In person'}
                   />
-                  <Fact label="Paid" value={money(lesson.priceMinor)} strong />
                 </Facts>
+                {/* THE BREAKDOWN, NOT THE PRICE. What the family paid is not
+                    what she was paid, and this is her page. */}
+                <div className="mt-4 border-t border-surface-border pt-3">
+                  <EarningsSplit grossMinor={lesson.priceMinor} label="You earned" />
+                </div>
                 <div className="mt-4">
                   <DemoButton
                     href={`/demo/tutor/students/${lesson.student.slug}`}

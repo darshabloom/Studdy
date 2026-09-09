@@ -80,7 +80,15 @@ export function JourneyProgress({ current }: { current: string }): ReactNode {
   );
 }
 
-/** One answer per row, and the row IS the link. */
+/**
+ * ONE ANSWER PER CARD, and the card IS the link.
+ *
+ * A question with two answers is a choice, not a form, so each answer gets a
+ * surface of its own with room for the thing that actually decides it — the
+ * price, or what the format means in practice. They lift and grow a chevron on
+ * hover for the same reason every other clickable card in the demo does: a
+ * surface you can press must not look like a surface you cannot.
+ */
 export function ChoiceRows({
   choices,
 }: {
@@ -93,26 +101,37 @@ export function ChoiceRows({
   }[];
 }): ReactNode {
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="grid gap-4 sm:grid-cols-2">
       {choices.map((choice) => (
-        <li key={choice.key}>
+        <li key={choice.key} className="flex">
           <Link
             href={choice.href}
-            className="flex items-center justify-between gap-4 rounded-[4px] border border-surface-border bg-surface-card px-4 py-3.5 transition-colors hover:border-brand/50 hover:bg-brand-tint/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            className="group/card flex w-full flex-col gap-2 rounded-[6px] border border-surface-border bg-surface-card px-5 py-4 transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-px hover:border-brand/45 hover:shadow-[0_2px_10px_rgb(20_51_42/0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
-            <span className="min-w-0">
-              <span className="block font-display text-[17px] font-medium text-text-primary">
+            <span className="flex items-baseline justify-between gap-3">
+              <span className="font-display text-[19px] font-medium leading-tight text-text-primary">
                 {choice.title}
               </span>
-              {choice.detail === undefined ? null : (
-                <span className="mt-0.5 block text-[13px] text-text-muted">{choice.detail}</span>
+              {choice.meta === undefined ? null : (
+                <span className="shrink-0 text-[19px] font-semibold tabular-nums text-text-primary">
+                  {choice.meta}
+                </span>
               )}
             </span>
-            {choice.meta === undefined ? null : (
-              <span className="shrink-0 text-[15px] font-semibold tabular-nums text-text-primary">
-                {choice.meta}
+            {choice.detail === undefined ? null : (
+              <span className="block text-[13px] leading-relaxed text-text-muted">
+                {choice.detail}
               </span>
             )}
+            <span className="mt-auto flex items-center gap-1.5 pt-2 text-[12.5px] font-medium text-brand">
+              Choose this
+              <span
+                aria-hidden
+                className="transition-transform duration-150 group-hover/card:translate-x-0.5"
+              >
+                &rarr;
+              </span>
+            </span>
           </Link>
         </li>
       ))}

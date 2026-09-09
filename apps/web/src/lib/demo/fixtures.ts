@@ -49,6 +49,38 @@ export function money(amountMinor: bigint): string {
   );
 }
 
+/** Studdy's cut, taken OUT OF the listed price rather than added to it. */
+export const COMMISSION_RATE = 0.15;
+
+export interface MoneySplit {
+  /** What the family pays. The advertised price, unchanged. */
+  readonly grossMinor: bigint;
+  readonly feeMinor: bigint;
+  /** What the tutor actually receives. */
+  readonly netMinor: bigint;
+}
+
+/**
+ * ONE PLACE THE COMMISSION IS ARITHMETIC.
+ *
+ * Three screens used to each round the fee themselves, which is three chances
+ * for a tutor to be told two different things about the same lesson. Every
+ * tutor-facing figure in the demo now comes through here.
+ *
+ * The direction matters as much as the number: the fee comes OUT OF the listed
+ * price, so a $55 lesson costs a family $55 and pays a tutor $46.75. Nothing
+ * parent-facing calls this — Priya is never shown a fee she is not charged.
+ */
+export function split(grossMinor: bigint): MoneySplit {
+  const feeMinor = BigInt(Math.round(Number(grossMinor) * COMMISSION_RATE));
+  return { grossMinor, feeMinor, netMinor: grossMinor - feeMinor };
+}
+
+/** '$46.75' — what the tutor keeps of one lesson. */
+export function netMoney(grossMinor: bigint): string {
+  return money(split(grossMinor).netMinor);
+}
+
 /* ------------------------------------------------------------------ *
  * THE TUTOR
  * ------------------------------------------------------------------ */
@@ -474,6 +506,3 @@ export const REFERENCES = {
 
 /** How long a chosen tutor's time is held while the family pays. */
 export const PAYMENT_WINDOW_MINUTES = 60;
-
-/** Studdy's cut, taken OUT OF the listed price rather than added to it. */
-export const COMMISSION_RATE = 0.15;

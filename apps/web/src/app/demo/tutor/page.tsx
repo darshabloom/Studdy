@@ -7,6 +7,7 @@ import {
   OpenMark,
   Panel,
   PanelBody,
+  QuickCard,
   PanelHead,
   Row,
   RowList,
@@ -178,11 +179,15 @@ export default function TutorDashboardPage() {
             <div className="mb-5 flex flex-wrap gap-x-9 gap-y-4">
               <Stat label="Lessons" value={String(totals.lessons)} size="lg" />
               <Stat label="Teaching hours" value={(totals.minutes / 60).toFixed(1)} size="lg" />
+              {/* WHAT SHE EARNS, not what the families spend. A tutor's
+                  headline figure has to be the one that reaches her account;
+                  the gross is a fact about the week, not her income, so it
+                  sits underneath as detail. */}
               <Stat
-                label="Booked value"
-                value={money(totals.grossMinor)}
+                label="You earn this week"
+                value={money(totals.netMinor)}
                 size="lg"
-                detail="before Studdy's cut"
+                detail={`${money(totals.grossMinor)} in lessons, less ${money(totals.feeMinor)} Studdy fee`}
               />
             </div>
             <DemoCalendar
@@ -269,31 +274,6 @@ export default function TutorDashboardPage() {
         </div>
       </div>
     </TutorShell>
-  );
-}
-
-/** A small card that is entirely a way into somewhere else. */
-function QuickCard({
-  href,
-  title,
-  detail,
-}: {
-  href: string;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <Panel href={href} tone="quiet">
-      <PanelBody className="flex items-center gap-3 py-3.5">
-        <span className="min-w-0 flex-1">
-          <span className="block font-display text-[16px] font-medium text-text-primary">
-            {title}
-          </span>
-          <span className="mt-0.5 block text-[12.5px] text-text-muted">{detail}</span>
-        </span>
-        <OpenMark label="" />
-      </PanelBody>
-    </Panel>
   );
 }
 

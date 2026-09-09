@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { STACEY, PRIYA, JACOB } from '@/lib/demo/fixtures';
+import { inboxRequests, withPaid } from '@/lib/demo/schedule';
 import { Disc } from './kit';
 
 /**
@@ -30,7 +31,7 @@ interface NavEntry {
  */
 const TUTOR_NAV: readonly NavEntry[] = [
   { label: 'Home', href: '/demo/tutor' },
-  { label: 'Requests', href: '/demo/tutor/requests', count: 3 },
+  { label: 'Requests', href: '/demo/tutor/requests' },
   { label: 'Bookings', href: '/demo/tutor/bookings' },
   { label: 'Availability', href: '/demo/tutor/availability' },
   { label: 'Students', href: '/demo/tutor/students' },
@@ -135,7 +136,11 @@ export function TutorShell({
 }): ReactNode {
   return (
     <Shell
-      nav={TUTOR_NAV}
+      // COUNTED, NOT WRITTEN DOWN. The badge said three while the inbox held
+      // four for one build, because the number was a literal in this file.
+      nav={TUTOR_NAV.map((entry) =>
+        entry.label === 'Requests' ? { ...entry, count: inboxRequests(new Date()).length } : entry,
+      )}
       active={active}
       who={STACEY.firstName}
       role="Tutor workspace"
@@ -146,17 +151,30 @@ export function TutorShell({
   );
 }
 
+/**
+ * `paid` is the demo's one carried fact, and the NAVIGATION is what carries it.
+ *
+ * After the simulated payment the family should not find the same lesson still
+ * demanding money the moment they click Home. There is nowhere to write that
+ * down — no store, no session — so the flag rides in the URL, and every link in
+ * this sidebar keeps it. Nothing else in the demo needs state, and this needs
+ * only one bit of it.
+ */
 export function ParentShell({
   active,
+  paid = false,
   children,
 }: {
   active: string;
+  paid?: boolean;
   children: ReactNode;
 }): ReactNode {
   return (
     <Shell
-      nav={PARENT_NAV}
-      active={active}
+      nav={PARENT_NAV.map((entry) =>
+        entry.href === undefined ? entry : { ...entry, href: withPaid(entry.href, paid) },
+      )}
+      active={withPaid(active, paid)}
       who={PRIYA.firstName}
       role="Family"
       initials={PRIYA.initials}

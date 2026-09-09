@@ -15,8 +15,9 @@ import {
   Disc,
   Fact,
   Facts,
-  PageHead,
-  SectionLine,
+  Panel,
+  PanelBody,
+  PanelHead,
 } from '@/components/demo/kit';
 import { DISCOVERY_TUTOR_SLUG, JACOB, money, physicsTutor } from '@/lib/demo/fixtures';
 import { demoWeek } from '@/lib/demo/schedule';
@@ -57,32 +58,43 @@ export default async function DiscoveryProfilePage({
         &larr; Back to tutors
       </DemoButton>
 
-      <div className="mt-4 flex items-start gap-4">
-        <Disc initials={tutor.initials} size="lg" />
-        <div className="min-w-0 flex-1">
-          <PageHead title={tutor.firstName} sub={tutor.headline} />
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-[20px] font-semibold tabular-nums text-text-primary">
-            {money(tutor.hourlyMinor)}
-          </p>
-          <p className="text-[11.5px] text-text-muted">per hour</p>
-        </div>
+      {/* ── Who, and what he costs ──────────────────────────────────── */}
+      <div className="mt-4">
+        <Panel tone="hero">
+          <PanelBody className="flex flex-wrap items-start gap-x-7 gap-y-5 py-6">
+            <Disc initials={tutor.initials} size="lg" />
+            <div className="min-w-[240px] flex-1">
+              <h1 className="font-display text-[28px] font-semibold leading-tight tracking-[-0.018em] text-text-primary">
+                {tutor.firstName}
+              </h1>
+              <p className="mt-1.5 max-w-[54ch] text-[14px] leading-snug text-text-secondary">
+                {tutor.headline}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <Chip tone="current">{availabilityLabel(tutor.availabilityLabelCode)}</Chip>
+                {rating === null ? null : <Chip tone="neutral">{rating} rating</Chip>}
+                <Chip tone="neutral">{tutor.completedLessonCount} lessons</Chip>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-[30px] font-semibold leading-none tabular-nums text-text-primary">
+                {money(tutor.hourlyMinor)}
+              </p>
+              <p className="mt-1 text-[11.5px] text-text-muted">per hour</p>
+            </div>
+          </PanelBody>
+        </Panel>
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-1.5">
-        <Chip tone="neutral">{availabilityLabel(tutor.availabilityLabelCode)}</Chip>
-        {rating === null ? null : <Chip tone="neutral">{rating} rating</Chip>}
-        <Chip tone="neutral">{tutor.completedLessonCount} lessons</Chip>
-      </div>
-
-      <section className="mt-8">
-        <SectionLine title="Availability" meta={week.rangeLabel} />
-        <p className="mt-3 text-[13.5px] text-text-muted">
-          60-minute lessons, shown in New Zealand time.
-        </p>
-        <div className="mt-4">
-          <DemoCalendar
+      {/* ── The week, which is the actual decision ──────────────────── */}
+      <div className="mt-5">
+        <Panel className="min-w-0">
+          <PanelHead
+            title="Availability"
+            meta={`${week.rangeLabel} \u00b7 60-minute lessons, New Zealand time`}
+          />
+          <PanelBody>
+            <DemoCalendar
               blocks={blocks}
               dayLabels={week.dayLabels}
               todayIndex={week.todayIndex}
@@ -92,68 +104,74 @@ export default async function DiscoveryProfilePage({
               ariaLabel={`Bookable times for ${tutor.firstName}`}
               legend={{}}
             />
-        </div>
+          </PanelBody>
+          {isStoryTutor ? (
+            <div className="flex flex-wrap items-center gap-4 border-t border-surface-border bg-brand-tint/45 px-5 py-4">
+              <DemoButton href="/demo/parent/find/format" size="lg">
+                Book a lesson
+              </DemoButton>
+              <p className="max-w-[46ch] text-[13.5px] text-text-secondary">
+                {tutor.firstName} still has to accept &mdash; you are sending a request, not
+                confirming a booking.
+              </p>
+            </div>
+          ) : (
+            <div className="border-t border-surface-border px-5 py-4">
+              <Aside title="The demo story follows Daniel">
+                <span className="flex flex-wrap items-center gap-3">
+                  {tutor.firstName}&rsquo;s profile is here to show what a card leads to.
+                  <DemoButton href="/demo/parent/tutors/daniel" tone="tertiary" size="sm">
+                    Open Daniel
+                  </DemoButton>
+                </span>
+              </Aside>
+            </div>
+          )}
+        </Panel>
+      </div>
 
-        {isStoryTutor ? (
-          <div className="mt-6 flex flex-wrap items-center gap-4 border-l-2 border-brand bg-brand-tint/40 px-5 py-4">
-            <DemoButton href="/demo/parent/find/format" size="lg">
-              Book a lesson
-            </DemoButton>
-            <p className="text-[13.5px] text-text-secondary">
-              {tutor.firstName} still has to accept &mdash; you are sending a request, not
-              confirming a booking.
+      {/* ── Everything else about him ───────────────────────────────── */}
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <Panel>
+          <PanelHead title="What a lesson is like" />
+          <PanelBody>
+            <p className="max-w-[62ch] text-[14.5px] leading-relaxed text-text-secondary">
+              {tutor.teachingApproach}
             </p>
-          </div>
-        ) : (
-          <div className="mt-6">
-            <Aside title="The demo story follows Daniel">
-              <span className="flex flex-wrap items-center gap-3">
-                {tutor.firstName}&rsquo;s profile is here to show what a card leads to.
-                <DemoButton href="/demo/parent/tutors/daniel" tone="tertiary" size="sm">
-                  Open Daniel
-                </DemoButton>
-              </span>
-            </Aside>
-          </div>
-        )}
-      </section>
+          </PanelBody>
+        </Panel>
 
-      <section className="mt-9 max-w-[68ch]">
-        <SectionLine title="What a lesson is like" />
-        <p className="mt-3 text-[15px] leading-relaxed text-text-secondary">
-          {tutor.teachingApproach}
-        </p>
-      </section>
+        <div className="flex flex-col gap-5">
+          <Panel>
+            <PanelHead title="Teaching" />
+            <PanelBody>
+              <Facts>
+                <Fact label="Subjects" value={tutor.subjects.join(', ')} />
+                <Fact
+                  label="Year levels"
+                  value={yearLevelRangeLabel(tutor.yearLevelFrom, tutor.yearLevelTo)}
+                />
+                <Fact
+                  label="Format"
+                  value={formatLabel(tutor.offersOnline, tutor.offersInPerson)}
+                />
+                <Fact label="Suits" value={`Year ${String(JACOB.schoolYear)}`} />
+              </Facts>
+            </PanelBody>
+          </Panel>
 
-      <section className="mt-9 grid gap-x-10 sm:grid-cols-2">
-        <div>
-          <SectionLine title="Teaching" />
-          <div className="mt-3">
-            <Facts>
-              <Fact label="Subjects" value={tutor.subjects.join(', ')} />
-              <Fact
-                label="Year levels"
-                value={yearLevelRangeLabel(tutor.yearLevelFrom, tutor.yearLevelTo)}
-              />
-              <Fact
-                label="Format"
-                value={formatLabel(tutor.offersOnline, tutor.offersInPerson)}
-              />
-              <Fact label="Suits" value={`Year ${String(JACOB.schoolYear)}`} />
-            </Facts>
-          </div>
+          <Panel tone="quiet">
+            <PanelHead title="Verification" meta={`${String(tutor.verificationLabels.length)}`} />
+            <PanelBody className="flex flex-wrap gap-1.5">
+              {tutor.verificationLabels.map((label) => (
+                <Chip key={label} tone="neutral">
+                  {verificationLabel(label)}
+                </Chip>
+              ))}
+            </PanelBody>
+          </Panel>
         </div>
-        <div>
-          <SectionLine title="Verification" />
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {tutor.verificationLabels.map((label) => (
-              <Chip key={label} tone="neutral">
-                {verificationLabel(label)}
-              </Chip>
-            ))}
-          </div>
-        </div>
-      </section>
+      </div>
     </ParentShell>
   );
 }

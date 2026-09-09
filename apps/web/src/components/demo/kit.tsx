@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { money, split } from '@/lib/demo/fixtures';
 
 /**
  * THE DEMO'S VISUAL LANGUAGE, as a handful of small parts.
@@ -39,8 +40,10 @@ const buttonTone: Record<ButtonTone, string> = {
   // already means "this one".
   secondary: 'bg-brand-tint text-brand-strong border-brand/15 hover:border-brand/35',
   tertiary: 'bg-transparent text-brand border-surface-border hover:border-brand/40',
-  quiet: 'bg-transparent text-text-secondary border-transparent hover:text-text-primary underline underline-offset-4 decoration-surface-border',
-  destructive: 'bg-transparent text-status-critical border-status-critical-border hover:bg-status-critical-bg',
+  quiet:
+    'bg-transparent text-text-secondary border-transparent hover:text-text-primary underline underline-offset-4 decoration-surface-border',
+  destructive:
+    'bg-transparent text-status-critical border-status-critical-border hover:bg-status-critical-bg',
 };
 
 const buttonSize = {
@@ -258,13 +261,7 @@ export function Row({
 }
 
 /** The name-and-detail column that most rows lead with. */
-export function RowMain({
-  name,
-  detail,
-}: {
-  name: ReactNode;
-  detail?: ReactNode;
-}): ReactNode {
+export function RowMain({ name, detail }: { name: ReactNode; detail?: ReactNode }): ReactNode {
   return (
     <span className="min-w-0 flex-1">
       <span className="block font-display text-base font-medium leading-tight text-text-primary">
@@ -330,13 +327,7 @@ export function Fact({
  * these, so a reviewer can tell what the product does from what the demo is
  * standing in for.
  */
-export function DemoNote({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}): ReactNode {
+export function DemoNote({ title, children }: { title: string; children: ReactNode }): ReactNode {
   return (
     <div className="rounded-[4px] border border-dashed border-brand/35 bg-brand-tint/40 p-4">
       <p className="flex items-center gap-2.5 text-[13.5px] font-semibold text-brand-strong">
@@ -354,13 +345,7 @@ export function DemoNote({
 }
 
 /** Information carries no hue. Neutral ink on the raised surface, and a rule. */
-export function Aside({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}): ReactNode {
+export function Aside({ title, children }: { title: string; children: ReactNode }): ReactNode {
   return (
     <div className="border-l-2 border-surface-border bg-surface-card-secondary px-4 py-3">
       <p className="text-[13.5px] font-semibold text-text-primary">{title}</p>
@@ -370,13 +355,7 @@ export function Aside({
 }
 
 /** The one screen state that is genuinely good news, and looks it. */
-export function Confirmed({
-  title,
-  children,
-}: {
-  title: string;
-  children?: ReactNode;
-}): ReactNode {
+export function Confirmed({ title, children }: { title: string; children?: ReactNode }): ReactNode {
   return (
     <div className="rounded-[4px] bg-brand px-5 py-4 text-brand-contrast">
       <p className="text-[11px] font-medium uppercase tracking-[0.09em] opacity-80">Confirmed</p>
@@ -388,13 +367,7 @@ export function Confirmed({
   );
 }
 
-export function ComingSoon({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}): ReactNode {
+export function ComingSoon({ title, children }: { title: string; children: ReactNode }): ReactNode {
   return (
     <div className="max-w-xl">
       <PageHead title={title} sub="Coming soon" />
@@ -566,9 +539,7 @@ export function Stat({
       >
         {value}
       </p>
-      {detail === undefined ? null : (
-        <p className="mt-1.5 text-[12px] text-text-muted">{detail}</p>
-      )}
+      {detail === undefined ? null : <p className="mt-1.5 text-[12px] text-text-muted">{detail}</p>}
     </div>
   );
 }
@@ -606,5 +577,193 @@ export function EditAffordance({
         )}
       </div>
     </details>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Parts shared by more than one screen
+ * ------------------------------------------------------------------ */
+
+/**
+ * A small card that is entirely a way into somewhere else.
+ *
+ * Lives here rather than beside one page because four screens now use it, and
+ * two versions of the same shortcut drifting apart is precisely the kind of
+ * inconsistency this pass exists to remove.
+ */
+export function QuickCard({
+  href,
+  title,
+  detail,
+  label,
+}: {
+  href: string;
+  title: string;
+  detail: string;
+  label?: string;
+}): ReactNode {
+  return (
+    <Panel href={href} tone="quiet">
+      <PanelBody className="flex items-center gap-3 py-3.5">
+        <span className="min-w-0 flex-1">
+          <span className="block font-display text-[16px] font-medium text-text-primary">
+            {title}
+          </span>
+          <span className="mt-0.5 block text-[12.5px] text-text-muted">{detail}</span>
+        </span>
+        <OpenMark label={label ?? ''} />
+      </PanelBody>
+    </Panel>
+  );
+}
+
+/**
+ * WHETHER THIS LESSON HAS BEEN PAID FOR, in one glance.
+ *
+ * A parent scanning a list of lessons has exactly one question about money, and
+ * it is not how much — it is whether anything is owed. So the settled state is
+ * the brand (committed, done, nothing to do) and the unsettled state is clay,
+ * which everywhere else in this demo means a clock is running. Used unchanged
+ * on the dashboard, on the lessons page and in every detail panel, so the two
+ * states cannot come to look different on different screens.
+ */
+export function PayChip({ payment }: { payment: 'paid' | 'due' }): ReactNode {
+  return payment === 'paid' ? (
+    <Chip tone="committed">Paid</Chip>
+  ) : (
+    <Chip tone="attention">Payment required</Chip>
+  );
+}
+
+/**
+ * Lesson price, Studdy's fee, and what the tutor actually earns.
+ *
+ * TUTOR-FACING ONLY. Every figure derives from `split`, which is the single
+ * place the commission is arithmetic — so this breakdown, the week's headline
+ * and the payouts mock-up cannot disagree about a lesson. Nothing on a parent
+ * screen renders it: Priya is not charged a fee and must never be shown one.
+ */
+export function EarningsSplit({
+  grossMinor,
+  label = 'You earn',
+}: {
+  grossMinor: bigint;
+  label?: string;
+}): ReactNode {
+  const parts = split(grossMinor);
+  return (
+    <Facts>
+      <Fact label="Lesson price" value={money(parts.grossMinor)} />
+      <Fact label="Studdy fee" value={`− ${money(parts.feeMinor)}`} />
+      <Fact label={label} value={money(parts.netMinor)} strong />
+    </Facts>
+  );
+}
+
+/**
+ * A WEEK AT A GLANCE — seven marks, one per day.
+ *
+ * The discovery cards used to carry a real calendar each, which answered a
+ * question nobody asks while comparing tutors. Choosing between four people is
+ * a question of SHAPE — does this person teach on the days we are free — and
+ * the exact hour only matters once one of them has been picked. So the card
+ * gets a strip and the profile keeps the calendar.
+ */
+export function WeekStrip({
+  days,
+  ariaLabel,
+}: {
+  /** One entry per day, Monday first: true where there is bookable time. */
+  days: readonly { readonly label: string; readonly open: boolean }[];
+  ariaLabel: string;
+}): ReactNode {
+  return (
+    <div className="flex flex-wrap items-center gap-1" role="img" aria-label={ariaLabel}>
+      {days.map((day, index) => (
+        <span
+          key={`${day.label}-${String(index)}`}
+          aria-hidden
+          className={`flex h-[26px] w-[30px] items-center justify-center rounded-[4px] border text-[10.5px] font-medium ${
+            day.open
+              ? 'border-brand/25 bg-brand-tint text-brand-strong'
+              : 'border-surface-border bg-surface-card-secondary text-text-muted'
+          }`}
+        >
+          {day.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A labelled block of prose inside a panel.
+ *
+ * The five parts of a lesson record, the goal on a student card, the note on a
+ * request — all the same shape, and the rule on the left is how a reader tells
+ * "went well" from "needs work" without reading either.
+ */
+export function NotePanel({
+  label,
+  tone = 'plain',
+  children,
+}: {
+  label: string;
+  tone?: 'plain' | 'good' | 'watch';
+  children: ReactNode;
+}): ReactNode {
+  const rule =
+    tone === 'good'
+      ? 'border-l-2 border-brand pl-3.5'
+      : tone === 'watch'
+        ? 'border-l-2 border-status-warning pl-3.5'
+        : 'border-l-2 border-surface-border pl-3.5';
+  return (
+    <div className={rule}>
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">{label}</p>
+      <div className="mt-1 text-[13.5px] leading-relaxed text-text-secondary">{children}</div>
+    </div>
+  );
+}
+
+/** A bulleted list of tasks, in the demo's hand. */
+export function TaskList({ tasks }: { tasks: readonly string[] }): ReactNode {
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {tasks.map((task) => (
+        <li key={task} className="flex gap-2.5 text-[13.5px] leading-relaxed text-text-secondary">
+          <span aria-hidden className="mt-[3px] text-brand">
+            &middot;
+          </span>
+          <span className="min-w-0">{task}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The heading above a column of cards that has no card of its own.
+ *
+ * A group of sibling cards still needs a name, and wrapping them in a further
+ * panel to get one is how a page turns into nested boxes.
+ */
+export function CardsHead({
+  title,
+  meta,
+  action,
+}: {
+  title: string;
+  meta?: ReactNode;
+  action?: ReactNode;
+}): ReactNode {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-3">
+      <h2 className="font-display text-[16px] font-semibold text-text-primary">{title}</h2>
+      <div className="flex items-center gap-3 text-[12.5px] text-text-muted">
+        {meta}
+        {action}
+      </div>
+    </div>
   );
 }

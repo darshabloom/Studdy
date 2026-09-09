@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { STUDENTS, JACOB } from './fixtures';
-import { demoFortnight, demoWeek, familyLessons, familyWeekBlocks, staceyWeekBlocks } from './schedule';
+import {
+  demoFortnight,
+  demoWeek,
+  familyLessons,
+  familyWeekBlocks,
+  staceyWeekBlocks,
+} from './schedule';
 
 /**
  * THE PRIVACY BOUNDARY, ASSERTED.
@@ -34,9 +40,10 @@ describe('family calendar projection', () => {
       const blocks = familyWeekBlocks(demoWeek(now).days, now, JACOB.slug);
       const labels = blocks.map((block) => block.label ?? '');
       for (const name of OTHER_NAMES) {
-        expect(labels, `leaked ${name} for a family audience on ${now.toISOString()}`).not.toContain(
-          name,
-        );
+        expect(
+          labels,
+          `leaked ${name} for a family audience on ${now.toISOString()}`,
+        ).not.toContain(name);
       }
     }
   });
@@ -65,9 +72,7 @@ describe('family calendar projection', () => {
   it('shows the tutor her own students by name', () => {
     const now = new Date('2026-09-07T09:00:00+12:00');
     const labels = staceyWeekBlocks(demoWeek(now).days, now).map((block) => block.label ?? '');
-    const named = OTHER_NAMES.filter((name) =>
-      labels.some((label) => label.startsWith(name)),
-    );
+    const named = OTHER_NAMES.filter((name) => labels.some((label) => label.startsWith(name)));
     expect(named.length).toBeGreaterThan(0);
   });
 

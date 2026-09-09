@@ -145,9 +145,7 @@ export function rebookStarts(now: Date = new Date()): readonly BookableStart[] {
     .filter((exception) => exception.opens)
     .map((exception) => ({
       weekday: weekdayOf(exception.day),
-      startMinutes: Math.round(
-        (exception.at.getTime() - exception.day.startAt.getTime()) / 60_000,
-      ),
+      startMinutes: Math.round((exception.at.getTime() - exception.day.startAt.getTime()) / 60_000),
       endMinutes: Math.round(
         (exception.endAt.getTime() - exception.day.startAt.getTime()) / 60_000,
       ),
@@ -249,7 +247,11 @@ export function discoveryStory(
 }
 
 /** A physics tutor's week as read-only bands, for cards and profiles. */
-export function tutorBands(tutor: DemoTutor, days: readonly WeekDay[], now: Date): readonly CalendarBlock[] {
+export function tutorBands(
+  tutor: DemoTutor,
+  days: readonly WeekDay[],
+  now: Date,
+): readonly CalendarBlock[] {
   return bookableStarts(tutor.bands, days, 60, now).map((start) => start.block);
 }
 

@@ -12,11 +12,7 @@ import type { ReactNode } from 'react';
  * announced by a screen reader, and reduced contrast so it never reads as a
  * working control. The explanation above it is the part that is real.
  */
-export function SkeletonPreview({
-  children,
-}: {
-  children: ReactNode;
-}): ReactNode {
+export function SkeletonPreview({ children }: { children: ReactNode }): ReactNode {
   return (
     <div className="relative mt-6">
       <div

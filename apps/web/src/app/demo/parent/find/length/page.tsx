@@ -1,6 +1,6 @@
 import { ParentShell } from '@/components/demo/demo-shells';
 import { ChoiceRows, JourneyProgress } from '@/components/demo/demo-journey';
-import { PageHead } from '@/components/demo/kit';
+import { Panel, PanelBody, PanelHead } from '@/components/demo/kit';
 import { money } from '@/lib/demo/fixtures';
 import { discoveryStory } from '@/lib/demo/stories';
 
@@ -13,31 +13,32 @@ export default function FindLengthPage() {
     <ParentShell active="/demo/parent/tutors">
       <JourneyProgress current="lesson" />
       <div className="mt-6">
-        <PageHead
-          eyebrow="Step 2 of 3"
-          title="How long should the lesson be?"
-          sub={`${story.tutor.firstName} sets a price for each length he offers.`}
-        />
-      </div>
-      <div className="mt-7 max-w-xl">
-        <ChoiceRows
-          choices={[
-            {
-              key: '60',
-              href: '/demo/parent/find/times',
-              title: '60 minutes',
-              detail: 'The usual first lesson.',
-              meta: money(hourly),
-            },
-            {
-              key: '90',
-              href: '/demo/parent/find/times',
-              title: '90 minutes',
-              detail: 'More room when there is a lot of ground to cover.',
-              meta: money((hourly * 3n) / 2n),
-            },
-          ]}
-        />
+        <Panel>
+          <PanelHead title="How long should the lesson be?" meta="Step 2 of 3" />
+          <PanelBody className="py-5">
+            <p className="mb-5 text-[13.5px] text-text-muted">
+              {story.tutor.firstName} sets a price for each length he offers.
+            </p>
+            <ChoiceRows
+              choices={[
+                {
+                  key: '60',
+                  href: '/demo/parent/find/times',
+                  title: '60 minutes',
+                  detail: 'The usual first lesson.',
+                  meta: money(hourly),
+                },
+                {
+                  key: '90',
+                  href: '/demo/parent/find/times',
+                  title: '90 minutes',
+                  detail: 'More room when there is a lot of ground to cover.',
+                  meta: money((hourly * 3n) / 2n),
+                },
+              ]}
+            />
+          </PanelBody>
+        </Panel>
       </div>
     </ParentShell>
   );

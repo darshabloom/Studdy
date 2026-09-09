@@ -2,27 +2,26 @@ import { TutorShell } from '@/components/demo/demo-shells';
 import { DemoCalendar } from '@/components/demo/demo-calendar';
 import {
   Aside,
+  CardsHead,
   Chip,
   DemoButton,
   Disc,
-  PageHead,
-  Row,
-  RowList,
-  RowMain,
-  RowMeta,
-  SectionLine,
+  OpenMark,
+  Panel,
+  PanelBody,
+  PanelHead,
+  Stat,
 } from '@/components/demo/kit';
-import { formatLessonDateTime } from '@/components/requests/request-status';
-import { CADENCE_LABEL, money } from '@/lib/demo/fixtures';
+import { CADENCE_LABEL, money, netMoney } from '@/lib/demo/fixtures';
 import {
   committedLessons,
   demoFortnight,
   demoWeek,
-  inboxRequests,
+  heldRequests,
   serviceNameFor,
+  spanLabel,
   staceyWeekBlocks,
   weekTotals,
-  shortDeadline,
 } from '@/lib/demo/schedule';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
@@ -34,6 +33,11 @@ const DAY_LABEL = new Intl.DateTimeFormat('en-NZ', {
   day: 'numeric',
   month: 'long',
 });
+const CLOCK = new Intl.DateTimeFormat('en-NZ', {
+  timeZone: PLATFORM_TIME_ZONE,
+  hour: 'numeric',
+  minute: '2-digit',
+});
 
 /**
  * WHAT STACEY HAS COMMITTED TO.
@@ -44,6 +48,11 @@ const DAY_LABEL = new Intl.DateTimeFormat('en-NZ', {
  * mistake that makes a tutoring product feel like a diary app — a tutor needs
  * to see the difference between "free on Thursday" and "Thursday is spoken
  * for".
+ *
+ * THE HELD HOUR IS NOT COUNTED. Jacob's extra session sits on the calendar in
+ * clay and in its own card at the bottom, and stays out of the week's figures,
+ * because a lesson nobody has paid for is not income. That is the distinction
+ * the card at the foot of this page exists to make.
  */
 export default function TutorBookingsPage() {
   const now = new Date();
@@ -55,7 +64,7 @@ export default function TutorBookingsPage() {
   const lessons = committedLessons(fortnight, now);
   const blocks = staceyWeekBlocks(week.days, now, { includeHolds: true, includePast: true });
   const totals = weekTotals(week.days, now);
-  const held = inboxRequests(now).filter((request) => request.urgent === false).slice(0, 1);
+  const held = heldRequests(now);
 
   // Grouped by day, because a schedule is read a day at a time.
   const byDay = new Map<string, typeof lessons>();
@@ -66,20 +75,39 @@ export default function TutorBookingsPage() {
 
   return (
     <TutorShell active="/demo/tutor/bookings">
-      <PageHead
-        title="Bookings"
-        sub="The hours you have committed to. Availability is a separate question."
-        action={
-          <DemoButton href="/demo/tutor/availability" tone="tertiary" size="sm">
-            Manage availability
-          </DemoButton>
-        }
-      />
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-muted">
+            {week.rangeLabel}
+          </p>
+          <h1 className="mt-1.5 font-display text-[30px] font-semibold leading-tight tracking-[-0.018em] text-text-primary">
+            Bookings
+          </h1>
+          <p className="mt-1.5 max-w-[62ch] text-[13.5px] text-text-muted">
+            The hours you have committed to. Availability is a separate question.
+          </p>
+        </div>
+        <DemoButton href="/demo/tutor/availability" tone="tertiary" size="sm">
+          Manage availability
+        </DemoButton>
+      </header>
 
-      <section className="mt-8">
-        <SectionLine title="This week" meta={week.rangeLabel} />
-        <div className="mt-4">
-          <DemoCalendar
+      {/* ── The week, with its figures inside the same frame ───────────── */}
+      <div className="mt-6">
+        <Panel className="min-w-0">
+          <PanelHead title="This week" meta={week.rangeLabel} />
+          <PanelBody>
+            <div className="mb-5 flex flex-wrap gap-x-9 gap-y-4">
+              <Stat label="Lessons" value={String(totals.lessons)} size="lg" />
+              <Stat label="Teaching hours" value={(totals.minutes / 60).toFixed(1)} size="lg" />
+              <Stat
+                label="You earn this week"
+                value={money(totals.netMinor)}
+                size="lg"
+                detail={`${money(totals.grossMinor)} in lessons, less ${money(totals.feeMinor)} Studdy fee`}
+              />
+            </div>
+            <DemoCalendar
               blocks={blocks}
               dayLabels={week.dayLabels}
               todayIndex={week.todayIndex}
@@ -88,81 +116,110 @@ export default function TutorBookingsPage() {
               ariaLabel={`Your bookings, ${week.rangeLabel}`}
               legend={{ held: true, once: true }}
             />
-        </div>
-        <p className="mt-3 text-[12.5px] tabular-nums text-text-muted">
-          {totals.lessons} lessons &middot; {(totals.minutes / 60).toFixed(1)} hours &middot;{' '}
-          {money(totals.grossMinor)}
-        </p>
-      </section>
+          </PanelBody>
+        </Panel>
+      </div>
 
-      <section className="mt-10">
-        <SectionLine title="Next two weeks" meta={`${lessons.length} lessons`} />
-        <div className="mt-4 flex flex-col gap-7">
+      {/* ── Every booking in the fortnight, a day at a time ────────────── */}
+      <section className="mt-8">
+        <CardsHead title="Next two weeks" meta={`${String(lessons.length)} lessons`} />
+        <div className="mt-4 flex flex-col gap-5">
           {[...byDay.entries()].map(([day, dayLessons]) => (
-            <div key={day}>
-              <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-muted">
-                {day}
-              </p>
-              <div className="mt-1">
-                <RowList>
-                  {dayLessons.map((lesson) => (
-                    <Row key={lesson.id} href={`/demo/tutor/students/${lesson.student.slug}`}>
-                      <span className="w-[74px] shrink-0 text-[14px] font-semibold tabular-nums text-text-primary">
-                        {formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE).split(' at ')[1]}
-                      </span>
-                      <Disc initials={lesson.student.initials} size="sm" />
-                      <RowMain
-                        name={lesson.student.firstName}
-                        detail={`Year ${String(lesson.student.schoolYear)} · ${serviceNameFor(lesson.student)} · ${lesson.format === 'online' ? 'Online' : 'In person'}`}
-                      />
-                      <Chip tone={lesson.kind === 'weekly' ? 'current' : 'neutral'}>
-                        {CADENCE_LABEL[lesson.kind]}
-                      </Chip>
-                      <RowMeta>
-                        {lesson.durationMinutes} min
-                        <span className="mt-0.5 block text-text-muted">
-                          {money(lesson.priceMinor)}
+            <Panel key={day} tone="quiet">
+              <PanelHead
+                title={day}
+                meta={`${String(dayLessons.length)} ${dayLessons.length === 1 ? 'lesson' : 'lessons'}`}
+              />
+              <PanelBody className="grid gap-4 sm:grid-cols-2">
+                {dayLessons.map((lesson) => (
+                  <Panel key={lesson.id} href={`/demo/tutor/students/${lesson.student.slug}`}>
+                    <PanelBody className="flex flex-col gap-3 py-3.5">
+                      <div className="flex items-start gap-3">
+                        <span className="w-[62px] shrink-0 text-[15px] font-semibold tabular-nums text-text-primary">
+                          {CLOCK.format(lesson.at)}
                         </span>
-                      </RowMeta>
-                    </Row>
-                  ))}
-                </RowList>
-              </div>
-            </div>
+                        <Disc initials={lesson.student.initials} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-display text-[16px] font-medium leading-tight text-text-primary">
+                            {lesson.student.firstName}
+                          </p>
+                          <p className="mt-0.5 text-[12px] text-text-muted">
+                            Year {lesson.student.schoolYear} &middot;{' '}
+                            {serviceNameFor(lesson.student)}
+                          </p>
+                        </div>
+                        <OpenMark label="" />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 border-t border-surface-border pt-2.5">
+                        <Chip tone={lesson.kind === 'weekly' ? 'current' : 'neutral'}>
+                          {CADENCE_LABEL[lesson.kind]}
+                        </Chip>
+                        <Chip tone="ghost">
+                          {lesson.format === 'online' ? 'Online' : 'In person'}
+                        </Chip>
+                        <span className="ml-auto text-[12.5px] tabular-nums text-text-secondary">
+                          {lesson.durationMinutes} min &middot;{' '}
+                          <span className="font-semibold text-text-primary">
+                            {netMoney(lesson.priceMinor)}
+                          </span>
+                        </span>
+                      </div>
+                    </PanelBody>
+                  </Panel>
+                ))}
+              </PanelBody>
+            </Panel>
           ))}
         </div>
       </section>
 
+      {/* ── The hour that is spoken for but not sold ───────────────────── */}
       {held.length > 0 ? (
-        <section className="mt-10">
-          <SectionLine title="Held, not yet booked" meta={`${held.length}`} />
-          <div className="mt-1">
-            <RowList>
-              {held.map((request) => {
-                const first = request.offered[0];
-                return (
-                  <Row key={request.reference} href={`/demo/tutor/requests/${request.slug}`}>
-                    <Disc initials={request.studentInitials} size="sm" />
-                    <RowMain
-                      name={request.studentFirstName}
-                      detail={
-                        first === undefined
-                          ? 'Awaiting a decision'
-                          : `${formatLessonDateTime(first.at, PLATFORM_TIME_ZONE)} · awaiting the family`
-                      }
+        <section className="mt-8">
+          <CardsHead title="Held, not yet booked" meta={`${String(held.length)}`} />
+          <div className="mt-4 flex flex-col gap-4">
+            {held.map((request) => {
+              const accepted = request.offered[0];
+              return (
+                <Panel
+                  key={request.reference}
+                  tone="attention"
+                  href={`/demo/tutor/requests/${request.slug}/accepted`}
+                >
+                  <PanelBody className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                    <span
+                      aria-hidden
+                      className="w-[3px] self-stretch rounded-full bg-status-warning"
                     />
-                    <Chip tone="attention">
-                      Reply by {shortDeadline(request.respondByAt)}
-                    </Chip>
-                  </Row>
-                );
-              })}
-            </RowList>
+                    <Disc initials={request.studentInitials} size="sm" />
+                    <span className="min-w-[210px] flex-1">
+                      <span className="block font-display text-[17px] font-medium text-text-primary">
+                        {request.studentFirstName}
+                      </span>
+                      <span className="mt-0.5 block text-[12.5px] text-text-secondary">
+                        {accepted === undefined
+                          ? 'Awaiting a decision'
+                          : `${spanLabel(accepted.at, accepted.durationMinutes)} · you accepted, the family has not paid`}
+                      </span>
+                    </span>
+                    <Chip tone="attention">Awaiting payment</Chip>
+                    <span className="text-right text-[13px] tabular-nums text-text-secondary">
+                      <span className="block font-semibold text-text-primary">
+                        {netMoney(request.priceMinor)}
+                      </span>
+                      if it becomes a lesson
+                    </span>
+                    <OpenMark label="" />
+                  </PanelBody>
+                </Panel>
+              );
+            })}
           </div>
-          <div className="mt-5">
+          <div className="mt-4">
             <Aside title="A hold is not a booking">
               Time held against a request keeps the slot out of your availability, but the lesson is
-              only confirmed once the family has chosen you and paid.
+              only confirmed once the family has chosen you and paid. It is deliberately kept out of
+              the figures above.
             </Aside>
           </div>
         </section>

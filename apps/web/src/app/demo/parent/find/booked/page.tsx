@@ -9,13 +9,14 @@ import {
   Disc,
   Fact,
   Facts,
-  PageHead,
-  SectionLine,
+  Panel,
+  PanelBody,
+  PanelHead,
+  PayChip,
 } from '@/components/demo/kit';
-import { formatLessonDateTime } from '@/components/requests/request-status';
 import { JACOB, STACEY, money } from '@/lib/demo/fixtures';
-import { chosenTimes, discoveryStory, tutorBands } from '@/lib/demo/stories';
-import { PLATFORM_TIME_ZONE } from '@/lib/time';
+import { withPaid } from '@/lib/demo/schedule';
+import { chosenTimes, discoveryStory, intervalLabel, tutorBands } from '@/lib/demo/stories';
 
 export const metadata = { title: 'This lesson is booked' };
 
@@ -50,7 +51,9 @@ export default async function FindBookedPage({
   const blocks = [
     ...bands.filter(
       (block) =>
-        block.dayIndex !== column || block.endMinutes <= startMinutes || block.startMinutes >= endMinutes,
+        block.dayIndex !== column ||
+        block.endMinutes <= startMinutes ||
+        block.startMinutes >= endMinutes,
     ),
     {
       id: `lesson-${story.accepted.toISOString()}`,
@@ -66,52 +69,63 @@ export default async function FindBookedPage({
     <ParentShell active="/demo/parent/tutors">
       <JourneyProgress current="booked" />
 
-      <div className="mt-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-[12.5px] text-text-muted">{story.reference}</p>
-          <PageHead title="Booked" sub={`Physics for ${JACOB.firstName}`} />
+      <header className="mt-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-muted">
+            {story.reference}
+          </p>
+          <h1 className="mt-1.5 font-display text-[30px] font-semibold leading-tight tracking-[-0.018em] text-text-primary">
+            Booked
+          </h1>
+          <p className="mt-1.5 text-[13.5px] text-text-muted">Physics for {JACOB.firstName}</p>
         </div>
-        <Chip tone="committed">Confirmed</Chip>
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip tone="committed">Confirmed</Chip>
+          <PayChip payment="paid" />
+        </div>
+      </header>
 
       <div className="mt-6">
-        <Confirmed title={formatLessonDateTime(story.accepted, PLATFORM_TIME_ZONE)}>
+        <Confirmed title={intervalLabel(story.accepted, story.durationMinutes)}>
           {story.tutor.firstName} has this time reserved for {JACOB.firstName}. Your payment went
           through and nothing else is needed from you.
         </Confirmed>
       </div>
 
-      <div className="mt-8 grid gap-8 xl:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] xl:items-start">
-        <section className="min-w-0">
-          <SectionLine title="The lesson" />
-          <div className="mt-4 flex items-center gap-3">
-            <Disc initials={story.tutor.initials} />
-            <div>
-              <p className="font-display text-[17px] font-medium text-text-primary">
-                {story.tutor.firstName}
-              </p>
-              <p className="text-[12.5px] text-text-muted">Physics</p>
+      <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+        <Panel>
+          <PanelHead title="The lesson" />
+          <PanelBody>
+            <div className="flex items-center gap-3">
+              <Disc initials={story.tutor.initials} />
+              <div className="min-w-0">
+                <p className="font-display text-[17px] font-medium leading-tight text-text-primary">
+                  {story.tutor.firstName}
+                </p>
+                <p className="mt-0.5 text-[12.5px] text-text-muted">Physics</p>
+              </div>
             </div>
-          </div>
-          <div className="mt-4">
-            <Facts>
-              <Fact label="Student" value={JACOB.firstName} />
-              <Fact label="Length" value={`${String(story.durationMinutes)} minutes`} />
-              <Fact
-                label="Format"
-                value={story.formatCode === 'online' ? 'Online' : 'In person'}
-              />
-              <Fact label="Paid" value={money(story.priceMinor)} strong />
-            </Facts>
-          </div>
-        </section>
+            <div className="mt-4">
+              <Facts>
+                <Fact label="Student" value={JACOB.firstName} />
+                <Fact label="When" value={intervalLabel(story.accepted, story.durationMinutes)} />
+                <Fact label="Length" value={`${String(story.durationMinutes)} minutes`} />
+                <Fact
+                  label="Format"
+                  value={story.formatCode === 'online' ? 'Online' : 'In person'}
+                />
+                <Fact label="Paid" value={money(story.priceMinor)} strong />
+              </Facts>
+            </div>
+          </PanelBody>
+        </Panel>
 
-        <section className="min-w-0">
-          <SectionLine title="His week" meta={story.week.rangeLabel} />
-          <p className="mt-2 text-[12.5px] text-text-muted">
-            The confirmed lesson, on the time it took out of his availability.
-          </p>
-          <div className="mt-4">
+        <Panel className="min-w-0">
+          <PanelHead title={`${story.tutor.firstName}'s week`} meta={story.week.rangeLabel} />
+          <PanelBody>
+            <p className="mb-4 text-[12.5px] text-text-muted">
+              The confirmed lesson, on the time it took out of his availability.
+            </p>
             <DemoCalendar
               blocks={blocks}
               dayLabels={story.week.dayLabels}
@@ -121,8 +135,8 @@ export default async function FindBookedPage({
               ariaLabel={`${story.tutor.firstName}`}
               legend={{}}
             />
-          </div>
-        </section>
+          </PanelBody>
+        </Panel>
       </div>
 
       <div className="mt-9">
@@ -132,7 +146,7 @@ export default async function FindBookedPage({
             screens to find a stranger; four to book again with someone you already use.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <DemoButton href="/demo/parent">Back to your family</DemoButton>
+            <DemoButton href={withPaid('/demo/parent', true)}>Back to your family</DemoButton>
             <DemoButton href="/demo/parent/rebook" tone="quiet">
               See the shorter journey
             </DemoButton>

@@ -7,8 +7,9 @@ import {
   Disc,
   Fact,
   Facts,
-  PageHead,
-  SectionLine,
+  Panel,
+  PanelBody,
+  PanelHead,
 } from '@/components/demo/kit';
 import { formatDeadline } from '@/components/requests/request-status';
 import { JACOB, money } from '@/lib/demo/fixtures';
@@ -30,42 +31,52 @@ export default async function FindSentPage({
   return (
     <ParentShell active="/demo/parent/tutors">
       <JourneyProgress current="sent" />
-      <div className="mt-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-[12.5px] text-text-muted">{story.reference}</p>
-          <PageHead title={`Sent to ${story.tutor.firstName}`} sub={`Physics for ${JACOB.firstName}`} />
-        </div>
-        <Chip tone="neutral">Awaiting a reply</Chip>
-      </div>
+      <div className="mt-6 grid items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <Panel>
+          <PanelHead
+            title="Request sent"
+            meta={story.reference}
+            action={<Chip tone="neutral">Awaiting a reply</Chip>}
+          />
+          <PanelBody className="py-5">
+            <div className="flex items-center gap-4">
+              <Disc initials={story.tutor.initials} size="lg" />
+              <div className="min-w-0 flex-1">
+                <h1 className="font-display text-[24px] font-semibold leading-tight text-text-primary">
+                  Sent to {story.tutor.firstName}
+                </h1>
+                <p className="mt-1 text-[12.5px] text-text-muted">Physics for {JACOB.firstName}</p>
+              </div>
+              <span className="text-[19px] font-semibold tabular-nums text-text-primary">
+                {money(story.priceMinor)}
+              </span>
+            </div>
+            <div className="mt-5 border-t border-surface-border pt-3">
+              <Facts>
+                <Fact
+                  label="Reply due by"
+                  value={formatDeadline(story.respondByAt, PLATFORM_TIME_ZONE)}
+                />
+                <Fact label="Status" value="Nothing held or charged yet" />
+              </Facts>
+            </div>
+          </PanelBody>
+        </Panel>
 
-      <section className="mt-8">
-        <SectionLine title="What you asked for" />
-        <div className="mt-4 flex items-center gap-4">
-          <Disc initials={story.tutor.initials} />
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-[17px] font-medium text-text-primary">
-              {story.tutor.firstName}
-            </p>
-            <p className="mt-0.5 text-[12.5px] text-text-muted">
-              Reply due by {formatDeadline(story.respondByAt, PLATFORM_TIME_ZONE)}
-            </p>
-          </div>
-          <span className="text-[14px] font-semibold tabular-nums text-text-primary">
-            {money(story.priceMinor)}
-          </span>
-        </div>
-        <div className="mt-5 max-w-lg">
-          <Facts>
+        <Panel tone="quiet">
+          <PanelHead title="What you asked for" meta={`${String(story.offered.length)} times`} />
+          <PanelBody className="flex flex-col gap-2">
             {story.offered.map((at) => (
-              <Fact
+              <div
                 key={at.toISOString()}
-                label="Offered"
-                value={intervalLabel(at, story.durationMinutes)}
-              />
+                className="rounded-[5px] border border-surface-border bg-surface-card px-3.5 py-2.5 text-[13px] font-medium tabular-nums text-text-primary"
+              >
+                {intervalLabel(at, story.durationMinutes)}
+              </div>
             ))}
-          </Facts>
-        </div>
-      </section>
+          </PanelBody>
+        </Panel>
+      </div>
 
       <div className="mt-9">
         <DemoNote title="In the real product you would wait here">

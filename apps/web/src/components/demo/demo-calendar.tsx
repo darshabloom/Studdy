@@ -114,7 +114,11 @@ function fitFor(width: number, total: number): Fit {
       if (perColumn >= MIN_COLUMN) return { columns, gutter, perColumn };
     }
   }
-  return { columns: 1, gutter: GUTTER_TIGHT, perColumn: Math.max(width - GUTTER_TIGHT, MIN_COLUMN) };
+  return {
+    columns: 1,
+    gutter: GUTTER_TIGHT,
+    perColumn: Math.max(width - GUTTER_TIGHT, MIN_COLUMN),
+  };
 }
 
 /** 'Mon 14 Sept' → 'Mon 14' → 'Mon', by how much room a column has. */

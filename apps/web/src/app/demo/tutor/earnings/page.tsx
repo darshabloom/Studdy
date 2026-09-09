@@ -13,12 +13,20 @@ import {
   RowMeta,
   Stat,
 } from '@/components/demo/kit';
-import { COMMISSION_RATE, money, priceFor } from '@/lib/demo/fixtures';
+import { money, priceFor, split } from '@/lib/demo/fixtures';
 
 export const metadata = { title: 'Earnings' };
 
-const keep = (minor: bigint): bigint => BigInt(Math.round(Number(minor) * (1 - COMMISSION_RATE)));
-const fee = (minor: bigint): bigint => minor - keep(minor);
+/*
+ * THROUGH THE RATE CARD, even here.
+ *
+ * This page is a mock-up of something unbuilt, and it still may not invent
+ * arithmetic: it rounded the commission itself for one build, which is one more
+ * place for a tutor to be told a different number about the same lesson. A
+ * skeleton that contradicts the live screens is worse than no skeleton.
+ */
+const keep = (minor: bigint): bigint => split(minor).netMinor;
+const fee = (minor: bigint): bigint => split(minor).feeMinor;
 
 const PAYMENTS = [
   { student: 'Jacob', when: 'Tue 8 Sept', minutes: 60 },
@@ -66,8 +74,18 @@ export default function TutorEarningsPage() {
           <PanelBody>
             <div className="flex flex-wrap gap-x-10 gap-y-5">
               <Stat label="Earned" value={money(keep(weekGross))} size="lg" detail="after fees" />
-              <Stat label="Lesson value" value={money(weekGross)} size="lg" detail="charged to families" />
-              <Stat label="Studdy fee" value={money(fee(weekGross))} size="lg" detail="15% of listed price" />
+              <Stat
+                label="Lesson value"
+                value={money(weekGross)}
+                size="lg"
+                detail="charged to families"
+              />
+              <Stat
+                label="Studdy fee"
+                value={money(fee(weekGross))}
+                size="lg"
+                detail="15% of listed price"
+              />
             </div>
             <div className="mt-5 border-t border-surface-border pt-4">
               <Facts>

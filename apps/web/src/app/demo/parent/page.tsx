@@ -8,6 +8,7 @@ import {
   Facts,
   OpenMark,
   Panel,
+  PayChip,
   PanelBody,
   PanelHead,
   Row,
@@ -24,7 +25,10 @@ import {
   familyActions,
   familyLessons,
   familyRelationships,
+  isPaid,
   lessonsForStudent,
+  shortDeadline,
+  withPaid,
 } from '@/lib/demo/schedule';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
@@ -64,22 +68,29 @@ const CLOCK = new Intl.DateTimeFormat('en-NZ', {
  * The attention card renders NOTHING when nothing is waiting. An "all clear"
  * card is filler, and filler is what makes software feel automated.
  */
-export default function ParentHomePage() {
+export default async function ParentHomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ paid?: string }>;
+}) {
+  const { paid: paidParam } = await searchParams;
+  const paid = isPaid(paidParam);
   const now = new Date();
   const relationships = familyRelationships();
-  const actions = familyActions();
+  const actions = familyActions(now, paid);
   // THROUGH THE FAMILY PROJECTION. Listing every lesson Stacey teaches put
   // another family's child on Priya's dashboard once already.
-  const upcoming = familyLessons(demoFortnight(now), now);
+  const upcoming = familyLessons(demoFortnight(now), now, [JACOB.slug], { paid });
   const next = upcoming[0] ?? null;
   const { past } = lessonsForStudent(JACOB.slug, now);
+  const link = (href: string) => withPaid(href, paid);
   const latest = past[0] ?? null;
   const record = lessonRecord(latest?.topic ?? null);
   const spentMinor = past.reduce((total, lesson) => total + lesson.priceMinor, 0n);
   const primary = relationships[0] ?? null;
 
   return (
-    <ParentShell active="/demo/parent">
+    <ParentShell active="/demo/parent" paid={paid}>
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-muted">
@@ -89,25 +100,44 @@ export default function ParentHomePage() {
             Your family
           </h1>
         </div>
-        <DemoButton href="/demo/parent/rebook">Book another lesson</DemoButton>
+        <DemoButton href={link('/demo/parent/rebook')}>Book another lesson</DemoButton>
       </header>
 
-      {/* Renders only when something genuinely needs Priya. Empty today. */}
+      {/*
+       * Renders ONLY when something genuinely needs Priya, and today one thing
+       * does: Stacey has accepted the extra session and is holding the hour
+       * until it is paid for. When the demo's payment goes through this list
+       * empties and the card disappears entirely - no "all clear" tile, which
+       * would be filler dressed as reassurance.
+       */}
       {actions.length > 0 ? (
         <div className="mt-6 flex flex-col gap-3">
           {actions.map((action) => (
-            <Panel key={action.id} tone="attention" href={action.href}>
-              <PanelBody className="flex flex-wrap items-center gap-4">
+            <Panel key={action.id} tone="attention">
+              <PanelBody className="flex flex-wrap items-start gap-x-6 gap-y-4 py-5">
                 <span aria-hidden className="w-[3px] self-stretch rounded-full bg-status-warning" />
-                <span className="min-w-0 flex-1">
-                  <span className="block font-display text-[17px] font-medium text-text-primary">
-                    {action.title}
+                <span className="min-w-[220px] flex-1">
+                  <span className="flex flex-wrap items-center gap-2.5">
+                    <span className="font-display text-[19px] font-semibold text-text-primary">
+                      {action.title}
+                    </span>
+                    <Chip tone="attention">Pay by {shortDeadline(action.payByAt)}</Chip>
                   </span>
-                  <span className="mt-0.5 block text-[13px] text-text-secondary">
+                  <span className="mt-1.5 block max-w-[62ch] text-[13.5px] leading-relaxed text-text-secondary">
                     {action.detail}
                   </span>
+                  <span className="mt-2.5 block text-[13.5px] font-medium tabular-nums text-text-primary">
+                    {action.whenLabel}
+                  </span>
                 </span>
-                <OpenMark label="Sort it" />
+                <span className="flex flex-col items-end gap-3">
+                  <span className="text-[26px] font-semibold leading-none tabular-nums text-text-primary">
+                    {money(action.amountMinor)}
+                  </span>
+                  <DemoButton href={action.href} size="md">
+                    {action.actionLabel}
+                  </DemoButton>
+                </span>
               </PanelBody>
             </Panel>
           ))}
@@ -152,7 +182,7 @@ export default function ParentHomePage() {
                   </p>
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
                     <Chip tone="current">{CADENCE_LABEL[next.kind]}</Chip>
-                    <Chip tone="neutral">Paid</Chip>
+                    <PayChip payment={next.payment} />
                   </div>
                 </div>
               </div>
@@ -168,7 +198,7 @@ export default function ParentHomePage() {
             title="Upcoming lessons"
             meta={`${String(upcoming.length)} booked`}
             action={
-              <DemoButton href="/demo/parent/lessons" tone="quiet" size="sm">
+              <DemoButton href={link('/demo/parent/lessons')} tone="quiet" size="sm">
                 All lessons
               </DemoButton>
             }
@@ -180,7 +210,11 @@ export default function ParentHomePage() {
                   (entry) => entry.student.slug === lesson.student.slug,
                 );
                 return (
-                  <Row key={lesson.id} href="/demo/parent/lessons">
+                  <Row
+                    key={lesson.id}
+                    href={link(`/demo/parent/lessons/${lesson.id}`)}
+                    attention={lesson.payment === 'due'}
+                  >
                     <span className="w-[96px] shrink-0">
                       <span className="block text-[13.5px] font-semibold tabular-nums text-text-primary">
                         {CLOCK.format(lesson.at)}
@@ -194,7 +228,7 @@ export default function ParentHomePage() {
                       name={`${relationship?.subject ?? 'Lesson'} · ${relationship?.tutorFirstName ?? ''}`}
                       detail={`${lesson.student.firstName} · ${lesson.format === 'online' ? 'Online' : 'In person'} · ${String(lesson.durationMinutes)} min`}
                     />
-                    <Chip tone="current">Booked</Chip>
+                    <PayChip payment={lesson.payment} />
                     <RowMeta>{money(lesson.priceMinor)}</RowMeta>
                   </Row>
                 );
@@ -206,7 +240,7 @@ export default function ParentHomePage() {
         <div className="flex flex-col gap-5">
           <PanelHeadless title="Tutors" count={relationships.length} />
           {relationships.map((relationship) => (
-            <Panel key={relationship.id} href={relationship.href}>
+            <Panel key={relationship.id} href={link(relationship.href)}>
               <PanelBody className="flex flex-col gap-3">
                 <div className="flex items-start gap-3">
                   <Disc initials={relationship.tutorInitials} />
@@ -222,16 +256,14 @@ export default function ParentHomePage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <Chip tone="current">{CADENCE_LABEL[relationship.cadence]}</Chip>
-                  <Chip tone="neutral">
-                    {relationship.lessonsSoFar} lessons
-                  </Chip>
+                  <Chip tone="neutral">{relationship.lessonsSoFar} lessons</Chip>
                 </div>
                 <p className="text-[12.5px] text-text-secondary">{relationship.standing}</p>
               </PanelBody>
             </Panel>
           ))}
 
-          <Panel tone="quiet" href="/demo/parent/tutors">
+          <Panel tone="quiet" href={link('/demo/parent/tutors')}>
             <PanelBody className="flex items-center gap-3">
               <span className="min-w-0 flex-1">
                 <span className="block font-display text-[16px] font-medium text-text-primary">
@@ -249,7 +281,7 @@ export default function ParentHomePage() {
 
       {/* ── Jacob (narrow) + Recent activity (wide) ───────────────────── */}
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)]">
-        <Panel href="/demo/parent/student">
+        <Panel href={link('/demo/parent/student')}>
           <PanelHead
             title={JACOB.firstName}
             meta={`Year ${String(JACOB.schoolYear)}`}
@@ -270,7 +302,7 @@ export default function ParentHomePage() {
         </Panel>
 
         {latest !== null && record !== null ? (
-          <Panel href="/demo/parent/lessons">
+          <Panel href={link(`/demo/parent/lessons/${latest.id}`)}>
             <PanelHead
               title="Last lesson"
               meta={formatLessonDateTime(latest.at, PLATFORM_TIME_ZONE)}
@@ -311,11 +343,14 @@ export default function ParentHomePage() {
       {/* ── Earlier lessons, quiet ────────────────────────────────────── */}
       <div className="mt-5">
         <Panel tone="quiet">
-          <PanelHead title="Earlier lessons" meta={`${String(Math.max(past.length - 1, 0))} more`} />
+          <PanelHead
+            title="Earlier lessons"
+            meta={`${String(Math.max(past.length - 1, 0))} more`}
+          />
           <PanelBody className="py-1">
             <RowList>
               {past.slice(1, 5).map((lesson) => (
-                <Row key={lesson.id} href="/demo/parent/lessons">
+                <Row key={lesson.id} href={link(`/demo/parent/lessons/${lesson.id}`)}>
                   <RowMain
                     name={lesson.topic ?? 'Lesson'}
                     detail={`${lesson.student.firstName} · ${formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}`}
@@ -352,7 +387,13 @@ function Note({
   children: ReactNode;
 }): ReactNode {
   return (
-    <div className={tone === 'good' ? 'border-l-2 border-brand pl-3.5' : 'border-l-2 border-status-warning pl-3.5'}>
+    <div
+      className={
+        tone === 'good'
+          ? 'border-l-2 border-brand pl-3.5'
+          : 'border-l-2 border-status-warning pl-3.5'
+      }
+    >
       <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
         {label}
       </dt>

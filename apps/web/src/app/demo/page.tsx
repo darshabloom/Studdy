@@ -46,8 +46,11 @@ export default function DemoHomePage() {
           initials={PRIYA.initials}
           title="Book with a tutor you already use"
           who={`${PRIYA.name} · parent`}
-          body={`${PRIYA.firstName} has booked ${JACOB.firstName}'s Maths lessons with ${STACEY.firstName} since March. Book an extra session before his assessment — four screens, because everything except when is already known.`}
-          beats={['Pick your own times on a real calendar', 'Review, pay, confirmed']}
+          body={`${PRIYA.firstName} has booked ${JACOB.firstName}'s Maths lessons with ${STACEY.firstName} since March. ${STACEY.firstName} has accepted an extra session before his assessment and is holding the hour — it needs paying for.`}
+          beats={[
+            'Pay for the held lesson, and watch it settle',
+            'Or book another: pick your own times, review, pay',
+          ]}
           href="/demo/parent"
           cta="Open the family workspace"
           tone="hero"
@@ -67,8 +70,8 @@ export default function DemoHomePage() {
           initials={STACEY.initials}
           title="Run a tutoring practice"
           who={`${STACEY.firstName} · ${String(STUDENTS.length)} students`}
-          body="An established tutor's week: recurring lessons, a one-off, a trial, a paused student, and four requests waiting on a decision. Her bookings, services and lesson records."
-          beats={['Accept a request and hold the time', 'Lesson summaries and homework']}
+          body="An established tutor's week: recurring lessons, a one-off, a trial, a paused student, three requests waiting on a decision and one hour held against a family who has not paid yet."
+          beats={['Accept a request and hold the time', 'What each lesson earns, after commission']}
           href="/demo/tutor"
           cta="Open the tutor workspace"
         />
