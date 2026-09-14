@@ -78,7 +78,7 @@ export default async function FindSentPage({
         </Panel>
       </div>
 
-      <div className="mt-9">
+      <div className="mt-6 sm:mt-9">
         <DemoNote title="In the real product you would wait here">
           <p>
             Each tutor replies separately, and no tutor can see who else you asked. You are emailed

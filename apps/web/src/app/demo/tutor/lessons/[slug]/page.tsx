@@ -14,11 +14,9 @@ import {
   PanelBody,
   PanelHead,
 } from '@/components/demo/kit';
-import { formatLessonDateTime } from '@/components/requests/request-status';
 import { serviceById } from '@/lib/demo/fixtures';
 import { lessonRecord } from '@/lib/demo/lesson-records';
 import { lessonById, serviceNameFor, spanLabel } from '@/lib/demo/schedule';
-import { PLATFORM_TIME_ZONE } from '@/lib/time';
 
 export const metadata = { title: 'Lesson' };
 
@@ -53,8 +51,7 @@ export default async function TutorLessonPage({ params }: { params: Promise<{ sl
           <Disc initials={lesson.student.initials} size="lg" />
           <div className="min-w-0">
             <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-muted">
-              {lesson.student.firstName} &middot;{' '}
-              {formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}
+              {lesson.student.firstName} &middot; {spanLabel(lesson.at, lesson.durationMinutes)}
             </p>
             <h1 className="mt-1.5 font-display text-[28px] font-semibold leading-tight tracking-[-0.018em] text-text-primary text-balance">
               {lesson.topic ?? 'Lesson'}

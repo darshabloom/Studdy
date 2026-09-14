@@ -46,10 +46,11 @@ const buttonTone: Record<ButtonTone, string> = {
     'bg-transparent text-status-critical border-status-critical-border hover:bg-status-critical-bg',
 };
 
+// Taller on phones: a 30px target is fine for a mouse and a miss for a thumb.
 const buttonSize = {
-  sm: 'text-[13px] px-3 py-1.5',
-  md: 'text-sm px-4 py-2',
-  lg: 'text-[15px] px-5 py-2.5',
+  sm: 'text-[13px] px-3 py-1.5 min-h-[36px] sm:min-h-0',
+  md: 'text-sm px-4 py-2 min-h-[44px] sm:min-h-0',
+  lg: 'text-[15px] px-5 py-2.5 min-h-[48px] sm:min-h-0',
 } as const;
 
 export function DemoButton({
@@ -263,7 +264,10 @@ export function Row({
 /** The name-and-detail column that most rows lead with. */
 export function RowMain({ name, detail }: { name: ReactNode; detail?: ReactNode }): ReactNode {
   return (
-    <span className="min-w-0 flex-1">
+    // `basis-[11rem]`: in a wrapping row a zero basis lets the name shrink to a
+    // word per line while the chips beside it keep their width. With a real
+    // basis the row wraps instead, and the chips drop underneath the name.
+    <span className="min-w-0 flex-1 basis-[11rem]">
       <span className="block font-display text-base font-medium leading-tight text-text-primary">
         {name}
       </span>
@@ -303,12 +307,14 @@ export function Fact({
 }): ReactNode {
   return (
     <div
-      className={`flex justify-between gap-6 border-b border-surface-border py-2 text-[13.5px] last:border-b-0 ${
+      className={`flex flex-wrap justify-between gap-x-6 gap-y-0.5 border-b border-surface-border py-2 text-[13.5px] last:border-b-0 ${
         strong ? 'border-t border-t-surface-border font-semibold text-text-primary' : ''
       }`}
     >
       <dt className="text-text-muted">{label}</dt>
-      <dd className={`text-right tabular-nums ${strong ? '' : 'font-medium text-text-primary'}`}>
+      <dd
+        className={`ml-auto text-right tabular-nums ${strong ? '' : 'font-medium text-text-primary'}`}
+      >
         {value}
       </dd>
     </div>
@@ -473,11 +479,11 @@ export function PanelHead({
 }): ReactNode {
   return (
     <div
-      className={`flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3 ${
+      className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b px-4 py-3 sm:px-5 ${
         tone === 'onBrand' ? 'border-brand-contrast/20' : 'border-surface-border'
       }`}
     >
-      <div className="flex items-baseline gap-3">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
         <h2
           className={`font-display text-[16px] font-semibold ${
             tone === 'onBrand' ? 'text-brand-contrast' : 'text-text-primary'
@@ -508,7 +514,7 @@ export function PanelBody({
   className?: string;
   children: ReactNode;
 }): ReactNode {
-  return <div className={`px-5 py-4 ${className}`}>{children}</div>;
+  return <div className={`px-4 py-4 sm:px-5 ${className}`}>{children}</div>;
 }
 
 /**

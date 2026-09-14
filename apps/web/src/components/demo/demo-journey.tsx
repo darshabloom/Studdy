@@ -33,9 +33,38 @@ export const DISCOVERY_STEPS: readonly JourneyStep[] = [
 export function JourneyProgress({ current }: { current: string }): ReactNode {
   const index = DISCOVERY_STEPS.findIndex((step) => step.key === current);
 
+  const currentStep = DISCOVERY_STEPS[index];
+
   return (
     <nav aria-label="Progress" className="border-b border-surface-border pb-3">
-      <ol className="flex flex-wrap items-center gap-x-1 gap-y-1">
+      {/* Eight pills wrap to three rows on a phone and push the question below
+          the fold. Below `sm` the same fact is one line and a bar. */}
+      <div className="sm:hidden">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[13px] font-semibold text-text-primary">
+            Step {index + 1} of {DISCOVERY_STEPS.length} &middot; {currentStep?.label}
+          </p>
+          {index > 0 ? (
+            <Link
+              href={DISCOVERY_STEPS[index - 1]?.href ?? '/demo/parent/tutors'}
+              className="text-[13px] font-medium text-brand"
+            >
+              &lsaquo; {DISCOVERY_STEPS[index - 1]?.label}
+            </Link>
+          ) : null}
+        </div>
+        <div className="mt-2 flex gap-1" aria-hidden>
+          {DISCOVERY_STEPS.map((step, position) => (
+            <span
+              key={step.key}
+              className={`h-[4px] flex-1 rounded-full ${
+                position <= index ? 'bg-brand' : 'bg-surface-border'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+      <ol className="hidden flex-wrap items-center gap-x-1 gap-y-1 sm:flex">
         {DISCOVERY_STEPS.map((step, position) => {
           const state = position < index ? 'done' : position === index ? 'current' : 'todo';
           const body = (

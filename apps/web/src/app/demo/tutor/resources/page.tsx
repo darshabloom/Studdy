@@ -64,7 +64,7 @@ export default function TutorResourcesPage() {
           <PanelHead title="Your library" meta="5 items" />
           <PanelBody>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="flex-1 rounded-[5px] border border-surface-border bg-surface-card-secondary px-3 py-2 text-[13.5px] text-text-muted">
+              <span className="basis-full rounded-[5px] border border-surface-border bg-surface-card-secondary sm:flex-1 sm:basis-0 px-3 py-2 text-[13.5px] text-text-muted">
                 Search your resources…
               </span>
               <Chip tone="current">All subjects</Chip>

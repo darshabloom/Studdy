@@ -121,7 +121,7 @@ export function DemoTimePicker({
                   onClick={() => {
                     setSelected((current) => current.filter((entry) => entry !== iso));
                   }}
-                  className="inline-flex items-center gap-2 rounded-full border border-brand bg-brand-tint px-3 py-1 text-[12.5px] font-medium tabular-nums text-brand-strong transition-colors hover:bg-brand-tint/60"
+                  className="inline-flex min-h-[36px] items-center gap-2 rounded-full border border-brand bg-brand-tint px-3.5 py-1 text-[13px] font-medium tabular-nums text-brand-strong transition-colors hover:bg-brand-tint/60 sm:min-h-0 sm:px-3 sm:text-[12.5px]"
                 >
                   {labelFor[iso] ?? iso}
                   <span aria-hidden>×</span>
@@ -139,7 +139,31 @@ export function DemoTimePicker({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
+      {/*
+       * ON A PHONE, THE DECISION STAYS IN REACH.
+       *
+       * The calendar is taller than the screen, so a Continue button after it
+       * is a scroll away from every tap that matters. Below `sm` this bar
+       * sticks just above the bottom navigation, carrying the count and the
+       * action; from `sm` up it is an ordinary row, exactly as before.
+       */}
+      <div className="sticky bottom-[calc(72px+env(safe-area-inset-bottom))] z-10 -mx-4 flex items-center gap-3 border-y border-surface-border bg-surface-card/95 px-4 py-3 backdrop-blur sm:hidden">
+        <p className="min-w-0 flex-1 text-[13.5px] font-semibold text-text-primary">
+          {selected.length === 0
+            ? 'Tap a time to choose it'
+            : `${String(selected.length)} time${selected.length === 1 ? '' : 's'} chosen`}
+        </p>
+        <button
+          type="button"
+          disabled={problem !== null}
+          onClick={goOn}
+          className="inline-flex min-h-[46px] items-center rounded-[6px] bg-brand px-6 text-[15px] font-medium text-brand-contrast disabled:bg-brand-tint disabled:text-brand-strong"
+        >
+          Continue
+        </button>
+      </div>
+
+      <div className="hidden flex-wrap items-center gap-4 sm:flex">
         <button
           type="button"
           disabled={problem !== null}

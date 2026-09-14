@@ -87,13 +87,13 @@ export default function TutorStudentsPage() {
         </div>
       </header>
 
-      <section className="mt-7">
+      <section className="mt-6 sm:mt-7">
         <CardsHead title="Active" meta={`${String(active.length)}`} />
         <div className="mt-4 grid gap-4 sm:grid-cols-2">{active.map(cardFor)}</div>
       </section>
 
       {paused.length > 0 ? (
-        <section className="mt-8">
+        <section className="mt-6 sm:mt-8">
           <CardsHead title="Paused" meta={`${String(paused.length)}`} />
           <p className="mt-2 max-w-[68ch] text-[13px] text-text-secondary">
             A paused relationship keeps its history and its standing slot, and takes no time out of

@@ -147,7 +147,7 @@ export default function TutorLessonsPage() {
 
       {/* ── The rest of the record shelf ──────────────────────────────── */}
       {earlier.length > 0 ? (
-        <section className="mt-8">
+        <section className="mt-6 sm:mt-8">
           <CardsHead title="Taught" meta={`${String(earlier.length)} more`} />
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {earlier.map((lesson) => {
@@ -189,7 +189,7 @@ export default function TutorLessonsPage() {
         </section>
       ) : null}
 
-      <div className="mt-8">
+      <div className="mt-6 sm:mt-8">
         <DemoNote title="Summaries and homework are written by the tutor">
           Studdy does not record or transcribe lessons. After a lesson the tutor writes a short
           summary and sets homework, and the family sees both. The examples in this demo are sample

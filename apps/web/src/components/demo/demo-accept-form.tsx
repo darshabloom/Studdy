@@ -38,7 +38,7 @@ export function DemoAcceptForm({
         {options.map((option) => (
           <label
             key={option.id}
-            className={`flex cursor-pointer items-center gap-3 rounded-[4px] border px-4 py-3 transition-colors ${
+            className={`flex min-h-[52px] cursor-pointer items-center gap-3 rounded-[6px] border px-4 py-3 transition-colors ${
               chosen === option.id
                 ? 'border-brand bg-brand-tint'
                 : 'border-surface-border bg-surface-card hover:border-brand/40'
@@ -65,7 +65,7 @@ export function DemoAcceptForm({
           onClick={() => {
             router.push(`${acceptHref}?time=${encodeURIComponent(chosen)}`);
           }}
-          className="inline-flex items-center rounded-[5px] border border-transparent bg-brand px-5 py-2.5 text-[15px] font-medium text-brand-contrast transition-colors hover:bg-brand-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          className="inline-flex min-h-[50px] w-full items-center justify-center rounded-[6px] border border-transparent bg-brand px-5 py-2.5 text-[16px] font-medium text-brand-contrast sm:min-h-0 sm:w-auto sm:rounded-[5px] sm:text-[15px] transition-colors hover:bg-brand-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
         >
           Accept this time
         </button>
@@ -80,7 +80,7 @@ export function DemoAcceptForm({
           onClick={() => {
             router.push(declineHref);
           }}
-          className="text-[13px] text-text-secondary underline decoration-surface-border underline-offset-4 hover:text-text-primary"
+          className="min-h-[40px] text-[13.5px] text-text-secondary underline decoration-surface-border underline-offset-4 hover:text-text-primary"
         >
           Decline &mdash; none of these work
         </button>

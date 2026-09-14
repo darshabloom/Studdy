@@ -25,6 +25,7 @@ import {
   nextLesson,
   serviceNameFor,
   shortDeadline,
+  spanLabel,
   staceyWeekBlocks,
   weekTotals,
   type DemoRequest,
@@ -96,7 +97,7 @@ export default function TutorDashboardPage() {
       {next === null ? null : (
         <div className="mt-6">
           <Panel tone="hero" href={`/demo/tutor/students/${next.student.slug}`}>
-            <PanelBody className="flex flex-wrap items-center gap-x-7 gap-y-6 py-6">
+            <PanelBody className="flex flex-wrap items-center gap-x-7 gap-y-3.5 py-5 sm:gap-y-6 sm:py-6">
               <div className="min-w-[124px]">
                 <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-brand-strong">
                   {remaining.length > 0 ? 'Next up' : 'Next lesson'}
@@ -144,7 +145,7 @@ export default function TutorDashboardPage() {
             title="Needs you"
             meta={
               urgent.length > 0
-                ? `${String(urgent.length)} needs answering soon`
+                ? `${String(urgent.length)} ${urgent.length === 1 ? 'needs' : 'need'} answering soon`
                 : `${String(requests.length)} awaiting a reply`
             }
             action={
@@ -246,7 +247,7 @@ export default function TutorDashboardPage() {
                         ? 'Resumes 12 Oct'
                         : theirNext === undefined
                           ? '—'
-                          : formatLessonDateTime(theirNext.at, PLATFORM_TIME_ZONE)}
+                          : spanLabel(theirNext.at, theirNext.durationMinutes)}
                     </RowMeta>
                   </Row>
                 );

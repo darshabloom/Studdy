@@ -139,7 +139,7 @@ export default async function FindBookedPage({
         </Panel>
       </div>
 
-      <div className="mt-9">
+      <div className="mt-6 sm:mt-9">
         <DemoNote title={`${JACOB.firstName} now has two tutors`}>
           <p>
             {STACEY.firstName} for Maths every Tuesday, {story.tutor.firstName} for Physics. Nine

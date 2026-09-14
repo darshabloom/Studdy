@@ -156,7 +156,7 @@ export default async function TutorStudentPage({ params }: { params: Promise<{ s
 
       {/* ── What has been taught, as records you can open ─────────────── */}
       {past.length > 0 ? (
-        <section className="mt-8">
+        <section className="mt-6 sm:mt-8">
           <CardsHead
             title="Lesson records"
             meta={`${String(past.length)}`}

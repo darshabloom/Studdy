@@ -92,7 +92,10 @@ export default async function ParentLessonPage({
         <div className="mt-6">
           <Panel tone="attention">
             <PanelBody className="flex flex-wrap items-center gap-x-6 gap-y-4">
-              <span aria-hidden className="w-[3px] self-stretch rounded-full bg-status-warning" />
+              <span
+                aria-hidden
+                className="hidden w-[3px] self-stretch rounded-full bg-status-warning sm:block"
+              />
               <span className="min-w-[220px] flex-1">
                 <span className="block font-display text-[18px] font-semibold text-text-primary">
                   {STACEY.firstName} is holding this time
@@ -208,7 +211,7 @@ export default async function ParentLessonPage({
         </div>
       </div>
 
-      <div className="mt-8">
+      <div className="mt-6 sm:mt-8">
         <DemoNote title="Sample notes">
           Studdy does not record or transcribe lessons. {STACEY.firstName} writes this after the
           session, and the family sees exactly what you see here.

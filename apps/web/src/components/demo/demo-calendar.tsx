@@ -169,7 +169,10 @@ export function DemoCalendar({
    * the more visible of the two wrong answers.
    */
   const [width, setWidth] = useState<number | null>(null);
-  const [offset, setOffset] = useState(0);
+  // Null until the viewer pages. Until then the view opens on TODAY — a phone
+  // showing three days should show the three that matter, not Monday to
+  // Wednesday of a week that is half gone.
+  const [offset, setOffset] = useState<number | null>(null);
 
   useEffect(() => {
     const element = frame.current;
@@ -190,7 +193,8 @@ export function DemoCalendar({
 
   // Keep the view from paging past the end when the container widens.
   const maxOffset = Math.max(0, total - visible);
-  const start = Math.min(offset, maxOffset);
+  const anchor = todayIndex >= 0 ? todayIndex : Math.min(pastCount, total - 1);
+  const start = Math.max(0, Math.min(offset ?? anchor, maxOffset));
 
   const shownLabels = dayLabels
     .slice(start, start + visible)
@@ -207,8 +211,19 @@ export function DemoCalendar({
     (calendarWindow.dayEndMinutes - calendarWindow.dayStartMinutes) / 60,
     1,
   );
+  /*
+   * A PICKER ON A PHONE NEEDS FINGER-SIZED ROWS.
+   *
+   * The height budget divides a fixed number of pixels by the hours on screen,
+   * so paging onto a day with a morning in it (Saturday's one-off 9am) squeezed
+   * every half-hour start down to a sliver. When choosing, and paged down to a
+   * few days, an hour never drops below 64px: the page grows instead, which is
+   * allowed — it is still the page that scrolls, never the calendar.
+   */
+  const paged = fit !== null && fit.columns < total;
+  const minHour = mode === 'select' && paged ? 64 : MIN_HOUR_HEIGHT;
   const hourHeight = Math.round(
-    Math.min(MAX_HOUR_HEIGHT, Math.max(MIN_HOUR_HEIGHT, BUDGET[size] / spanHours)),
+    Math.min(MAX_HOUR_HEIGHT, Math.max(minHour, BUDGET[size] / spanHours)),
   );
 
   const relativeToday = todayIndex - start;
@@ -224,13 +239,15 @@ export function DemoCalendar({
             onClick={() => {
               setOffset(Math.max(0, start - visible));
             }}
-            className="rounded-[4px] border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-text-secondary transition-colors hover:border-brand/40 hover:text-text-primary disabled:opacity-40"
+            className="inline-flex min-h-[40px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] border border-surface-border bg-surface-card px-3.5 py-2 text-[13.5px] font-medium text-text-primary transition-colors hover:border-brand/40 disabled:opacity-35"
           >
-            ← Earlier
+            <span aria-hidden>‹</span> Earlier
           </button>
-          <p className="min-w-0 truncate text-[12.5px] font-medium tabular-nums text-text-secondary">
-            {dayLabels[start]}
-            {visible > 1 ? ` – ${dayLabels[start + visible - 1] ?? ''}` : ''}
+          <p className="min-w-0 truncate text-center text-[13px] font-semibold tabular-nums text-text-primary">
+            {/* The shortened labels the columns use, so the range fits between
+                the two buttons on a phone instead of ending in an ellipsis. */}
+            {shownLabels[0]}
+            {visible > 1 ? ` – ${shownLabels[visible - 1] ?? ''}` : ''}
           </p>
           <button
             type="button"
@@ -238,9 +255,9 @@ export function DemoCalendar({
             onClick={() => {
               setOffset(Math.min(maxOffset, start + visible));
             }}
-            className="rounded-[4px] border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-text-secondary transition-colors hover:border-brand/40 hover:text-text-primary disabled:opacity-40"
+            className="inline-flex min-h-[40px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] border border-surface-border bg-surface-card px-3.5 py-2 text-[13.5px] font-medium text-text-primary transition-colors hover:border-brand/40 disabled:opacity-35"
           >
-            Later →
+            Later <span aria-hidden>›</span>
           </button>
         </div>
       ) : null}

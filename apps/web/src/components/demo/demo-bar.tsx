@@ -26,15 +26,21 @@ export function DemoBar(): ReactNode {
 
   return (
     <div className="sticky top-0 z-[1030] border-b border-brand-strong bg-brand-strong text-brand-contrast">
-      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-2">
-        <Link href="/demo" className="font-display text-lg font-semibold">
-          Studdy
+      <div className="mx-auto flex max-w-[1180px] items-center gap-x-3 px-3 py-1.5 sm:flex-wrap sm:gap-x-4 sm:gap-y-2 sm:px-5 sm:py-2">
+        {/* On a phone the wordmark and the honesty label stack into one small
+            block, so the whole bar is a single row and the side switch stays
+            within reach. */}
+        <Link
+          href="/demo"
+          className="flex min-w-0 flex-col leading-none sm:flex-row sm:items-center sm:gap-4"
+        >
+          <span className="font-display text-[16px] font-semibold sm:text-lg">Studdy</span>
+          <span className="mt-0.5 whitespace-nowrap text-[10px] font-medium text-brand-contrast/75 sm:mt-0 sm:rounded-full sm:border sm:border-brand-contrast/25 sm:bg-brand-contrast/10 sm:px-2.5 sm:py-0.5 sm:text-[11px] sm:text-brand-contrast">
+            Demo &mdash; sample data
+          </span>
         </Link>
-        <span className="rounded-full border border-brand-contrast/25 bg-brand-contrast/10 px-2.5 py-0.5 text-[11px] font-medium">
-          Demo &mdash; sample data
-        </span>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <BarLink href="/demo/parent" active={side === 'parent'}>
             Parent
           </BarLink>
@@ -43,7 +49,10 @@ export function DemoBar(): ReactNode {
           </BarLink>
           <span aria-hidden className="mx-1 h-4 w-px bg-brand-contrast/25" />
           <BarLink href="/demo" active={false}>
-            Restart
+            <span className="sm:hidden" aria-hidden>
+              &#x21BA;
+            </span>
+            <span className="sr-only sm:not-sr-only">Restart</span>
           </BarLink>
         </div>
       </div>
@@ -64,7 +73,7 @@ function BarLink({
     <Link
       href={href}
       aria-current={active ? 'true' : undefined}
-      className={`rounded-[4px] px-2.5 py-1 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-contrast ${
+      className={`inline-flex min-h-[34px] items-center rounded-[4px] px-3 py-1 text-[13px] font-medium transition-colors sm:min-h-0 sm:px-2.5 sm:text-[12px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-contrast ${
         active
           ? 'bg-brand-contrast text-brand-strong'
           : 'text-brand-contrast/80 hover:bg-brand-contrast/15 hover:text-brand-contrast'

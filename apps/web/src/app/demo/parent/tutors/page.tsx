@@ -75,7 +75,7 @@ export default async function DiscoveryPage({
         </Panel>
       </div>
 
-      <section className="mt-7">
+      <section className="mt-6 sm:mt-7">
         <CardsHead
           title="Available tutors"
           meta={`${String(PHYSICS_TUTORS.length)} match your search`}
@@ -93,7 +93,7 @@ export default async function DiscoveryPage({
         </div>
       </section>
 
-      <div className="mt-8">
+      <div className="mt-6 sm:mt-8">
         <Aside title={`Why ${STACEY.firstName} is not here`}>
           She teaches Maths and Calculus only. Studdy shows the tutors who actually cover the
           subject you asked for, rather than everyone you have worked with before.

@@ -81,3 +81,19 @@
   --color-status-neutral-bg: #f5f1e9;
   --color-status-neutral-border: #e4ded2;
 }
+
+/*
+ * PHONE TYPE SCALE.
+ *
+ * Page titles are written at 30px inline on every screen, which is right on a
+ * laptop and takes a third of a phone's first screen with a two-line title.
+ * One rule here rather than thirty edits: under 640px a workspace page title
+ * steps down to 25px. Unlayered, so it outranks the utility it overrides, and
+ * scoped to `main` so the landing page keeps its own hero.
+ */
+@media (max-width: 639px) {
+  [data-studdy-theme='forest'] main h1.font-display {
+    font-size: 25px;
+    line-height: 1.15;
+  }
+}

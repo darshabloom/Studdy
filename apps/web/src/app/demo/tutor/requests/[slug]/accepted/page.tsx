@@ -66,7 +66,10 @@ export default async function TutorAcceptedPage({
       <div className="mt-4">
         <Panel tone="attention">
           <PanelBody className="flex flex-wrap items-start gap-x-7 gap-y-5 py-5">
-            <span aria-hidden className="w-[3px] self-stretch rounded-full bg-status-warning" />
+            <span
+              aria-hidden
+              className="hidden w-[3px] self-stretch rounded-full bg-status-warning sm:block"
+            />
             <Disc initials={request.studentInitials} size="lg" />
             <div className="min-w-[230px] flex-1">
               <p className="text-[12.5px] text-text-muted">{request.reference}</p>
@@ -132,7 +135,7 @@ export default async function TutorAcceptedPage({
         </Panel>
       </div>
 
-      <div className="mt-9">
+      <div className="mt-6 sm:mt-9">
         <DemoNote title="Now the family pays">
           <p>
             {request.parentName} chooses you, pays, and Studdy confirms the booking. In the real

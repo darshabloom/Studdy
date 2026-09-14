@@ -17,7 +17,6 @@ import {
   RowMeta,
   Stat,
 } from '@/components/demo/kit';
-import { formatLessonDateTime } from '@/components/requests/request-status';
 import { CADENCE_LABEL, JACOB, PRIYA, money } from '@/lib/demo/fixtures';
 import { lessonRecord } from '@/lib/demo/lesson-records';
 import {
@@ -115,8 +114,11 @@ export default async function ParentHomePage({
           {actions.map((action) => (
             <Panel key={action.id} tone="attention">
               <PanelBody className="flex flex-wrap items-start gap-x-6 gap-y-4 py-5">
-                <span aria-hidden className="w-[3px] self-stretch rounded-full bg-status-warning" />
-                <span className="min-w-[220px] flex-1">
+                <span
+                  aria-hidden
+                  className="hidden w-[3px] self-stretch rounded-full bg-status-warning sm:block"
+                />
+                <span className="min-w-0 flex-1 basis-full sm:min-w-[220px] sm:basis-auto">
                   <span className="flex flex-wrap items-center gap-2.5">
                     <span className="font-display text-[19px] font-semibold text-text-primary">
                       {action.title}
@@ -130,11 +132,11 @@ export default async function ParentHomePage({
                     {action.whenLabel}
                   </span>
                 </span>
-                <span className="flex flex-col items-end gap-3">
+                <span className="flex w-full items-center justify-between gap-3 border-t border-status-warning-border pt-4 sm:w-auto sm:flex-col sm:items-end sm:border-t-0 sm:pt-0">
                   <span className="text-[26px] font-semibold leading-none tabular-nums text-text-primary">
                     {money(action.amountMinor)}
                   </span>
-                  <DemoButton href={action.href} size="md">
+                  <DemoButton href={action.href} size="md" className="px-7">
                     {action.actionLabel}
                   </DemoButton>
                 </span>
@@ -147,7 +149,7 @@ export default async function ParentHomePage({
       {/* ── HERO: the next lesson ─────────────────────────────────────── */}
       <div className="mt-6">
         <Panel tone="hero">
-          <PanelBody className="flex flex-wrap items-center gap-x-8 gap-y-6 py-6">
+          <PanelBody className="flex flex-wrap items-center gap-x-8 gap-y-4 py-5 sm:gap-y-6 sm:py-6">
             <div className="min-w-[150px]">
               <p className="text-[11px] font-medium uppercase tracking-[0.09em] text-brand-strong">
                 Next lesson
@@ -156,10 +158,10 @@ export default async function ParentHomePage({
                 <p className="mt-2 font-display text-[24px] text-text-primary">Nothing booked</p>
               ) : (
                 <>
-                  <p className="mt-2 font-display text-[25px] font-semibold leading-tight text-text-primary">
+                  <p className="mt-2 font-display text-[22px] font-semibold sm:text-[25px] leading-tight text-text-primary">
                     {DAY.format(next.at)}
                   </p>
-                  <p className="mt-1 text-[30px] font-semibold leading-none tabular-nums text-brand-strong">
+                  <p className="mt-1 text-[26px] font-semibold leading-none sm:text-[30px] tabular-nums text-brand-strong">
                     {CLOCK.format(next.at)}
                   </p>
                 </>
@@ -225,8 +227,8 @@ export default async function ParentHomePage({
                     </span>
                     <Disc initials={relationship?.tutorInitials ?? '—'} size="sm" />
                     <RowMain
-                      name={`${relationship?.subject ?? 'Lesson'} · ${relationship?.tutorFirstName ?? ''}`}
-                      detail={`${lesson.student.firstName} · ${lesson.format === 'online' ? 'Online' : 'In person'} · ${String(lesson.durationMinutes)} min`}
+                      name={relationship?.subject ?? 'Lesson'}
+                      detail={`${relationship?.tutorFirstName ?? ''} · ${lesson.student.firstName} · ${lesson.format === 'online' ? 'Online' : 'In person'} · ${String(lesson.durationMinutes)} min`}
                     />
                     <PayChip payment={lesson.payment} />
                     <RowMeta>{money(lesson.priceMinor)}</RowMeta>
@@ -263,19 +265,22 @@ export default async function ParentHomePage({
             </Panel>
           ))}
 
-          <Panel tone="quiet" href={link('/demo/parent/tutors')}>
-            <PanelBody className="flex items-center gap-3">
-              <span className="min-w-0 flex-1">
-                <span className="block font-display text-[16px] font-medium text-text-primary">
-                  Find another tutor
+          {/* Beside the tutors on a wide screen; at the very end on a phone. */}
+          <div className="hidden lg:block">
+            <Panel tone="quiet" href={link('/demo/parent/tutors')}>
+              <PanelBody className="flex items-center gap-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block font-display text-[16px] font-medium text-text-primary">
+                    Find another tutor
+                  </span>
+                  <span className="mt-0.5 block text-[12.5px] text-text-muted">
+                    For a subject your current tutors do not teach
+                  </span>
                 </span>
-                <span className="mt-0.5 block text-[12.5px] text-text-muted">
-                  For a subject your current tutors do not teach
-                </span>
-              </span>
-              <OpenMark label="Search" />
-            </PanelBody>
-          </Panel>
+                <OpenMark label="Search" />
+              </PanelBody>
+            </Panel>
+          </div>
         </div>
       </div>
 
@@ -305,7 +310,7 @@ export default async function ParentHomePage({
           <Panel href={link(`/demo/parent/lessons/${latest.id}`)}>
             <PanelHead
               title="Last lesson"
-              meta={formatLessonDateTime(latest.at, PLATFORM_TIME_ZONE)}
+              meta={SHORT_DAY.format(latest.at)}
               action={<OpenMark label="Full record" />}
             />
             <PanelBody>
@@ -353,13 +358,28 @@ export default async function ParentHomePage({
                 <Row key={lesson.id} href={link(`/demo/parent/lessons/${lesson.id}`)}>
                   <RowMain
                     name={lesson.topic ?? 'Lesson'}
-                    detail={`${lesson.student.firstName} · ${formatLessonDateTime(lesson.at, PLATFORM_TIME_ZONE)}`}
+                    detail={`${lesson.student.firstName} · ${SHORT_DAY.format(lesson.at)}`}
                   />
                   <Chip tone="neutral">Completed</Chip>
                   <RowMeta>{money(lesson.priceMinor)}</RowMeta>
                 </Row>
               ))}
             </RowList>
+          </PanelBody>
+        </Panel>
+      </div>
+      <div className="mt-5 lg:hidden">
+        <Panel tone="quiet" href={link('/demo/parent/tutors')}>
+          <PanelBody className="flex items-center gap-3">
+            <span className="min-w-0 flex-1">
+              <span className="block font-display text-[16px] font-medium text-text-primary">
+                Find another tutor
+              </span>
+              <span className="mt-0.5 block text-[12.5px] text-text-muted">
+                For a subject your current tutors do not teach
+              </span>
+            </span>
+            <OpenMark label="Search" />
           </PanelBody>
         </Panel>
       </div>

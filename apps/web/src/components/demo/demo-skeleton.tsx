@@ -26,7 +26,7 @@ export function SkeletonPreview({ children }: { children: ReactNode }): ReactNod
         {children}
       </div>
       {/* Sits over the mock-up so it cannot be mistaken for a working page. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center">
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-end pr-3 sm:justify-center sm:pr-0">
         <span className="rounded-b-[5px] bg-brand px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-brand-contrast">
           Not built yet
         </span>

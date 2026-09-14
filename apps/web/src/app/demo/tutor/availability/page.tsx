@@ -110,7 +110,7 @@ export default function TutorAvailabilityPage() {
               </EditAffordance>
             }
           />
-          <PanelBody className="grid gap-3 sm:grid-cols-2">
+          <PanelBody className="grid grid-cols-2 gap-3">
             {STACEY.bands.map((band) => (
               <div
                 key={band.weekday}

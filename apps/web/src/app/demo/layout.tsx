@@ -1,3 +1,4 @@
+import type { Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { DemoBar } from '@/components/demo/demo-bar';
 import './forest.css';
@@ -27,6 +28,17 @@ export const metadata = {
  * under here performs any I/O.
  */
 export const dynamic = 'force-dynamic';
+
+/*
+ * `viewport-fit=cover` is what makes `env(safe-area-inset-bottom)` report the
+ * home-indicator height on iPhones; without it the bottom nav sits under it.
+ * The theme colour paints the phone's own browser chrome to match the demo
+ * bar. Both are scoped to this subtree.
+ */
+export const viewport: Viewport = {
+  viewportFit: 'cover',
+  themeColor: '#14332a',
+};
 
 export default function DemoLayout({ children }: { children: ReactNode }) {
   /*

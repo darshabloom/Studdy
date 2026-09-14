@@ -19,7 +19,7 @@ export default function DemoHomePage() {
       <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-brand">
         Interactive demo
       </p>
-      <h1 className="mt-3 font-display text-[40px] font-semibold leading-[1.06] tracking-[-0.022em] text-brand-strong text-balance md:text-[48px]">
+      <h1 className="mt-3 font-display text-[34px] font-semibold leading-[1.06] sm:text-[40px] tracking-[-0.022em] text-brand-strong text-balance md:text-[48px]">
         A tutoring platform,
         <br />
         from both sides.
@@ -40,7 +40,7 @@ export default function DemoHomePage() {
         </p>
       </div>
 
-      <div className="mt-10 grid gap-5 md:grid-cols-3">
+      <div className="mt-6 sm:mt-10 grid gap-5 md:grid-cols-3">
         <Door
           eyebrow="Start here"
           initials={PRIYA.initials}
@@ -77,7 +77,7 @@ export default function DemoHomePage() {
         />
       </div>
 
-      <p className="mt-8 text-[13px] text-text-muted">
+      <p className="mt-6 sm:mt-8 text-[13px] text-text-muted">
         Switch sides at any point using the bar at the top. Nothing you click changes any real
         state.
       </p>

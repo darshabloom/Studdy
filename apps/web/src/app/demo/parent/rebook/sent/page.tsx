@@ -88,7 +88,7 @@ export default async function RebookSentPage({
         </Panel>
       </div>
 
-      <div className="mt-9">
+      <div className="mt-6 sm:mt-9">
         <DemoNote title="In the real product you would wait here">
           <p>
             {STACEY.firstName} gets the request in her workspace and has until{' '}

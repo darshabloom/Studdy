@@ -54,7 +54,7 @@ export function DemoPaymentForm({
               router.push(nextHref);
             }, 900);
           }}
-          className="inline-flex items-center rounded-[5px] border border-transparent bg-brand px-5 py-2.5 text-[15px] font-medium text-brand-contrast transition-colors hover:bg-brand-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:bg-brand-tint disabled:text-brand-strong"
+          className="inline-flex min-h-[50px] w-full items-center justify-center rounded-[6px] border border-transparent bg-brand px-5 py-2.5 text-[16px] font-medium sm:min-h-0 sm:w-auto sm:rounded-[5px] sm:text-[15px] text-brand-contrast transition-colors hover:bg-brand-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:bg-brand-tint disabled:text-brand-strong"
         >
           {state === 'processing' ? 'Processing…' : `Pay ${total}`}
         </button>
@@ -83,7 +83,7 @@ function Field({
       <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.07em] text-text-muted">
         {label}
       </p>
-      <p className="rounded-[4px] border border-surface-border bg-surface-card-secondary px-3 py-2 font-medium tabular-nums text-text-muted">
+      <p className="rounded-[4px] border border-surface-border bg-surface-card-secondary px-3 py-2.5 font-medium tabular-nums text-text-muted sm:py-2">
         {value}
       </p>
     </div>

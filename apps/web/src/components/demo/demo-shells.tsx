@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { STACEY, PRIYA, JACOB } from '@/lib/demo/fixtures';
 import { inboxRequests, withPaid } from '@/lib/demo/schedule';
+import { DemoBottomNav, type BottomNavItem, type MoreItem } from './demo-bottom-nav';
 import { Disc } from './kit';
 
 /**
@@ -80,6 +81,8 @@ function Shell({
   who,
   role,
   initials,
+  mobileNav,
+  mobileMore,
   children,
 }: {
   nav: readonly NavEntry[];
@@ -87,11 +90,15 @@ function Shell({
   who: string;
   role: string;
   initials: string;
+  mobileNav: readonly BottomNavItem[];
+  mobileMore?: readonly MoreItem[];
   children: ReactNode;
 }): ReactNode {
   return (
     <div className="flex min-h-[calc(100vh-42px)] flex-col bg-surface-page text-text-primary">
-      <div className="sticky top-[42px] z-[1020] border-b border-surface-border bg-surface-card">
+      {/* Desktop only. On a phone the demo bar already says whose workspace this
+          is, and a second bar would spend another fifty pixels saying it again. */}
+      <div className="sticky top-[42px] z-[1020] hidden border-b border-surface-border bg-surface-card md:block">
         <div className="flex items-center justify-between gap-4 px-5 py-2.5">
           <span className="font-display text-lg font-semibold text-brand-strong">Studdy</span>
           <div className="flex items-center gap-2.5">
@@ -119,10 +126,17 @@ function Shell({
             ))}
           </nav>
         </aside>
-        <main className="min-w-0 flex-1 px-6 py-7 md:px-9 md:py-9">
+        {/* The bottom padding on phones is the height of the bottom nav plus
+            the safe-area inset, plus a little air, so the last card on every
+            page scrolls clear of it. */}
+        <main className="min-w-0 flex-1 px-4 pb-[calc(96px+env(safe-area-inset-bottom))] pt-5 sm:px-6 md:px-9 md:py-9">
           <div className="mx-auto max-w-[880px]">{children}</div>
         </main>
       </div>
+      <DemoBottomNav
+        items={mobileNav}
+        {...(mobileMore === undefined ? {} : { more: mobileMore })}
+      />
     </div>
   );
 }
@@ -136,6 +150,62 @@ export function TutorShell({
 }): ReactNode {
   return (
     <Shell
+      mobileNav={[
+        { label: 'Home', href: '/demo/tutor', icon: 'home', active: active === '/demo/tutor' },
+        {
+          label: 'Requests',
+          href: '/demo/tutor/requests',
+          icon: 'requests',
+          active: active === '/demo/tutor/requests',
+          count: inboxRequests(new Date()).length,
+        },
+        {
+          label: 'Bookings',
+          href: '/demo/tutor/bookings',
+          icon: 'bookings',
+          active: active === '/demo/tutor/bookings',
+        },
+        {
+          label: 'Students',
+          href: '/demo/tutor/students',
+          icon: 'students',
+          active: active === '/demo/tutor/students',
+        },
+      ]}
+      mobileMore={[
+        {
+          label: 'Availability',
+          detail: 'Regular hours and one-off changes',
+          href: '/demo/tutor/availability',
+          active: active === '/demo/tutor/availability',
+        },
+        {
+          label: 'Services',
+          detail: 'What you teach and what it pays',
+          href: '/demo/tutor/services',
+          active: active === '/demo/tutor/services',
+        },
+        {
+          label: 'Lessons',
+          detail: 'Summaries and homework',
+          href: '/demo/tutor/lessons',
+          active: active === '/demo/tutor/lessons',
+        },
+        {
+          label: 'Resources',
+          detail: 'A preview of what is planned',
+          href: '/demo/tutor/resources',
+          active: active === '/demo/tutor/resources',
+          soon: true,
+        },
+        {
+          label: 'Earnings',
+          detail: 'A preview of what is planned',
+          href: '/demo/tutor/earnings',
+          active: active === '/demo/tutor/earnings',
+          soon: true,
+        },
+      ]}
       // COUNTED, NOT WRITTEN DOWN. The badge said three while the inbox held
       // four for one build, because the number was a literal in this file.
       nav={TUTOR_NAV.map((entry) =>
@@ -171,6 +241,12 @@ export function ParentShell({
 }): ReactNode {
   return (
     <Shell
+      mobileNav={[
+        { label: 'Home', href: '/demo/parent', icon: 'home' as const },
+        { label: JACOB.firstName, href: '/demo/parent/student', icon: 'student' as const },
+        { label: 'Lessons', href: '/demo/parent/lessons', icon: 'lessons' as const },
+        { label: 'Find tutor', href: '/demo/parent/tutors', icon: 'search' as const },
+      ].map((item) => ({ ...item, active: item.href === active, href: withPaid(item.href, paid) }))}
       nav={PARENT_NAV.map((entry) =>
         entry.href === undefined ? entry : { ...entry, href: withPaid(entry.href, paid) },
       )}

@@ -121,7 +121,7 @@ export default function TutorBookingsPage() {
       </div>
 
       {/* ── Every booking in the fortnight, a day at a time ────────────── */}
-      <section className="mt-8">
+      <section className="mt-6 sm:mt-8">
         <CardsHead title="Next two weeks" meta={`${String(lessons.length)} lessons`} />
         <div className="mt-4 flex flex-col gap-5">
           {[...byDay.entries()].map(([day, dayLessons]) => (
@@ -175,7 +175,7 @@ export default function TutorBookingsPage() {
 
       {/* ── The hour that is spoken for but not sold ───────────────────── */}
       {held.length > 0 ? (
-        <section className="mt-8">
+        <section className="mt-6 sm:mt-8">
           <CardsHead title="Held, not yet booked" meta={`${String(held.length)}`} />
           <div className="mt-4 flex flex-col gap-4">
             {held.map((request) => {
@@ -189,7 +189,7 @@ export default function TutorBookingsPage() {
                   <PanelBody className="flex flex-wrap items-center gap-x-5 gap-y-3">
                     <span
                       aria-hidden
-                      className="w-[3px] self-stretch rounded-full bg-status-warning"
+                      className="hidden w-[3px] self-stretch rounded-full bg-status-warning sm:block"
                     />
                     <Disc initials={request.studentInitials} size="sm" />
                     <span className="min-w-[210px] flex-1">

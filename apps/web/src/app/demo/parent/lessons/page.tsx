@@ -175,7 +175,7 @@ export default async function ParentLessonsPage({
 
       {/* ── Every earlier lesson, as something you can open ───────────── */}
       {earlier.length > 0 ? (
-        <section className="mt-9">
+        <section className="mt-6 sm:mt-9">
           <CardsHead title="Earlier lessons" meta={`${String(earlier.length)}`} />
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {earlier.map((lesson) => {
@@ -219,7 +219,7 @@ export default async function ParentLessonsPage({
         </section>
       ) : null}
 
-      <div className="mt-8">
+      <div className="mt-6 sm:mt-8">
         <DemoNote title="Written by the tutor, not by a machine">
           Studdy does not record or transcribe lessons. {STACEY.firstName} writes the summary and
           sets the homework after each session, and you see both. These are sample notes.

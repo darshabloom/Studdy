@@ -99,7 +99,7 @@ export default function TutorServicesPage() {
       </div>
 
       {/* ── One card per service ──────────────────────────────────────── */}
-      <section className="mt-8">
+      <section className="mt-6 sm:mt-8">
         <CardsHead title="What you teach" meta={`${String(SERVICES.length)}`} />
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {SERVICES.map((service) => {

@@ -63,7 +63,7 @@ export default function TutorRequestsPage() {
         </Aside>
       </div>
 
-      <div className="mt-7 flex flex-col gap-5">
+      <div className="mt-6 sm:mt-7 flex flex-col gap-5">
         {requests.map((request) => (
           <RequestCard key={request.reference} request={request} />
         ))}
@@ -71,7 +71,7 @@ export default function TutorRequestsPage() {
 
       {/* Accepted, and now waiting on somebody else. Not a decision any more. */}
       {held.length > 0 ? (
-        <section className="mt-9">
+        <section className="mt-6 sm:mt-9">
           <CardsHead title="Accepted, awaiting the family" meta={`${String(held.length)}`} />
           <div className="mt-4 flex flex-col gap-4">
             {held.map((request) => {
