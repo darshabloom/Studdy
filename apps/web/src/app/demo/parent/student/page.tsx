@@ -57,7 +57,12 @@ export default async function ParentStudentPage({
   const owing = upcoming.filter((lesson) => lesson.payment === 'due');
 
   return (
-    <ParentShell active="/demo/parent/student" paid={paid}>
+    // Entered through Students, so that is the section that stays highlighted.
+    <ParentShell active="/demo/parent/students" paid={paid}>
+      <DemoButton href={link('/demo/parent/students')} tone="quiet" size="sm">
+        &larr; Students
+      </DemoButton>
+      <div className="mt-3" />
       {/* ── Who he is, and what is being worked on ────────────────────── */}
       <Panel tone="hero">
         <PanelBody className="flex flex-wrap items-start gap-x-8 gap-y-6 py-6">
@@ -77,7 +82,20 @@ export default async function ParentStudentPage({
             </div>
           </div>
 
-          <span aria-hidden className="hidden h-20 w-px bg-brand/20 sm:block" />
+          <div className="flex w-full flex-col gap-3 border-t border-brand/20 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <Disc initials={STACEY.initials} size="sm" />
+              <p className="min-w-0 text-[13.5px] text-text-secondary">
+                <span className="font-medium text-text-primary">
+                  {service?.name ?? 'Maths'} with {STACEY.firstName}
+                </span>
+                <span className="block text-[12.5px] text-text-muted">{JACOB.standing}</span>
+              </p>
+            </div>
+            <DemoButton href={link('/demo/parent/rebook')} size="lg" className="w-full sm:w-auto">
+              Book another lesson
+            </DemoButton>
+          </div>
 
           <div className="flex flex-wrap gap-x-8 gap-y-4">
             <Stat

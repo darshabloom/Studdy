@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { STACEY, PRIYA, JACOB } from '@/lib/demo/fixtures';
+import { STACEY, PRIYA } from '@/lib/demo/fixtures';
 import { inboxRequests, withPaid } from '@/lib/demo/schedule';
 import { DemoBottomNav, type BottomNavItem, type MoreItem } from './demo-bottom-nav';
 import { Disc } from './kit';
@@ -44,7 +44,7 @@ const TUTOR_NAV: readonly NavEntry[] = [
 
 const PARENT_NAV: readonly NavEntry[] = [
   { label: 'Home', href: '/demo/parent' },
-  { label: `${JACOB.firstName}`, href: '/demo/parent/student' },
+  { label: 'Students', href: '/demo/parent/students' },
   { label: 'Lessons', href: '/demo/parent/lessons' },
   { label: 'Find a tutor', href: '/demo/parent/tutors' },
 ];
@@ -243,7 +243,7 @@ export function ParentShell({
     <Shell
       mobileNav={[
         { label: 'Home', href: '/demo/parent', icon: 'home' as const },
-        { label: JACOB.firstName, href: '/demo/parent/student', icon: 'student' as const },
+        { label: 'Students', href: '/demo/parent/students', icon: 'students' as const },
         { label: 'Lessons', href: '/demo/parent/lessons', icon: 'lessons' as const },
         { label: 'Find tutor', href: '/demo/parent/tutors', icon: 'search' as const },
       ].map((item) => ({ ...item, active: item.href === active, href: withPaid(item.href, paid) }))}
