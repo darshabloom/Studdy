@@ -12,6 +12,17 @@ export interface EmailMessage {
   readonly text: string;
   /** Development messages are clearly marked and restricted to allowlisted addresses. */
   readonly environmentLabel: string | null;
+  /**
+   * A caller-supplied deduplication token, or null.
+   *
+   * PROVIDER-NEUTRAL BY INTENT: it says "this is the same logical message you
+   * may already have accepted", which every transactional provider worth using
+   * can honour. It exists because a worker can crash after the provider accepts
+   * a message and before Studdy records that it did — the two writes are not in
+   * one transaction and cannot be — so the retry is made harmless at the far
+   * end instead.
+   */
+  readonly idempotencyKey: string | null;
 }
 
 export interface EmailDeliveryReceipt {

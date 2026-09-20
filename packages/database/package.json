@@ -15,7 +15,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
     "db:seed": "tsx src/seed/run.ts",
-    "db:reset": "tsx src/reset.ts"
+    "db:reset": "tsx src/reset.ts",
+    "db:notifications:supersede": "tsx src/operations/supersede-historical-notifications.ts"
   },
   "dependencies": {
     "@studdy/configuration": "workspace:*",

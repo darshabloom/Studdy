@@ -1,0 +1,23 @@
+-- Notification deliveries: SERVER-ONLY.
+--
+-- Same posture as the request, availability and payment tables, and enabled
+-- here for the same two reasons plus one of this table's own.
+--
+-- The shared reason: a column-level grant is granted per DATABASE ROLE, and a
+-- parent, a student and a tutor all authenticate as `authenticated`. A grant
+-- therefore cannot show one family their own delivery rows while hiding
+-- another family's from them — the role receives the union.
+--
+-- The reason specific to this table: it holds EMAIL ADDRESSES, side by side,
+-- for every party Studdy writes to — one family's beside another's, every
+-- tutor's, and the operations mailbox. It also records which template was sent
+-- to whom and when, which is a record of what each person has been told. None
+-- of that is any browser's to read, and a recipient learns what they were told
+-- by RECEIVING it, not by querying for it. There is no product surface that
+-- needs this table, so there is no projection either.
+--
+-- RLS is enabled with deliberately NO policies. In PostgreSQL that is deny-all
+-- for non-owners, which is the fail-closed second layer beneath the absent
+-- grants — matching `audit.outbox_entries`, the table this one hangs from.
+
+alter table communications.notification_deliveries enable row level security;

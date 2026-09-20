@@ -324,13 +324,108 @@ turnaround; widening it would quietly cost bookable time either side of every br
 
 ---
 
+## PD-021 — Historical notification entries are superseded, never sent
+
+**Approved 20 September 2026, before the drain was switched on.**
+
+The outbox has been written to since payment slice 1 and nothing has ever drained it.
+`resolveContext` refuses only entries whose records have GONE, and nothing in this schema is
+hard-deleted — so every historical entry resolves cleanly and would be delivered. Switching
+the drain on without a decision would tell families to pay for lessons that expired weeks
+ago and congratulate them on lessons that have already happened.
+
+**The decision, in three parts.**
+
+1. **No permanent date cutoff in the drain.** The rejected alternative was a
+   `created_at >=` filter. It would leave those entries `pending` for ever, and `pending`
+   means OWED — the drain settles an entry only when every delivery it owes is `sent`.
+   Making the status mean "owed, or abandoned, and you cannot tell which without knowing a
+   constant" would cost more than it saved, and would silently pre-decide the same question
+   for the `tutor_request.*` slice at the one moment it should be asked afresh.
+
+2. **Historical customer-facing entries are marked `superseded`** by a one-off operational
+   script, per environment, run by a person who has read the counts:
+   `pnpm db:notifications:supersede`. `superseded` is terminal and nothing claims it, so the
+   drain skips those entries without a single rule changing anywhere else.
+
+3. **Two populations are never swept up**, because both need a person and neither is
+   recoverable afterwards:
+
+   - **`payment.refund_required`** — an operations alert meaning Studdy holds a parent's
+     money against a booking it could not confirm. Bulk-settling it would close the only
+     signal pointing at trapped funds. The script never touches this event type and refuses
+     if asked to.
+   - **`booking.confirmed` for a lesson that has not yet happened** — a real booking whose
+     family and tutor may never have been told anything. Superseding it silently is the one
+     outcome that could cost a family a lesson they have paid for.
+
+   Both are reported as blocking findings and must be acknowledged explicitly on the command
+   line. The acknowledgement records the exact references it covered in the audit event, so
+   "we dealt with those" is a fact with a list attached rather than a memory.
+
+**What is recorded.** One `audit.audit_events` row per run — `notifications.historical_superseded`,
+risk `medium` — carrying the cutoff, the event types, the count and both acknowledgement
+lists. The per-entry evidence is the rows themselves: `status_code = 'superseded'` with that
+run's `processed_at`.
+
+**This is an operational act, not a migration.** A migration would run automatically on every
+environment including empty ones, is immutable once applied, and would bury a judgement
+inside schema history.
+
+---
+
+## PD-022 — Resend is the transactional email provider
+
+**Approved 20 September 2026**, closing the open question that had stood since the planning
+pack ("Email provider — comparison document not yet produced"). This entry is that
+comparison's conclusion.
+
+**Decision.** Resend sends Studdy's transactional email. Postmark and Amazon SES were the
+realistic alternatives; SendGrid and Mailgun were not seriously in contention at this scale.
+
+**Why, in order of weight.**
+
+1. **The architecture already depends on a send-time idempotency key, and the alternatives
+   do not have one.** `ResendEmailProvider.send` passes Studdy's deterministic key through,
+   and Resend honours it for 24 hours. That is not a convenience — it is the only available
+   answer to the one gap the design cannot close inside a transaction: the window between
+   "the provider accepted this message" and "Studdy recorded that it did". Postmark and SES
+   offer no equivalent. Moving to either means accepting duplicate emails after a crash, or
+   building a different mitigation.
+2. **The deadline.** The adapter exists, is tested and is green. Rewriting it inside a month
+   would solve a problem Studdy does not yet have.
+3. **The free tier covers alpha completely** — 3,000 a month against an expected few
+   hundred. The free plan also caps at 100 a day; at roughly two emails per confirmed
+   booking that will not bind at alpha, and the paid tier removes it when it would.
+4. **Resend runs on Amazon SES underneath**, so the eventual "cheapest at scale" move is to
+   the same infrastructure rather than away from it.
+
+**The counter-argument, recorded rather than dismissed.** `payment.required` opens a
+sixty-minute window (PD-012, and the payment design), which makes inbox placement
+load-bearing on revenue in a way it is not for most products — a spam-foldered email costs a
+booking directly. Postmark runs a transactional-only IP pool and separates transactional
+from broadcast infrastructure, and is genuinely better on exactly that axis. That is the
+reason Studdy would move, and the only one.
+
+**Reassess if:** a family reports a missing `payment.required` email that Resend reports as
+delivered; sending exceeds 100 a day on the free plan with no wish to upgrade; or Studdy
+adds marketing email, at which point shared transactional and broadcast infrastructure
+becomes a real concern.
+
+**Switching cost is deliberately low.** `@studdy/database` depends on no integration
+package, and the provider sits behind `EmailProvider` in `@studdy/domain`. A change is one
+adapter file and environment variables — with the idempotency key above as the one genuine
+coupling to re-solve.
+
+---
+
 ## Still open — decisions this project needs
 
-| Question                                                            | Why it matters                                                                      | Current state                                                      |
-| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Confirmed deadline and hold numbers                                 | Provisional values are seeded and snapshotted; real numbers change tutor experience | PD-012 provisional                                                 |
-| Default currency NZD                                                | Appears only as an example in the source                                            | Assumed NZD, not confirmed                                         |
-| Whether a tutor may know the platform allows multi-tutor requests   | Platform-level honesty vs per-request silence                                       | Recommendation: honest at platform level, zero per-request signals |
-| Matching preference fields (tutor age, gender, cultural background) | Doc 14 §9 proposes them; NZ Human Rights Act 1993 exposure unassessed               | Held out of schema pending legal check                             |
-| Email provider                                                      | Required before any provider-specific email code                                    | Comparison document not yet produced                               |
-| Retention periods for the eleven categories in doc 06 §18           | Required before production                                                          | Not specified anywhere                                             |
+| Question                                                            | Why it matters                                                                      | Current state                                                                               |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Confirmed deadline and hold numbers                                 | Provisional values are seeded and snapshotted; real numbers change tutor experience | PD-012 provisional                                                                          |
+| Default currency NZD                                                | Appears only as an example in the source                                            | Assumed NZD, not confirmed                                                                  |
+| Whether a tutor may know the platform allows multi-tutor requests   | Platform-level honesty vs per-request silence                                       | Recommendation: honest at platform level, zero per-request signals                          |
+| Matching preference fields (tutor age, gender, cultural background) | Doc 14 §9 proposes them; NZ Human Rights Act 1993 exposure unassessed               | Held out of schema pending legal check                                                      |
+| ~~Email provider~~                                                  | Required before any provider-specific email code                                    | **Closed — Resend approved, [PD-022](#pd-022--resend-is-the-transactional-email-provider)** |
+| Retention periods for the eleven categories in doc 06 §18           | Required before production                                                          | Not specified anywhere                                                                      |

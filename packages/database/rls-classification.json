@@ -160,6 +160,11 @@
       "classification": "server_only",
       "policy": null,
       "notes": "Settlement obligations to tutors. Server-only: a tutor's own earnings reach them through a projection that shows lesson price, Studdy fee and entitlement — never this table, and never Studdy's provider cost."
+    },
+    "communications.notification_deliveries": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Transactional notification delivery state: which recipient of which outbox event was emailed, at what address, with which provider message id. Server-only: no anon/authenticated grant and no browser policy. It holds one family's address beside another's and the operations mailbox, so no browser role may reach it; a recipient learns what they were told by receiving it, never by querying this. Pruned operationally rather than kept forever, which is also why it is not in the audit schema."
     }
   }
 }
