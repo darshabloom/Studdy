@@ -998,6 +998,14 @@ describe.skipIf(!available)('notification delivery (integration)', () => {
      * condition row 5 turns on and a test of it should not depend on a
      * side effect of somebody else's fixture.
      */
+    /*
+     * INSTANTS CROSS AS TEXT AND ARE CAST IN SQL, never as `Date` objects.
+     * A raw template parameter is bound as a string, and handed a `Date` the
+     * driver fails with "Received an instance of Date" — an error that reads
+     * like a broken query rather than a badly typed parameter. The same trap
+     * cost a CI cycle in the backlog script; drizzle's typed query builder
+     * marshals `Date` correctly, hand-written SQL does not.
+     */
     const giveHeldTime = async (tutorRequestId: string, dayOffset: number): Promise<void> => {
       const { sql } = createDatabaseClient();
       try {
@@ -1007,7 +1015,10 @@ describe.skipIf(!available)('notification delivery (integration)', () => {
           insert into availability.tutor_time_reservations
             (tutor_profile_id, tutor_request_id, start_at, end_at, gap_minutes,
              effective_end_at, status_code, reservation_type_code)
-          select tr.tutor_profile_id, tr.id, ${startAt}, ${endAt}, 0, ${endAt},
+          select tr.tutor_profile_id, tr.id,
+                 ${startAt.toISOString()}::timestamptz,
+                 ${endAt.toISOString()}::timestamptz, 0,
+                 ${endAt.toISOString()}::timestamptz,
                  'released', 'request_hold'
           from bookings.tutor_requests tr
           where tr.id = ${tutorRequestId}::uuid`;
