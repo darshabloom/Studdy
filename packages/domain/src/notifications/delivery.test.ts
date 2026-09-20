@@ -19,26 +19,86 @@ import {
 
 describe('the events this slice delivers', () => {
   /**
-   * THREE, AND THE OUTBOX CARRIES MORE. `tutor_request.sent`,
-   * `tutor_request.closed` and the rest are left `pending` on purpose; this
-   * list is what stops the drain touching them.
+   * SEVEN, AND THE OUTBOX STILL CARRIES ONE MORE. The payment path plus the
+   * request lifecycle; `tutor_request.declined` is deliberately absent and is
+   * asserted so below. This list is what the claim query reads, so it is the
+   * single thing that decides what the drain will touch.
    */
-  it('delivers exactly the three payment-path events', () => {
+  it('delivers the payment path and the request lifecycle', () => {
     expect([...DELIVERABLE_EVENT_TYPES]).toEqual([
       'payment.required',
       'booking.confirmed',
       'payment.refund_required',
+      'tutor_request.sent',
+      'tutor_request.accepted',
+      'tutor_request.closed',
+      'intended_lesson_request.expired',
     ]);
   });
 
-  it('does not claim the request-lifecycle events', () => {
+  /**
+   * THE ONE THAT IS STILL NOT DELIVERED, AND MUST NOT BECOME SO BY ACCIDENT.
+   *
+   * A single decline is not news a family can act on: with a fan-out of three
+   * it means up to three discouraging emails while other tutors are still
+   * deciding. The moment that IS actionable — everybody declined — arrives as
+   * `intended_lesson_request.expired` carrying `all_tutors_declined`.
+   */
+  it('does not deliver an individual decline', () => {
+    expect(isDeliverableEventType('tutor_request.declined')).toBe(false);
+  });
+
+  it('claims the request-lifecycle events it now owns', () => {
     for (const type of [
       'tutor_request.sent',
       'tutor_request.accepted',
       'tutor_request.closed',
       'intended_lesson_request.expired',
     ]) {
-      expect(isDeliverableEventType(type)).toBe(false);
+      expect(isDeliverableEventType(type)).toBe(true);
+    }
+  });
+});
+
+describe('the request lifecycle, as approved', () => {
+  /** The email the product was missing: a tutor learns they have work. */
+  it('sends a new request to the tutor alone', () => {
+    expect([...recipientRolesFor('tutor_request.sent')]).toEqual(['tutor']);
+    expect(templateFor('tutor_request.sent', 'tutor')).toBe('tutor_request_sent_tutor');
+  });
+
+  /**
+   * An acceptance is news for the FAMILY. The tutor just pressed the button and
+   * can see the hold on their own screen — cut from this slice by decision.
+   */
+  it('sends an acceptance to the family alone', () => {
+    expect([...recipientRolesFor('tutor_request.accepted')]).toEqual(['family']);
+    expect(templateFor('tutor_request.accepted', 'family')).toBe('tutor_request_accepted_family');
+  });
+
+  /** A closure is the tutor's; whether it is owed at all is decided per row. */
+  it('sends a closure to the tutor alone', () => {
+    expect([...recipientRolesFor('tutor_request.closed')]).toEqual(['tutor']);
+    expect(templateFor('tutor_request.closed', 'tutor')).toBe('tutor_request_closed_tutor');
+  });
+
+  /**
+   * ONE TEMPLATE FOR BOTH ENDINGS. Everybody declined, or time ran out — one
+   * transition, one event, and copy that branches on the close reason.
+   */
+  it('sends a closed request to the family alone', () => {
+    expect([...recipientRolesFor('intended_lesson_request.expired')]).toEqual(['family']);
+    expect(templateFor('intended_lesson_request.expired', 'family')).toBe('request_closed_family');
+  });
+
+  /**
+   * NO TUTOR-FACING EVENT MAY ADDRESS A FAMILY, AND VICE VERSA. Asserted as a
+   * property of the whole map rather than per row, so a future event cannot be
+   * added with the wrong audience and still pass.
+   */
+  it('never sends a tutor-request event to more than one audience', () => {
+    for (const type of ['tutor_request.sent', 'tutor_request.accepted', 'tutor_request.closed']) {
+      expect(recipientRolesFor(type as never).length).toBe(1);
     }
   });
 });

@@ -895,4 +895,147 @@ describe.skipIf(!available)('notification delivery (integration)', () => {
       expect(second.getTime()).toBeGreaterThan(first.getTime());
     });
   });
+
+  describe('the request lifecycle', () => {
+    /**
+     * THE EMAIL THE PRODUCT WAS MISSING, resolved end to end: the event names a
+     * tutor request by REFERENCE rather than id, and the recipient must come
+     * out as the tutor, not the family.
+     */
+    it('resolves a new request to the tutor, by reference', async () => {
+      const fixture = await selectedRequest();
+      const { sql } = createDatabaseClient();
+      let reference: string;
+      try {
+        const [row] = await sql`
+          select reference from bookings.tutor_requests where id = ${fixture.tutorRequestId}`;
+        reference = row!['reference'] as string;
+      } finally {
+        await sql.end();
+      }
+
+      const entryId = await emit('tutor_request.sent', {
+        tutorRequestReference: reference,
+        respondByAt: new Date(Date.now() + 3_600_000).toISOString(),
+      });
+
+      const work = (await claim()).filter((item) => item.outboxEntryId === entryId);
+      expect(work).toHaveLength(1);
+      expect(work[0]!.recipientRole).toBe('tutor');
+      expect(work[0]!.toAddress).toBe(fixture.tutorEmail);
+      expect(work[0]!.templateCode).toBe('tutor_request_sent_tutor');
+      // Their own reference, never the family's.
+      expect(work[0]!.context.tutorRequestReference).toBe(reference);
+    });
+
+    /** An acceptance is the family's news, and carries the family's link. */
+    it('resolves an acceptance to the family', async () => {
+      const fixture = await selectedRequest();
+      const { sql } = createDatabaseClient();
+      let reference: string;
+      try {
+        const [row] = await sql`
+          select reference from bookings.tutor_requests where id = ${fixture.tutorRequestId}`;
+        reference = row!['reference'] as string;
+      } finally {
+        await sql.end();
+      }
+
+      const entryId = await emit('tutor_request.accepted', {
+        tutorRequestReference: reference,
+        startAt: new Date(Date.now() + 86_400_000).toISOString(),
+      });
+
+      const work = (await claim()).filter((item) => item.outboxEntryId === entryId);
+      expect(work).toHaveLength(1);
+      expect(work[0]!.recipientRole).toBe('family');
+      expect(work[0]!.toAddress).toBe(fixture.parentEmail);
+      expect(work[0]!.templateCode).toBe('tutor_request_accepted_family');
+    });
+
+    /**
+     * ROW 5. The fixture's tutor accepted, so a reservation exists and the
+     * closure genuinely releases something.
+     */
+    it('emails a closure to a tutor who had time held', async () => {
+      const fixture = await selectedRequest();
+      const entryId = await emit('tutor_request.closed', {
+        tutorRequestId: fixture.tutorRequestId,
+      });
+
+      const work = (await claim()).filter((item) => item.outboxEntryId === entryId);
+      expect(work).toHaveLength(1);
+      expect(work[0]!.recipientRole).toBe('tutor');
+      expect(work[0]!.templateCode).toBe('tutor_request_closed_tutor');
+    });
+
+    /**
+     * ROW 5, THE OTHER HALF. A tutor who never accepted has nothing released,
+     * so the entry owes nobody anything — and must CLOSE rather than sit
+     * pending being reconsidered on every drain for ever.
+     */
+    it('owes nothing for a closure where no time was ever held', async () => {
+      const fixture = await selectedRequest();
+
+      // Remove the acceptance's reservation: this tutor never held time.
+      const { sql } = createDatabaseClient();
+      try {
+        await sql`
+          delete from availability.tutor_time_reservations
+          where tutor_request_id = ${fixture.tutorRequestId}`;
+      } finally {
+        await sql.end();
+      }
+
+      const entryId = await emit('tutor_request.closed', {
+        tutorRequestId: fixture.tutorRequestId,
+      });
+
+      const work = (await claim()).filter((item) => item.outboxEntryId === entryId);
+      expect(work).toHaveLength(0);
+      expect(await deliveriesFor(entryId)).toHaveLength(0);
+      // Closed by decision, not left pending.
+      expect(await outboxStatus(entryId)).toBe('superseded');
+    });
+
+    /**
+     * ONE EVENT, BOTH ENDINGS. The close reason reaches the context so the
+     * template can tell a family "everybody declined" from "time ran out".
+     */
+    it('carries the close reason to the family', async () => {
+      const fixture = await selectedRequest();
+      const { sql } = createDatabaseClient();
+      try {
+        await sql`
+          update bookings.intended_lesson_requests
+          set status_code = 'closed', close_reason_code = 'all_tutors_declined'
+          where id = ${fixture.ilrId}`;
+      } finally {
+        await sql.end();
+      }
+
+      const entryId = await emit('intended_lesson_request.expired', {
+        intendedLessonRequestId: fixture.ilrId,
+      });
+
+      const work = (await claim()).filter((item) => item.outboxEntryId === entryId);
+      expect(work).toHaveLength(1);
+      expect(work[0]!.recipientRole).toBe('family');
+      expect(work[0]!.toAddress).toBe(fixture.parentEmail);
+      expect(work[0]!.context.closeReasonCode).toBe('all_tutors_declined');
+    });
+
+    /** An individual decline is still nobody's news. */
+    it('never plans a delivery for an individual decline', async () => {
+      const fixture = await selectedRequest();
+      const entryId = await emit('tutor_request.declined', {
+        tutorRequestReference: fixture.ilrReference,
+      });
+
+      const work = (await claim()).filter((item) => item.outboxEntryId === entryId);
+      expect(work).toHaveLength(0);
+      // Left pending and untouched — not failed, not superseded.
+      expect(await outboxStatus(entryId)).toBe('pending');
+    });
+  });
 });

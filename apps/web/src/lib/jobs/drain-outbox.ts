@@ -54,6 +54,8 @@ export interface OutboxDrainOutcome {
   readonly deliveriesFailed: number;
   readonly entriesSettled: number;
   readonly entriesUnresolvable: number;
+  /** Entries that, on inspection, owed nobody a message. Ordinary. */
+  readonly entriesNothingOwed: number;
   /**
    * Deliveries Studdy has stopped retrying, having used all
    * `MAX_DELIVERY_ATTEMPTS`.
@@ -194,6 +196,7 @@ export async function runOutboxDrain(
       deliveriesFailed: 0,
       entriesSettled: 0,
       entriesUnresolvable: 0,
+      entriesNothingOwed: 0,
       deliveriesExhausted: 0,
       durationMs: Date.now() - startedAt,
     };
@@ -240,6 +243,7 @@ export async function runOutboxDrain(
     deliveriesFailed: failed,
     entriesSettled: settled.settled,
     entriesUnresolvable: outcome.entriesUnresolvable,
+    entriesNothingOwed: outcome.entriesNothingOwed,
     deliveriesExhausted: outcome.deliveriesExhausted,
     durationMs: Date.now() - startedAt,
   };

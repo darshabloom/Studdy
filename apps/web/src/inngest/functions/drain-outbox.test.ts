@@ -21,6 +21,7 @@ const OUTCOME: OutboxDrainOutcome = {
   deliveriesFailed: 0,
   entriesSettled: 3,
   entriesUnresolvable: 0,
+  entriesNothingOwed: 0,
   deliveriesExhausted: 0,
   durationMs: 12,
 };
@@ -45,6 +46,7 @@ describe('the scheduled outbox drain', () => {
       deliveriesFailed: 0,
       entriesSettled: 0,
       entriesUnresolvable: 0,
+      entriesNothingOwed: 0,
       deliveriesExhausted: 0,
       durationMs: 2,
     };

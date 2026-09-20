@@ -16,12 +16,18 @@
 /**
  * Outbox event types this slice delivers.
  *
- * DELIBERATELY THREE. The outbox has been written to since slice 1 and carries
- * more types than these — `tutor_request.sent`, `tutor_request.accepted`,
- * `tutor_request.closed`, `intended_lesson_request.expired` — and they stay
- * undelivered on purpose. This slice proves the delivery machinery on the
- * payment path first; adding a type later is a template and a resolver, not a
- * redesign.
+ * ONE TYPE IS STILL DELIBERATELY ABSENT: `tutor_request.declined`.
+ *
+ * A single tutor declining is not news a family can act on. With a fan-out of
+ * three, emailing each one means up to three discouraging messages while other
+ * tutors are still deciding, and nothing to do about any of them. The moment
+ * that IS actionable — every tutor has declined, so the request is dead — is
+ * not this event at all: it is the request closing, which arrives as
+ * `intended_lesson_request.expired` carrying `all_tutors_declined`.
+ *
+ * An event type absent from this list is left `pending` and untouched, never
+ * marked failed: nothing is wrong with it, and it must still be there if a
+ * later slice decides it is owed to somebody.
  *
  * An event type absent from this list is left `pending` and untouched, never
  * marked failed: nothing is wrong with it, and it must still be there when its
@@ -31,6 +37,11 @@ export const DELIVERABLE_EVENT_TYPES = [
   'payment.required',
   'booking.confirmed',
   'payment.refund_required',
+  // The request lifecycle (feat/tutor-request-notifications).
+  'tutor_request.sent',
+  'tutor_request.accepted',
+  'tutor_request.closed',
+  'intended_lesson_request.expired',
 ] as const;
 
 export type DeliverableEventType = (typeof DELIVERABLE_EVENT_TYPES)[number];
@@ -77,6 +88,30 @@ const RECIPIENTS_BY_EVENT: Record<DeliverableEventType, readonly RecipientRole[]
   'payment.required': ['family'],
   'booking.confirmed': ['family', 'tutor'],
   'payment.refund_required': ['ops'],
+  /*
+   * THE ONE THAT MATTERS MOST. Until this, a tutor learned they had work only
+   * by logging in — against a response deadline measured in hours.
+   */
+  'tutor_request.sent': ['tutor'],
+  /*
+   * The FAMILY, not the tutor. An acceptance is new information to the family
+   * — another option they can now choose. The tutor just pressed the button
+   * and can see the hold on their own screen, so telling them again is noise
+   * (cut from this slice by decision, not by oversight).
+   */
+  'tutor_request.accepted': ['family'],
+  /*
+   * The tutor, and ONLY where they had time held — see `closureOwesTheTutor`
+   * in the repository. A tutor who never responded has nothing released and
+   * nothing to do.
+   */
+  'tutor_request.closed': ['tutor'],
+  /*
+   * The family, whether the request ran out of time or every tutor declined.
+   * ONE EVENT, because it is one transition: the request closed without a
+   * booking. The copy distinguishes the two; the delivery does not need to.
+   */
+  'intended_lesson_request.expired': ['family'],
 };
 
 export function recipientRolesFor(eventType: DeliverableEventType): readonly RecipientRole[] {
@@ -94,6 +129,10 @@ export const NOTIFICATION_TEMPLATES = [
   'booking_confirmed_family',
   'booking_confirmed_tutor',
   'payment_refund_required_ops',
+  'tutor_request_sent_tutor',
+  'tutor_request_accepted_family',
+  'tutor_request_closed_tutor',
+  'request_closed_family',
 ] as const;
 
 export type NotificationTemplate = (typeof NOTIFICATION_TEMPLATES)[number];
@@ -103,6 +142,15 @@ const TEMPLATE_BY_EVENT_AND_ROLE: Record<string, NotificationTemplate> = {
   'booking.confirmed:family': 'booking_confirmed_family',
   'booking.confirmed:tutor': 'booking_confirmed_tutor',
   'payment.refund_required:ops': 'payment_refund_required_ops',
+  'tutor_request.sent:tutor': 'tutor_request_sent_tutor',
+  'tutor_request.accepted:family': 'tutor_request_accepted_family',
+  'tutor_request.closed:tutor': 'tutor_request_closed_tutor',
+  /*
+   * ONE TEMPLATE FOR BOTH ENDINGS, branching on the close reason inside.
+   * Keying this map on the reason as well would make the (event, role) pair
+   * stop being a pair, for two messages that differ by one sentence.
+   */
+  'intended_lesson_request.expired:family': 'request_closed_family',
 };
 
 export function templateFor(

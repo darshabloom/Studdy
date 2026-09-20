@@ -1333,7 +1333,54 @@ export async function expireOverdueRequests(options: {
         )
         .limit(batchSize);
 
-      const toConsider = [...new Set([...candidateIlrIds, ...overdue.map((row) => row.id)])];
+      /*
+       * REQUESTS WITH NOTHING LIVE LEFT — the case the comment above has
+       * always described and the candidate set never actually reached.
+       *
+       * A declining tutor puts nothing into `due` (that is for response
+       * deadlines that have passed) and nothing into `lapsedAcceptances`. So
+       * an ILR whose every tutor declined sat `awaiting_responses` until its
+       * own decision deadline — hours during which the family's dashboard
+       * showed a live request that was already dead, and after which they
+       * were told it had "expired" rather than that everyone had said no.
+       *
+       * Closing it here rather than in the decline path keeps ONE owner for
+       * ILR closure. The sweep runs every minute, so the family learns within
+       * about a minute of the last decline instead of at the deadline.
+       */
+      const exhausted = await tx
+        .select({ id: intendedLessonRequests.id })
+        .from(intendedLessonRequests)
+        .where(
+          and(
+            inArray(intendedLessonRequests.statusCode, [
+              'awaiting_responses',
+              'ready_for_selection',
+            ]),
+            not(
+              exists(
+                tx
+                  .select({ one: tutorRequests.id })
+                  .from(tutorRequests)
+                  .where(
+                    and(
+                      eq(tutorRequests.intendedLessonRequestId, intendedLessonRequests.id),
+                      inArray(tutorRequests.statusCode, ['sent', 'accepted', 'selected']),
+                    ),
+                  ),
+              ),
+            ),
+          ),
+        )
+        .limit(batchSize);
+
+      const toConsider = [
+        ...new Set([
+          ...candidateIlrIds,
+          ...overdue.map((row) => row.id),
+          ...exhausted.map((row) => row.id),
+        ]),
+      ];
       let closedCount = 0;
 
       for (const ilrId of toConsider) {
@@ -1349,12 +1396,20 @@ export async function expireOverdueRequests(options: {
         const pastDeadline = overdue.some((row) => row.id === ilrId);
         if (live.length > 0 && !pastDeadline) continue;
 
+        /*
+         * ONE REASON, READ ONCE. It was previously computed inline for the row
+         * and hard-coded as `request_expired` on the status transition below,
+         * so the audit trail disagreed with the record it was describing
+         * whenever every tutor had declined.
+         */
+        const closeReasonCode = live.length === 0 ? 'all_tutors_declined' : 'request_expired';
+
         const closed = await tx
           .update(intendedLessonRequests)
           .set({
             statusCode: 'closed',
             closedAt: now,
-            closeReasonCode: live.length === 0 ? 'all_tutors_declined' : 'request_expired',
+            closeReasonCode,
             updatedAt: now,
           })
           .where(
@@ -1376,7 +1431,7 @@ export async function expireOverdueRequests(options: {
             fromStatusCode: 'awaiting_responses',
             toStatusCode: 'closed',
             actorUserId: null,
-            reasonCode: 'request_expired',
+            reasonCode: closeReasonCode,
             correlationId: options.correlationId,
             occurredAt: now,
           });
