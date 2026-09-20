@@ -731,14 +731,21 @@ describe.skipIf(!available)('notification delivery (integration)', () => {
 
   describe('event types outside this slice are left alone', () => {
     /**
-     * The outbox has been written to since slice 1 and carries types this slice
-     * does not deliver. They must stay `pending` and untouched — nothing is
-     * wrong with them, and they must still be there for their own slice.
+     * The outbox carries a type this slice does not deliver. It must stay
+     * `pending` and untouched — nothing is wrong with it, and it must still be
+     * there if a later slice decides somebody is owed it.
+     *
+     * `tutor_request.declined` is now the ONLY such type: the request
+     * lifecycle became deliverable with the tutor-notification slice, so the
+     * two types this test used to name are no longer examples of anything.
+     * A single decline is deliberately never emailed (matrix row 4).
      */
     it('never plans a delivery for an undeliverable event type', async () => {
-      const untouched = await emit('tutor_request.closed', { tutorRequestId: randomUUID() });
-      const closed = await emit('intended_lesson_request.expired', {
-        intendedLessonRequestId: randomUUID(),
+      const untouched = await emit('tutor_request.declined', {
+        tutorRequestReference: `TREQ-${randomUUID().slice(0, 8)}`,
+      });
+      const closed = await emit('tutor_request.declined', {
+        tutorRequestReference: `TREQ-${randomUUID().slice(0, 8)}`,
       });
 
       await claim();
@@ -984,8 +991,37 @@ describe.skipIf(!available)('notification delivery (integration)', () => {
      * ROW 5. The fixture's tutor accepted, so a reservation exists and the
      * closure genuinely releases something.
      */
+    /**
+     * THE FIXTURE DOES NOT HOLD TIME, whatever its comment says — it builds an
+     * ILR, a tutor request and a payment, and never inserts a reservation. So
+     * the held time is created here, explicitly, because that is the precise
+     * condition row 5 turns on and a test of it should not depend on a
+     * side effect of somebody else's fixture.
+     */
+    const giveHeldTime = async (tutorRequestId: string, dayOffset: number): Promise<void> => {
+      const { sql } = createDatabaseClient();
+      try {
+        const startAt = new Date(Date.now() + dayOffset * 86_400_000);
+        const endAt = new Date(startAt.getTime() + 3_600_000);
+        await sql`
+          insert into availability.tutor_time_reservations
+            (tutor_profile_id, tutor_request_id, start_at, end_at, gap_minutes,
+             effective_end_at, status_code, reservation_type_code)
+          select tr.tutor_profile_id, tr.id, ${startAt}, ${endAt}, 0, ${endAt},
+                 'released', 'request_hold'
+          from bookings.tutor_requests tr
+          where tr.id = ${tutorRequestId}::uuid`;
+      } finally {
+        await sql.end();
+      }
+    };
+
     it('emails a closure to a tutor who had time held', async () => {
       const fixture = await selectedRequest();
+      // Released, because the closure has already let it go — the point is
+      // that a hold EXISTED, not that it still does.
+      await giveHeldTime(fixture.tutorRequestId, 400);
+
       const entryId = await emit('tutor_request.closed', {
         tutorRequestId: fixture.tutorRequestId,
       });
@@ -1002,17 +1038,9 @@ describe.skipIf(!available)('notification delivery (integration)', () => {
      * pending being reconsidered on every drain for ever.
      */
     it('owes nothing for a closure where no time was ever held', async () => {
+      // No `giveHeldTime` call: this tutor never accepted, so no reservation
+      // exists and the closure releases nothing.
       const fixture = await selectedRequest();
-
-      // Remove the acceptance's reservation: this tutor never held time.
-      const { sql } = createDatabaseClient();
-      try {
-        await sql`
-          delete from availability.tutor_time_reservations
-          where tutor_request_id = ${fixture.tutorRequestId}`;
-      } finally {
-        await sql.end();
-      }
 
       const entryId = await emit('tutor_request.closed', {
         tutorRequestId: fixture.tutorRequestId,
