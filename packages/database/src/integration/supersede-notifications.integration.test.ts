@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq, inArray } from 'drizzle-orm';
 import { createDatabaseClient } from '../client';
 import { auditEvents, outboxEntries } from '../schema/index';
@@ -34,6 +34,23 @@ async function databaseAvailable(): Promise<boolean> {
 const available = await databaseAvailable();
 
 describe.skipIf(!available)('superseding historical notifications (integration)', () => {
+  /**
+   * Same quiet start as the delivery suite next door, for the same reason: the
+   * seed and every earlier file leave pending entries behind, and this suite
+   * asserts on counts and on which rows a cutoff selects.
+   */
+  beforeAll(async () => {
+    const { sql } = createDatabaseClient();
+    try {
+      await sql`
+        update audit.outbox_entries
+        set status_code = 'superseded', processed_at = now(), updated_at = now()
+        where status_code = 'pending'`;
+    } finally {
+      await sql.end();
+    }
+  });
+
   const createdOutboxIds: string[] = [];
 
   afterEach(async () => {

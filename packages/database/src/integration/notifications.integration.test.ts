@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
 import { createDatabaseClient } from '../client';
 import { notificationDeliveries, outboxEntries } from '../schema/index';
@@ -44,6 +44,33 @@ const available = await databaseAvailable();
 const OPS = 'ops@studdy.test';
 
 describe.skipIf(!available)('notification delivery (integration)', () => {
+  /**
+   * THE QUEUE MUST BE QUIET BEFORE THIS SUITE CLAIMS ANYTHING.
+   *
+   * `pnpm db:seed` creates two fanned-out lesson requests, so the outbox
+   * already holds several `tutor_request.sent` entries before a single test
+   * runs — and every earlier integration file adds more. All of them are now
+   * DELIVERABLE, all are older than anything a test emits, and the claim takes
+   * a bounded batch in no particular order. A test would then assert on a
+   * batch that never contained its own entry.
+   *
+   * That is not a test-only problem, which is why the fix is the real one:
+   * superseding what is already pending is exactly the operational step PD-021
+   * prescribes before the drain is switched on in any environment with
+   * history. The suite does to its database what an operator does to theirs.
+   */
+  beforeAll(async () => {
+    const { sql } = createDatabaseClient();
+    try {
+      await sql`
+        update audit.outbox_entries
+        set status_code = 'superseded', processed_at = now(), updated_at = now()
+        where status_code = 'pending'`;
+    } finally {
+      await sql.end();
+    }
+  });
+
   const createdIlrIds: string[] = [];
   const createdOutboxIds: string[] = [];
 
