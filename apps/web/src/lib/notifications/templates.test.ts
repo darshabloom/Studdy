@@ -3,7 +3,7 @@ import type { NotificationContext, NotificationWorkItem } from '@studdy/database
 import { renderNotification } from './templates';
 
 /**
- * The three transactional emails, rendered.
+ * The transactional emails, rendered.
  *
  * TWO KINDS OF ASSERTION LIVE HERE, and the second is the reason this file
  * matters more than a snapshot test would:
@@ -29,6 +29,11 @@ const BASE: NotificationContext = {
   paymentDeadlineAt: new Date('2026-09-01T08:36:48.000Z'),
   amountMinor: 4000n,
   currencyCode: 'NZD',
+  tutorRequestReference: 'TREQ-TESTTEST',
+  subjectDisplayName: 'Mathematics',
+  respondByAt: new Date('2026-09-01T06:00:00.000Z'),
+  offeredStartAts: [],
+  closeReasonCode: null,
   paymentReference: 'PAY-10000078',
   reason: 'The reservation was already released.',
 };
@@ -212,6 +217,137 @@ describe('payment.refund_required — operations only', () => {
   it('asks a human to act', () => {
     expect(rendered.html).toContain('manual intervention');
     expect(rendered.text).toContain('Someone needs to review this payment');
+  });
+});
+
+describe('tutor_request.sent — the tutor', () => {
+  const rendered = renderNotification(
+    item('tutor_request_sent_tutor', {
+      offeredStartAts: [new Date('2026-09-29T04:30:00.000Z'), new Date('2026-09-30T05:00:00.000Z')],
+    }),
+    SITE,
+  );
+
+  it('says what is being asked, and by when', () => {
+    expect(rendered.subject).toContain('Mathematics');
+    expect(rendered.subject).toContain('Ari');
+    expect(rendered.text).toMatch(/Reply by/);
+  });
+
+  it('offers this tutor their own times', () => {
+    expect(rendered.text).toContain('Tuesday, 29 September 2026');
+    expect(rendered.text).toContain('Wednesday, 30 September 2026');
+  });
+
+  it('sends them to their own request, by their own reference', () => {
+    expect(rendered.text).toContain(`${SITE}/tutor/requests/TREQ-TESTTEST`);
+  });
+
+  /**
+   * THE PRIVACY BOUNDARY, ASSERTED ON THE OUTPUT. The context deliberately
+   * carries the family's `LR-` reference, because the same object serves the
+   * family templates — so this proves the tutor template does not render it.
+   */
+  it('never names the family request or hints at another tutor', () => {
+    const all = `${rendered.subject} ${rendered.html} ${rendered.text}`;
+    expect(all).not.toContain('LR-10000077');
+    expect(all).not.toMatch(/other tutor|another tutor|also asked|shortlist|position/i);
+  });
+});
+
+describe('tutor_request.accepted — the family', () => {
+  const rendered = renderNotification(item('tutor_request_accepted_family'), SITE);
+
+  it('names the tutor and the time they can do', () => {
+    expect(rendered.subject).toContain('Aroha');
+    expect(rendered.text).toContain('Tuesday, 29 September 2026');
+  });
+
+  it('sends the family to choose', () => {
+    expect(rendered.text).toContain(`${SITE}/requests/LR-10000077/select`);
+  });
+
+  /** It must not read as though this is the only reply they will get. */
+  it('leaves room for other tutors still to answer', () => {
+    expect(rendered.text).toMatch(/wait to hear from anyone else/i);
+  });
+
+  it('promises no charge before confirmation', () => {
+    expect(rendered.text).toMatch(/Nothing is charged until you/i);
+  });
+});
+
+describe('tutor_request.closed — the tutor, and every cause reads the same', () => {
+  const CAUSES = [
+    'requester_withdrew',
+    'another_tutor_selected',
+    'request_expired',
+    'selection_window_lapsed',
+    'payment_window_lapsed',
+  ];
+
+  /**
+   * THE ASSERTION SP-006 EXISTS FOR. A tutor who could tell "someone else was
+   * picked" from "the family changed their mind" would learn that there WAS a
+   * someone else. Rendered for all five causes and compared byte for byte.
+   */
+  it('renders identically whatever the reason was', () => {
+    const outputs = CAUSES.map((closeReasonCode) =>
+      renderNotification(item('tutor_request_closed_tutor', { closeReasonCode }), SITE),
+    );
+    for (const rendered of outputs) {
+      expect(rendered.subject).toBe(outputs[0]!.subject);
+      expect(rendered.html).toBe(outputs[0]!.html);
+      expect(rendered.text).toBe(outputs[0]!.text);
+    }
+  });
+
+  it('never uses a word that would explain the closure', () => {
+    for (const closeReasonCode of CAUSES) {
+      const rendered = renderNotification(
+        item('tutor_request_closed_tutor', { closeReasonCode }),
+        SITE,
+      );
+      const all = `${rendered.subject} ${rendered.html} ${rendered.text}`;
+      expect(all).not.toMatch(
+        /another tutor|someone else|withdrew|withdrawn|chose|selected|declined|expired|payment/i,
+      );
+      expect(all).not.toContain('LR-10000077');
+    }
+  });
+
+  it('tells them the one thing they can act on', () => {
+    const rendered = renderNotification(item('tutor_request_closed_tutor'), SITE);
+    expect(rendered.text).toMatch(/has been released/i);
+    expect(rendered.text).toContain(`${SITE}/tutor/requests`);
+  });
+});
+
+describe('the request closed — the family', () => {
+  it('says plainly when every tutor declined', () => {
+    const rendered = renderNotification(
+      item('request_closed_family', { closeReasonCode: 'all_tutors_declined' }),
+      SITE,
+    );
+    expect(rendered.subject).toMatch(/No tutor is available/i);
+    expect(rendered.text).toMatch(/None of the tutors you asked/i);
+  });
+
+  it('says something different when it simply ran out of time', () => {
+    const rendered = renderNotification(
+      item('request_closed_family', { closeReasonCode: 'request_expired' }),
+      SITE,
+    );
+    expect(rendered.subject).not.toMatch(/No tutor is available/i);
+    expect(rendered.text).toMatch(/ran out of time/i);
+  });
+
+  it('always offers a way on, and confirms nothing was charged', () => {
+    for (const closeReasonCode of ['all_tutors_declined', 'request_expired']) {
+      const rendered = renderNotification(item('request_closed_family', { closeReasonCode }), SITE);
+      expect(rendered.text).toContain(`${SITE}/tutors`);
+      expect(rendered.text).toMatch(/Nothing has been charged/i);
+    }
   });
 });
 

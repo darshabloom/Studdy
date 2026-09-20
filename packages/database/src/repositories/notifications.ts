@@ -49,6 +49,13 @@ export interface NotificationBatchOutcome {
   readonly deliveriesPlanned: number;
   readonly entriesUnresolvable: number;
   /**
+   * Entries closed because, on inspection, they owed nobody a message — a
+   * closure for a tutor who never accepted, and so has nothing released.
+   * Ordinary, and reported so that "nothing happened" and "this was decided"
+   * are distinguishable.
+   */
+  readonly entriesNothingOwed: number;
+  /**
    * Deliveries that have run out of attempts and were NOT handed back as work.
    *
    * Reported rather than merely skipped: a message Studdy has given up on is
@@ -102,6 +109,29 @@ export interface NotificationContext {
   readonly paymentReference: string | null;
   /** Why fulfilment was blocked. Ops only. */
   readonly reason: string | null;
+
+  /* --- the request lifecycle (feat/tutor-request-notifications) --------- */
+
+  /**
+   * The tutor's own `TREQ-` reference, and the only handle a tutor email may
+   * use. Never the `LR-` reference, which belongs to the family's side of the
+   * boundary and would let two invited tutors discover they were both asked.
+   */
+  readonly tutorRequestReference: string | null;
+  readonly subjectDisplayName: string | null;
+  /** When the tutor must answer by. Shown to them; snapshotted, not recomputed. */
+  readonly respondByAt: Date | null;
+  /**
+   * The times THIS tutor was offered — their own subset, never the family's
+   * whole set. How flexible a family is, is not a tutor's to know.
+   */
+  readonly offeredStartAts: readonly Date[];
+  /**
+   * Why the request closed. FAMILY-FACING ONLY, and the reason the closed
+   * template can tell a family "everyone declined" while the tutor template
+   * says nothing at all about why.
+   */
+  readonly closeReasonCode: string | null;
 }
 
 const EMPTY_CONTEXT: NotificationContext = {
@@ -117,6 +147,11 @@ const EMPTY_CONTEXT: NotificationContext = {
   currencyCode: null,
   paymentReference: null,
   reason: null,
+  tutorRequestReference: null,
+  subjectDisplayName: null,
+  respondByAt: null,
+  offeredStartAts: [],
+  closeReasonCode: null,
 };
 
 export interface ClaimNotificationWorkInput {
@@ -193,6 +228,12 @@ export async function claimNotificationWork(input: ClaimNotificationWorkInput): 
       let planned = 0;
       let unresolvable = 0;
       const entryIds: string[] = [];
+      /*
+       * Entries that were resolved perfectly and turn out to owe nobody a
+       * message. They are CLOSED, not left pending: an entry nothing will ever
+       * deliver would otherwise be re-examined on every drain for ever.
+       */
+      const nothingOwed: string[] = [];
 
       for (const entry of due) {
         /*
@@ -226,6 +267,21 @@ export async function claimNotificationWork(input: ClaimNotificationWorkInput): 
             })
             .where(eq(outboxEntries.id, entry.id));
           continue;
+        }
+
+        /*
+         * ROW 5's CONDITION, APPLIED AT PLANNING rather than at send. A
+         * closure that owes nobody an email should never become a delivery
+         * row: a row that exists and is never sent would sit `pending` for
+         * ever, hold its entry open, and look exactly like a delivery that
+         * keeps failing.
+         */
+        if (entry.eventType === 'tutor_request.closed') {
+          const tutorRequestId = await tutorRequestIdFrom(tx, payload);
+          if (tutorRequestId === null || !(await closureOwesTheTutor(tx, tutorRequestId))) {
+            nothingOwed.push(entry.id);
+            continue;
+          }
         }
 
         entryIds.push(entry.id);
@@ -263,12 +319,28 @@ export async function claimNotificationWork(input: ClaimNotificationWorkInput): 
         }
       }
 
+      /*
+       * `superseded` — the same status PD-021 gave the historical backlog, and
+       * for the same reason: Studdy looked at this entry and decided it owes
+       * no message. Nothing claims a superseded entry, so it leaves the queue
+       * without ever pretending something was sent.
+       */
+      if (nothingOwed.length > 0) {
+        await tx
+          .update(outboxEntries)
+          .set({ statusCode: 'superseded', processedAt: now, updatedAt: now })
+          .where(
+            and(inArray(outboxEntries.id, nothingOwed), eq(outboxEntries.statusCode, 'pending')),
+          );
+      }
+
       if (entryIds.length === 0) {
         return {
           outcome: {
             entriesExamined: due.length,
             deliveriesPlanned: planned,
             entriesUnresolvable: unresolvable,
+            entriesNothingOwed: nothingOwed.length,
             // Nothing was claimed, so nothing could be exhausted.
             deliveriesExhausted: 0,
           },
@@ -335,6 +407,7 @@ export async function claimNotificationWork(input: ClaimNotificationWorkInput): 
           entriesExamined: due.length,
           deliveriesPlanned: planned,
           entriesUnresolvable: unresolvable,
+          entriesNothingOwed: nothingOwed.length,
           deliveriesExhausted: exhausted,
         },
         work,
@@ -394,8 +467,35 @@ async function resolveRecipient(
 ): Promise<{ userId: string | null; address: string } | null> {
   if (role === 'ops') return null;
 
-  const tutorRequestId = payload['tutorRequestId'];
-  if (typeof tutorRequestId !== 'string') return null;
+  /*
+   * THE FAMILY OF A WHOLE REQUEST, not of one invited tutor. Only
+   * `intended_lesson_request.expired` addresses the ILR directly; every other
+   * event names a single tutor request.
+   */
+  if (eventType === 'intended_lesson_request.expired') {
+    if (role !== 'family') return null;
+    const ilrId = payload['intendedLessonRequestId'];
+    if (typeof ilrId !== 'string') return null;
+    const [row] = await tx.execute(raw`
+      select l.authentication_email as address, u.id as user_id
+      from bookings.intended_lesson_requests ilr
+      join identity.users u on u.id = ilr.requested_by_user_id
+      join identity.auth_identity_links l on l.user_id = u.id
+      where ilr.id = ${ilrId}::uuid
+        and l.authentication_email is not null
+      limit 1`);
+    if (row === undefined) return null;
+    return { userId: row['user_id'] as string, address: row['address'] as string };
+  }
+
+  /*
+   * SOME EVENTS CARRY THE REFERENCE, SOME THE ID, because each was written by
+   * whichever transaction already had one to hand. Both name exactly one tutor
+   * request, so they are reduced to an id here rather than duplicating every
+   * query below.
+   */
+  const tutorRequestId = await tutorRequestIdFrom(tx, payload);
+  if (tutorRequestId === null) return null;
 
   if (role === 'family') {
     const [row] = await tx.execute(raw`
@@ -426,6 +526,52 @@ async function resolveRecipient(
 }
 
 /**
+ * One tutor request, however the payload happens to name it.
+ *
+ * `tutor_request.sent` and `.accepted` carry `tutorRequestReference`;
+ * `.closed` carries `tutorRequestId`. Neither is wrong — they were written by
+ * different transactions — and collapsing them here keeps every query below
+ * working in ids.
+ */
+async function tutorRequestIdFrom(
+  tx: Tx,
+  payload: Record<string, unknown>,
+): Promise<string | null> {
+  const id = payload['tutorRequestId'];
+  if (typeof id === 'string') return id;
+
+  const reference = payload['tutorRequestReference'];
+  if (typeof reference !== 'string') return null;
+  const [row] = await tx.execute(raw`
+    select id from bookings.tutor_requests where reference = ${reference} limit 1`);
+  return row === undefined ? null : (row['id'] as string);
+}
+
+/**
+ * Does this closure owe its tutor an email? ROW 5 OF THE APPROVED MATRIX.
+ *
+ * Only where the tutor had ACCEPTED and therefore had time held. A tutor who
+ * never responded has nothing released and nothing to do, and telling them
+ * "no longer available" is just "you missed it" — which at a fan-out of three
+ * is most closures.
+ *
+ * Asked of the RESERVATION rather than of the request's former status,
+ * because a reservation exists if and only if an acceptance happened, and it
+ * is still there after the request has closed. Reading a status that has
+ * already moved on would mean trusting `status_transitions` to be complete.
+ *
+ * Leaks nothing: the tutor already knows whether they accepted.
+ */
+async function closureOwesTheTutor(tx: Tx, tutorRequestId: string): Promise<boolean> {
+  const [row] = await tx.execute(raw`
+    select 1 as held
+    from availability.tutor_time_reservations
+    where tutor_request_id = ${tutorRequestId}::uuid
+    limit 1`);
+  return row !== undefined;
+}
+
+/**
  * Everything the templates for this event may render.
  *
  * Returns null when the event's own records cannot be found, which is what
@@ -436,6 +582,117 @@ async function resolveContext(
   eventType: DeliverableEventType,
   payload: Record<string, unknown>,
 ): Promise<NotificationContext | null> {
+  /*
+   * THE REQUEST CLOSED WITHOUT A BOOKING. One event, two endings, and the
+   * close reason is what tells them apart — so it is selected here and the
+   * template decides the words.
+   */
+  if (eventType === 'intended_lesson_request.expired') {
+    const ilrId = payload['intendedLessonRequestId'];
+    if (typeof ilrId !== 'string') return null;
+    const [row] = await tx.execute(raw`
+      select ilr.reference, ilr.close_reason_code, ilr.time_zone,
+             sp.preferred_name as student_first_name,
+             sub.display_name as subject_display_name
+      from bookings.intended_lesson_requests ilr
+      join students.student_subject_sections sss on sss.id = ilr.student_subject_section_id
+      join students.student_profiles sp on sp.id = sss.student_profile_id
+      join platform.subjects sub on sub.id = sss.subject_id
+      where ilr.id = ${ilrId}::uuid
+      limit 1`);
+    if (row === undefined) return null;
+    return {
+      ...EMPTY_CONTEXT,
+      requestReference: row['reference'] as string,
+      studentFirstName: row['student_first_name'] as string,
+      subjectDisplayName: row['subject_display_name'] as string,
+      timeZone: row['time_zone'] as string,
+      closeReasonCode: (row['close_reason_code'] as string | null) ?? null,
+    };
+  }
+
+  /*
+   * THE THREE TUTOR-REQUEST EVENTS share one shape: one invited tutor, their
+   * own reference, their own offered times.
+   *
+   * `intended_lesson_request_id` and `position` are NOT selected, and the
+   * `LR-` reference is not either. A tutor-facing template can only render
+   * what is on this object, so the privacy boundary is the shape of the data
+   * rather than the discipline of whoever writes the next template.
+   */
+  if (
+    eventType === 'tutor_request.sent' ||
+    eventType === 'tutor_request.accepted' ||
+    eventType === 'tutor_request.closed'
+  ) {
+    const tutorRequestId = await tutorRequestIdFrom(tx, payload);
+    if (tutorRequestId === null) return null;
+
+    const [row] = await tx.execute(raw`
+      select tr.reference as tutor_request_reference, tr.respond_by_at,
+             ilr.reference as request_reference, ilr.time_zone, ilr.format_code,
+             ilr.duration_minutes,
+             sp.preferred_name as student_first_name,
+             tp.public_first_name as tutor_first_name,
+             sub.display_name as subject_display_name
+      from bookings.tutor_requests tr
+      join bookings.intended_lesson_requests ilr on ilr.id = tr.intended_lesson_request_id
+      join students.student_subject_sections sss on sss.id = ilr.student_subject_section_id
+      join students.student_profiles sp on sp.id = sss.student_profile_id
+      join platform.subjects sub on sub.id = sss.subject_id
+      join tutors.tutor_profiles tp on tp.id = tr.tutor_profile_id
+      where tr.id = ${tutorRequestId}::uuid
+      limit 1`);
+    if (row === undefined) return null;
+
+    /*
+     * THIS TUTOR'S OWN OFFERED SUBSET, from `tutor_request_time_options` —
+     * never `request_time_options`, which holds the family's whole set and
+     * whose size alone would tell a tutor how flexible they are.
+     */
+    const offered = await tx.execute(raw`
+      select starts_at
+      from bookings.tutor_request_time_options
+      where tutor_request_id = ${tutorRequestId}::uuid
+      order by starts_at asc`);
+
+    const claimed =
+      eventType === 'tutor_request.accepted' && typeof payload['startAt'] === 'string'
+        ? new Date(payload['startAt'])
+        : null;
+
+    /*
+     * THE FAMILY'S `LR-` REFERENCE NEVER REACHES A TUTOR-FACING CONTEXT.
+     *
+     * Only `tutor_request.accepted` is addressed to the family, and only it
+     * needs the reference — to build the selection link. The other two events
+     * in this branch go to the TUTOR, and SP-006 puts the ILR and its
+     * identifier among the things a tutor must never learn.
+     *
+     * Enforced by the SHAPE rather than by the templates' restraint. Both
+     * tutor templates already decline to render it and a test asserts the
+     * rendered output does not contain it — but that is defence at the third
+     * layer, and SP-006's second layer is that the projection simply omits it.
+     * A future edit to either template cannot leak what was never resolved.
+     */
+    const familyFacing = eventType === 'tutor_request.accepted';
+
+    return {
+      ...EMPTY_CONTEXT,
+      requestReference: familyFacing ? (row['request_reference'] as string) : null,
+      tutorRequestReference: row['tutor_request_reference'] as string,
+      studentFirstName: row['student_first_name'] as string,
+      tutorFirstName: row['tutor_first_name'] as string,
+      subjectDisplayName: row['subject_display_name'] as string,
+      durationMinutes: Number(row['duration_minutes']),
+      formatCode: row['format_code'] as string,
+      timeZone: row['time_zone'] as string,
+      respondByAt: row['respond_by_at'] === null ? null : new Date(row['respond_by_at'] as string),
+      lessonStartAt: claimed,
+      offeredStartAts: offered.map((option) => new Date(option['starts_at'] as string)),
+    };
+  }
+
   if (eventType === 'payment.refund_required') {
     const paymentId = payload['paymentId'];
     if (typeof paymentId !== 'string') return null;
