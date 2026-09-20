@@ -1091,6 +1091,72 @@ describe.skipIf(!available)('notification delivery (integration)', () => {
       expect(work[0]!.context.closeReasonCode).toBe('all_tutors_declined');
     });
 
+    /**
+     * SP-006's SECOND LAYER, ASSERTED ON THE PROJECTION ITSELF.
+     *
+     * The templates already decline to render the family's reference and the
+     * rendered-output tests prove it. This proves the stronger thing: a
+     * tutor-facing context never CARRIES it, so no future template edit can
+     * leak what was never resolved.
+     */
+    it('never puts the family reference on a tutor-facing context', async () => {
+      const fixture = await selectedRequest();
+      const { sql } = createDatabaseClient();
+      let reference: string;
+      try {
+        const [row] = await sql`
+          select reference from bookings.tutor_requests where id = ${fixture.tutorRequestId}`;
+        reference = row!['reference'] as string;
+      } finally {
+        await sql.end();
+      }
+
+      const sent = await emit('tutor_request.sent', {
+        tutorRequestReference: reference,
+        respondByAt: new Date(Date.now() + 3_600_000).toISOString(),
+      });
+      await giveHeldTime(fixture.tutorRequestId, 500);
+      const closed = await emit('tutor_request.closed', {
+        tutorRequestId: fixture.tutorRequestId,
+      });
+
+      const work = await claim();
+      const tutorFacing = work.filter(
+        (task) => task.outboxEntryId === sent || task.outboxEntryId === closed,
+      );
+      expect(tutorFacing).toHaveLength(2);
+      for (const task of tutorFacing) {
+        expect(task.recipientRole).toBe('tutor');
+        expect(task.context.requestReference).toBeNull();
+        // Their own reference is still there — that is what they act on.
+        expect(task.context.tutorRequestReference).toBe(reference);
+      }
+    });
+
+    /** The family event in the same branch still gets what it needs. */
+    it('still gives the family their own reference on an acceptance', async () => {
+      const fixture = await selectedRequest();
+      const { sql } = createDatabaseClient();
+      let reference: string;
+      try {
+        const [row] = await sql`
+          select reference from bookings.tutor_requests where id = ${fixture.tutorRequestId}`;
+        reference = row!['reference'] as string;
+      } finally {
+        await sql.end();
+      }
+
+      const entryId = await emit('tutor_request.accepted', {
+        tutorRequestReference: reference,
+        startAt: new Date(Date.now() + 86_400_000).toISOString(),
+      });
+
+      const work = (await claim()).filter((task) => task.outboxEntryId === entryId);
+      expect(work).toHaveLength(1);
+      expect(work[0]!.recipientRole).toBe('family');
+      expect(work[0]!.context.requestReference).toBe(fixture.ilrReference);
+    });
+
     /** An individual decline is still nobody's news. */
     it('never plans a delivery for an individual decline', async () => {
       const fixture = await selectedRequest();

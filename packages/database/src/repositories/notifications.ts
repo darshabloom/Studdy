@@ -661,11 +661,25 @@ async function resolveContext(
         ? new Date(payload['startAt'])
         : null;
 
+    /*
+     * THE FAMILY'S `LR-` REFERENCE NEVER REACHES A TUTOR-FACING CONTEXT.
+     *
+     * Only `tutor_request.accepted` is addressed to the family, and only it
+     * needs the reference — to build the selection link. The other two events
+     * in this branch go to the TUTOR, and SP-006 puts the ILR and its
+     * identifier among the things a tutor must never learn.
+     *
+     * Enforced by the SHAPE rather than by the templates' restraint. Both
+     * tutor templates already decline to render it and a test asserts the
+     * rendered output does not contain it — but that is defence at the third
+     * layer, and SP-006's second layer is that the projection simply omits it.
+     * A future edit to either template cannot leak what was never resolved.
+     */
+    const familyFacing = eventType === 'tutor_request.accepted';
+
     return {
       ...EMPTY_CONTEXT,
-      // The family reference is carried for the FAMILY template only; the
-      // tutor templates never render it.
-      requestReference: row['request_reference'] as string,
+      requestReference: familyFacing ? (row['request_reference'] as string) : null,
       tutorRequestReference: row['tutor_request_reference'] as string,
       studentFirstName: row['student_first_name'] as string,
       tutorFirstName: row['tutor_first_name'] as string,
