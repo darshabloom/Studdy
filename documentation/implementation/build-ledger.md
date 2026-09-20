@@ -53,6 +53,23 @@ made and discharged.
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------- | ----------- |
 | **Notification delivery pruning** | Delete `communications.notification_deliveries` rows 90 days after creation. Prune ONLY where the outbox entry is terminal (`sent` or `superseded`) — omitting that condition is a duplicate-email bug, not a tidiness issue. | Before any row can exceed 90 days of age, and no later than 90 days after the **first production notification send**. That date does not exist yet and begins when the drain first sends in production. | **No** — post-launch work, unless the deadline would fall before launch. | [SP-011](../../docs/decisions/security-and-privacy-decisions.md) | NOT STARTED |
 
+| **Tutor-request notification backlog** | Review and supersede the historical `tutor_request.sent`, `tutor_request.accepted`, `tutor_request.closed` and `intended_lesson_request.expired` outbox entries in any environment with persistent history, BEFORE those types can be delivered. `pnpm db:notifications:supersede --types=...`, report mode first. | **Before `RESEND_API_KEY` is set in any persistent environment.** Not before merge: without that key the drain falls back to the in-memory provider and nothing leaves the host. | **No** — it gates enabling email, not merging or launching | [PD-021](../../docs/decisions/approved-product-decisions.md), PR #35 | NOT STARTED |
+
+**Why the tutor-request backlog is a live risk.** These four event types became deliverable
+with PR #35, and the outbox has carried them since payment slice 1. The first drain in an
+environment with history would email every one of them — telling tutors about requests that
+closed weeks ago and families about requests that are long dead. CI demonstrated the
+mechanism rather than predicting it: adding the types to `DELIVERABLE_EVENT_TYPES` made
+existing seeded rows deliverable, and they filled the batch ahead of anything a test emitted.
+
+**What has to happen, in order.** Run the supersede in report mode against the environment's
+own database; read the date range and counts; check that nothing in it is a request still at
+`awaiting_responses`, because superseding a live `tutor_request.sent` means that tutor is
+never told; then apply with an explicit `--before`. Only then set `RESEND_API_KEY` and
+`RESEND_FROM_ADDRESS`. The script's existing blocking gates cover unreconciled refunds and
+future-dated confirmed bookings — they do NOT cover live requests, which is why that check
+is a person's.
+
 **Why this is tracked rather than built now.** Nothing can be over-retained until day 91, so
 the job would have no rows to act on before then. The approved retention _rule_ is the
 compliance artefact; the job is its enforcement and follows it.
