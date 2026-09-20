@@ -1,5 +1,6 @@
 import { serve } from 'inngest/next';
 import { inngest } from '@/inngest/client';
+import { drainOutboxScheduled } from '@/inngest/functions/drain-outbox';
 import { expireRequestsScheduled } from '@/inngest/functions/expire-requests';
 import { reconcilePaymentsScheduled } from '@/inngest/functions/reconcile-payments';
 
@@ -49,5 +50,5 @@ export const maxDuration = 300;
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [expireRequestsScheduled, reconcilePaymentsScheduled],
+  functions: [expireRequestsScheduled, reconcilePaymentsScheduled, drainOutboxScheduled],
 });

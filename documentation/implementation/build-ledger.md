@@ -41,3 +41,21 @@ Tracked in `docs/decisions/approved-product-decisions.md` under "Still open": co
 deadline and hold numbers, default currency, whether tutors may know the platform allows
 multi-tutor requests, matching preference fields pending legal check, email provider, and
 retention periods.
+
+## Outstanding commitments
+
+Dated obligations accepted in an approved decision, where the work itself is deliberately
+deferred. Unlike the capability table above — which was last reviewed on 7 August 2026 and
+predates the payment and notification slices — this section is maintained as commitments are
+made and discharged.
+
+| Item                              | Requirement                                                                                                                                                                                                                   | Deadline                                                                                                                                                                                                | Launch blocker                                                           | Source                                                           | Status      |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------- | ----------- |
+| **Notification delivery pruning** | Delete `communications.notification_deliveries` rows 90 days after creation. Prune ONLY where the outbox entry is terminal (`sent` or `superseded`) — omitting that condition is a duplicate-email bug, not a tidiness issue. | Before any row can exceed 90 days of age, and no later than 90 days after the **first production notification send**. That date does not exist yet and begins when the drain first sends in production. | **No** — post-launch work, unless the deadline would fall before launch. | [SP-011](../../docs/decisions/security-and-privacy-decisions.md) | NOT STARTED |
+
+**Why this is tracked rather than built now.** Nothing can be over-retained until day 91, so
+the job would have no rows to act on before then. The approved retention _rule_ is the
+compliance artefact; the job is its enforcement and follows it.
+
+**What starts the clock.** The first production send. Whoever switches the drain on in
+production records that date here — the deadline is real but has no owner until they do.

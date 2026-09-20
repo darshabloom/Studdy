@@ -65,3 +65,6 @@ export { connectedAccounts } from './payments/connected-accounts';
 export { payments } from './payments/payments';
 export { paymentEvents } from './payments/payment-events';
 export { tutorTransfers } from './payments/tutor-transfers';
+
+// Communications — transactional notification delivery (feat/resend-outbox-notifications)
+export { notificationDeliveries } from './communications/notification-deliveries';

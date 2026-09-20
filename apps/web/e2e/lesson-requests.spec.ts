@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { deliveriesForLatest, latestOutboxStatus } from './helpers/notifications';
 
 /**
  * End-to-end journeys for the Intended Lesson Request slice.
@@ -414,5 +415,114 @@ test.describe('scheduled expiry endpoint', () => {
     expect(typeof body['releasedHolds']).toBe('number');
     // The response carries counts, never request details.
     expect(JSON.stringify(body)).not.toMatch(/LR-|TREQ-/);
+  });
+});
+
+/**
+ * The transactional outbox, drained end to end.
+ *
+ * PLACED IN THIS FILE DELIBERATELY. `payment.required` is written by selection,
+ * which the journey above has just performed — and `describe.configure({ mode:
+ * 'serial' })` at the top of this file is what guarantees it has. A separate
+ * spec file would run in parallel against an account this one is mutating, and
+ * would either race it or have to rebuild the whole journey to reach the same
+ * state.
+ *
+ * WHAT IS NOT COVERED, and why it is not a gap here. `booking.confirmed` needs
+ * a verified `payment_intent.succeeded` from Stripe, which no end-to-end run
+ * can produce; it is covered by `payment-fulfilment.integration.test.ts` and by
+ * the notification integration suite. `payment.refund_required` needs a
+ * fulfilment that failed, which is the same problem. This proves the chain with
+ * the one event a browser journey can genuinely cause.
+ */
+test.describe('transactional notification drain', () => {
+  test.skip(!supabaseConfigured, 'Requires local Supabase (pnpm supabase:start)');
+
+  const AUTHORISED = { Authorization: 'Bearer local-development-cron-secret' };
+
+  test('refuses a request without the shared secret', async ({ request }) => {
+    const response = await request.post('/api/jobs/drain-outbox');
+    expect(response.status()).toBe(401);
+  });
+
+  test('refuses a secret supplied in the query string', async ({ request }) => {
+    const response = await request.post(
+      '/api/jobs/drain-outbox?secret=local-development-cron-secret',
+    );
+    expect(response.status()).toBe(401);
+  });
+
+  test('refuses GET, because a drain sends real mail', async ({ request }) => {
+    const response = await request.get('/api/jobs/drain-outbox');
+    expect(response.status()).toBe(405);
+  });
+
+  test('delivers the payment email the selection owed, and records it', async ({ request }) => {
+    const response = await request.post('/api/jobs/drain-outbox', { headers: AUTHORISED });
+    expect(response.status()).toBe(200);
+
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body['ok']).toBe(true);
+    expect(typeof body['deliveriesPlanned']).toBe('number');
+    expect(typeof body['deliveriesSent']).toBe('number');
+
+    /*
+     * COUNTS, NEVER PEOPLE. This is the one job whose entire input is who is
+     * being written to, so the response is checked for the shapes that would
+     * mean it had leaked: a reference, or an address.
+     */
+    const serialised = JSON.stringify(body);
+    expect(serialised).not.toMatch(/LR-|TREQ-|PAY-/);
+    expect(serialised).not.toContain('@');
+
+    /*
+     * THE CHAIN, ASSERTED AT ITS FAR END. A row at `sent` with a provider
+     * message id means the entry was claimed, the recipient was resolved from
+     * Studdy's own records, a template rendered, the provider accepted it and
+     * the receipt was written back.
+     */
+    const deliveries = await deliveriesForLatest('payment.required');
+    expect(deliveries.length).toBe(1);
+
+    const [family] = deliveries;
+    expect(family?.recipientRole).toBe('family');
+    expect(family?.templateCode).toBe('payment_required_family');
+    expect(family?.statusCode).toBe('sent');
+    expect(family?.providerMessageId).not.toBeNull();
+    // CI configures no Resend key, so the in-memory preview provider takes it
+    // and nothing can leave the machine.
+    expect(family?.provider).toBe('local');
+    // The family who made the request, not the tutor and not operations.
+    expect(family?.toAddress).toBe(REQUEST_STUDENT);
+
+    // An entry is settled only once every recipient it owed has been reached.
+    expect(await latestOutboxStatus('payment.required')).toBe('sent');
+  });
+
+  test('a second drain does not send that message again', async ({ request }) => {
+    /*
+     * THE PROPERTY THAT MAKES A ONE-MINUTE CRON SAFE. The entry is settled and
+     * the delivery row is unique per (entry, recipient), so re-running cannot
+     * produce a second email — and this is the cheapest place to prove it,
+     * because the previous test has just created exactly the row a careless
+     * implementation would send twice.
+     *
+     * ASSERTED ON THIS ENTRY, NOT ON THE BATCH TOTALS. Seeded scenarios leave
+     * their own entries in the outbox and one of them can legitimately become
+     * due between the two drains, so a global `deliveriesSent === 0` would be
+     * asserting that nothing else in the system had anything to do — which is
+     * not the claim, and would fail for a reason unrelated to idempotency.
+     */
+    const before = await deliveriesForLatest('payment.required');
+    expect(before).toHaveLength(1);
+
+    const response = await request.post('/api/jobs/drain-outbox', { headers: AUTHORISED });
+    expect(response.status()).toBe(200);
+
+    const after = await deliveriesForLatest('payment.required');
+    // No second row, and not re-sent: the same provider receipt as before.
+    expect(after).toHaveLength(1);
+    expect(after[0]?.statusCode).toBe('sent');
+    expect(after[0]?.providerMessageId).toBe(before[0]?.providerMessageId);
   });
 });

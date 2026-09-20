@@ -148,3 +148,61 @@ Before any deployed environment expires anything automatically:
 
 **Vercel Cron is no longer a candidate and must not be added back.** There is one production
 scheduler.
+
+---
+
+## `POST /api/jobs/drain-outbox`
+
+The manual door for the transactional-notification drain, and the exact shape of the expiry
+door above: `Authorization: Bearer <CRON_SECRET>`, timing-safe comparison, `GET` refused
+with 405, counts in the response and never an address, a subject line or a reference.
+
+**Inngest runs this every minute** (`drain-transactional-outbox`, `concurrency: 1`). The
+route exists for two reasons and neither is scheduling:
+
+1. **Operations.** Push a stuck batch after an incident, or while the scheduler is paused,
+   without waiting for the next tick.
+2. **Tests.** Inngest does not run in CI, so without this door an end-to-end test can only
+   assert that nothing happened.
+
+`apps/web/src/lib/notifications/boundary.test.ts` asserts that these two are the ONLY callers
+of `runOutboxDrain`, and separately that this route checks `CRON_SECRET` with
+`timingSafeEqual`. Adding a third caller fails the suite; adding an unguarded one fails it
+twice.
+
+### Before the first drain in any environment with history
+
+Read PD-021. The outbox has been accumulating since payment slice 1, and the drain has no
+age filter by design — every historical entry would be delivered. Run the one-off first:
+
+```
+pnpm db:notifications:supersede                                  # report only
+pnpm db:notifications:supersede --apply --before=<ISO 8601>      # after reading the report
+```
+
+It refuses to apply while any payment is flagged `refund_required`, or while any confirmed
+booking is still in the future, until each is acknowledged on the command line.
+
+### When the drain gives up
+
+A delivery is attempted at most `MAX_DELIVERY_ATTEMPTS` (8) times, on an exponential backoff
+spanning a little over four hours. After that the claim stops handing it back — a retry that
+can never succeed is not resilience, and at a one-minute cadence it would be roughly 43,000
+provider calls a month for one dead address.
+
+Giving up is **reported, never silent**: every drain returns `deliveriesExhausted`, a
+non-zero value logs at error level, and `exhaustedDeliveries()` lists them with the role,
+template and last error code — and deliberately no address, so triaging a stuck queue is
+never a way to read the address book.
+
+Treat a non-zero count as an operational condition: a dead address, a suppressed recipient,
+or a provider outage that outlasted the retries. There is no automatic recovery by design.
+
+### Configuration
+
+| Variable                | Required                        | Effect if missing                                                                          |
+| ----------------------- | ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `RESEND_API_KEY`        | production                      | Falls back to the in-memory preview provider; nothing leaves the host                      |
+| `RESEND_FROM_ADDRESS`   | production                      | As above. Must be a domain verified in Resend                                              |
+| `STUDDY_OPS_EMAIL`      | **production, or throws**       | The drain refuses to run rather than address refund alerts to a `.test` domain             |
+| `EMAIL_DEV_REDIRECT_TO` | any non-production using Resend | The drain refuses to send at all, rather than mail whoever a development database contains |

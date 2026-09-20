@@ -155,3 +155,18 @@ export {
   type ApplyPaymentEventInput,
   type FulfilmentOutcome,
 } from './repositories/payment-fulfilment';
+
+// Transactional notification delivery (feat/resend-outbox-notifications)
+export {
+  claimNotificationWork,
+  recordDeliverySent,
+  recordDeliveryFailed,
+  settleOutboxEntries,
+  deliveriesForOutboxEntry,
+  exhaustedDeliveries,
+  MAX_DELIVERY_ATTEMPTS,
+  type ClaimNotificationWorkInput,
+  type NotificationBatchOutcome,
+  type NotificationContext,
+  type NotificationWorkItem,
+} from './repositories/notifications';

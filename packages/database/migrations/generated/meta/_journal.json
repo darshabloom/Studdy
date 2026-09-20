@@ -64,6 +64,13 @@
       "when": 1788172349625,
       "tag": "0008_numerous_outlaw_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788302594176,
+      "tag": "0009_silent_thor_girl",
+      "breakpoints": true
     }
   ]
 }

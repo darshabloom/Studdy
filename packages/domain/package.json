@@ -10,7 +10,8 @@
     "./students": "./src/students/index.ts",
     "./bookings": "./src/bookings/index.ts",
     "./availability": "./src/availability/index.ts",
-    "./payments": "./src/payments/index.ts"
+    "./payments": "./src/payments/index.ts",
+    "./notifications": "./src/notifications/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
