@@ -30,11 +30,11 @@
   "devDependencies": {
     "@eslint/js": "^9.30.0",
     "eslint": "^9.30.0",
-    "prettier": "^3.6.0",
-    "supabase": "^2.111.0",
-    "turbo": "^2.5.0",
+    "prettier": "^3.9.8",
+    "supabase": "^2.117.0",
+    "turbo": "^2.10.13",
     "typescript": "^5.9.0",
-    "typescript-eslint": "^8.35.0"
+    "typescript-eslint": "^8.70.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
