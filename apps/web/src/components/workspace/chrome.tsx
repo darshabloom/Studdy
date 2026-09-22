@@ -43,7 +43,11 @@ export async function WorkspaceChrome({
   const hasAccess = enteredWorkspace !== null;
 
   // MFA gate: managers and owners must hold aal2 before the workspace renders.
-  if (hasAccess && requireMfa) {
+  // Deliberately independent of `hasAccess` — it must not be skippable by any
+  // access-check bypass, including a database outage (see `databaseAvailable`
+  // below, which never grants access but must not grant an MFA-free path
+  // either).
+  if (requireMfa) {
     const supabase = await createSupabaseServerClient();
     if (supabase !== null) {
       const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -95,19 +99,21 @@ export async function WorkspaceChrome({
           </Alert>
         </div>
       ) : null}
-      {hasAccess || !identity.databaseAvailable ? (
+      {hasAccess ? (
         children
       ) : (
         <RestrictedState
           title={`You do not have access to the ${currentLabel} workspace`}
           description={
-            identity.roleAssignments.length === 0 && identity.pendingRoleCodes.length > 0
-              ? 'Your tutor application is registered but not yet approved. Tutor tools unlock after approval.'
-              : identity.roleAssignments.length === 0
-                ? 'Your account has no active roles yet.'
-                : `Your roles: ${identity.roleAssignments
-                    .map((assignment) => ROLE_DISPLAY_NAMES[assignment.roleCode])
-                    .join(', ')}.`
+            !identity.databaseAvailable
+              ? 'Workspace access could not be verified while the database is unavailable. Try again shortly.'
+              : identity.roleAssignments.length === 0 && identity.pendingRoleCodes.length > 0
+                ? 'Your tutor application is registered but not yet approved. Tutor tools unlock after approval.'
+                : identity.roleAssignments.length === 0
+                  ? 'Your account has no active roles yet.'
+                  : `Your roles: ${identity.roleAssignments
+                      .map((assignment) => ROLE_DISPLAY_NAMES[assignment.roleCode])
+                      .join(', ')}.`
           }
         />
       )}

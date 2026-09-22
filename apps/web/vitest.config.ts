@@ -2,6 +2,12 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // tsconfig.json sets `jsx: "preserve"` for Next's own SWC pipeline, which
+  // esbuild would otherwise inherit as "don't transform JSX at all" — every
+  // .tsx test needs this override to run under Vitest.
+  esbuild: {
+    jsx: 'automatic',
+  },
   resolve: {
     alias: {
       // Mirrors the `@/*` path in tsconfig.json. Without it any test that
