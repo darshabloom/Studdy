@@ -10,6 +10,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     <WorkspaceChrome
       accepts={['independent_student', 'dependent_student']}
       navItems={NAV_ITEMS}
+      navLinks={[{ label: 'Lesson requests', href: '/requests' }]}
       homeHref="/student"
     >
       {children}

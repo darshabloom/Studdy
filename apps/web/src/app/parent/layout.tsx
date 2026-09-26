@@ -15,7 +15,12 @@ export const metadata = { title: 'Parent workspace' };
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <WorkspaceChrome accepts={['parent']} navItems={NAV_ITEMS} homeHref="/parent">
+    <WorkspaceChrome
+      accepts={['parent']}
+      navItems={NAV_ITEMS}
+      navLinks={[{ label: 'Lesson requests', href: '/requests' }]}
+      homeHref="/parent"
+    >
       {children}
     </WorkspaceChrome>
   );

@@ -4,11 +4,13 @@ import { deliveriesForLatest, latestOutboxStatus } from './helpers/notifications
 /**
  * End-to-end journeys for the Intended Lesson Request slice.
  *
- * Covers both booking paths through the same screens, plus the tutor
- * read-only view and its temporary-hold presentation.
+ * Covers both booking paths through the same screens, the tutor's view of a
+ * request and its temporary hold, tutor accept and decline, the family's choice
+ * of tutor and time, and the payment notification that choice owes.
  *
- * Accept/decline, selection and payment are deliberately absent — they belong
- * to later slices and the interface says so rather than showing dead controls.
+ * Payment itself is deliberately absent: a browser run cannot produce a
+ * verified Stripe payment, so payment and fulfilment are covered by the
+ * integration suites instead.
  *
  * These journeys use DEDICATED seeded accounts. Playwright runs spec files in
  * parallel, so a journey that mutates an account shared with another spec
@@ -191,6 +193,32 @@ async function askMultipleAndReview(page: Page): Promise<void> {
   });
 }
 
+/**
+ * The requests list is reachable from a workspace dashboard: through the
+ * sidebar on desktop, and through the dashboard's own link below 768px, where
+ * the sidebar is not rendered at all.
+ */
+async function expectRequestsReachable(page: Page, dashboard: string): Promise<void> {
+  const sidebarLink = page
+    .getByRole('navigation', { name: 'Workspace' })
+    .getByRole('link', { name: 'Lesson requests' });
+
+  await page.goto(dashboard);
+  await sidebarLink.click();
+  await expect(page).toHaveURL(/\/requests$/);
+  await expect(page.getByRole('heading', { name: 'Lesson requests' })).toBeVisible();
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(dashboard);
+  await expect(page.getByRole('main').getByRole('link', { name: 'Lesson requests' })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(sidebarLink).toHaveCount(0);
+  await page.getByRole('main').getByRole('link', { name: 'Lesson requests' }).click();
+  await expect(page).toHaveURL(/\/requests$/);
+  await expect(page.getByRole('heading', { name: 'Lesson requests' })).toBeVisible();
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.describe('lesson requests', () => {
@@ -250,6 +278,35 @@ test.describe('lesson requests', () => {
 
     await expect(page).toHaveURL(/\/requests\/LR-\d{8}/);
     await expect(page.getByText('Awaiting responses')).toBeVisible();
+  });
+
+  test('parent: the requests list is reachable from the dashboard on desktop and phone', async ({
+    page,
+  }) => {
+    await signIn(page, REQUEST_PARENT);
+    await expectRequestsReachable(page, '/parent');
+  });
+
+  test('student: the requests list is reachable from the dashboard on desktop and phone', async ({
+    page,
+  }) => {
+    await signIn(page, REQUEST_STUDENT);
+    await expectRequestsReachable(page, '/student');
+  });
+
+  test('tutor: the dashboard no longer says responding to requests is unavailable', async ({
+    page,
+  }) => {
+    await signIn(page, 'tutor.a@local.studdy.test');
+    await page.goto('/tutor');
+    // Prove the dashboard rendered before asserting an absence on it.
+    await expect(page.getByRole('heading', { name: 'Your availability' })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    const body = (await settledBody(page)).toLowerCase();
+    expect(body).not.toContain('opens in the next release');
+    expect(body).not.toContain('nothing here affects a request');
   });
 
   test('tutor: sees only their own request, with a labelled temporary hold', async ({ page }) => {
