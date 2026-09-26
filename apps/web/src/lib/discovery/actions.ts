@@ -73,6 +73,17 @@ export async function setUpOwnProfileAction(
   const identity = await resolveIdentity();
   if (identity === null || identity.studdyUserId === null) redirect('/sign-in?next=%2Fstudent');
 
+  // Server-authoritative: a dependent student's 18+ declaration is captured
+  // only at /welcome when independent_student is chosen. Without this check,
+  // a dependent_student account reaches the same form and would silently
+  // become independent, bypassing that declaration entirely.
+  if (!identity.workspaces.includes('independent_student')) {
+    return {
+      ...INITIAL,
+      error: 'Your profile is managed by a parent or guardian.',
+    };
+  }
+
   const validated = validateStudentProfile({
     preferredName: String(formData.get('preferredName') ?? ''),
     familyName: String(formData.get('familyName') ?? ''),
