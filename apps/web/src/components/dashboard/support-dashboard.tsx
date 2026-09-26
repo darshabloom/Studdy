@@ -54,6 +54,9 @@ export function SupportDashboard({
           <Button asChild>
             <Link href={addSubjectHref}>Add a subject</Link>
           </Button>
+          <Button variant="quiet" asChild>
+            <Link href="/requests">Lesson requests</Link>
+          </Button>
         </div>
       </div>
 

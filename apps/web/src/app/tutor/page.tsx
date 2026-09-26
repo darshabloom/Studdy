@@ -193,13 +193,6 @@ export default async function TutorDashboardPage() {
             : `${String(rules.length)} regular weekly ${rules.length === 1 ? 'block' : 'blocks'} in ${timeZone}.`}
         </p>
       </section>
-
-      <div className="mt-10">
-        <Alert tone="information" title="Responding to requests opens in the next release">
-          Accepting and declining, and the times a family has offered you, arrive with the next part
-          of this release. Nothing here affects a request yet.
-        </Alert>
-      </div>
     </>
   );
 }
