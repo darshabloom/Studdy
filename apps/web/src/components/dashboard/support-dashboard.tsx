@@ -46,9 +46,6 @@ export function SupportDashboard({
           {actsForOthers ? 'Your students' : 'Your learning'}
         </h1>
         <div className="flex flex-wrap gap-2">
-          <Button variant="quiet" asChild>
-            <Link href="/requests">Lesson requests</Link>
-          </Button>
           {actsForOthers ? (
             <Button variant="secondary" asChild>
               <Link href={addStudentHref}>Add a student</Link>
@@ -56,6 +53,9 @@ export function SupportDashboard({
           ) : null}
           <Button asChild>
             <Link href={addSubjectHref}>Add a subject</Link>
+          </Button>
+          <Button variant="quiet" asChild>
+            <Link href="/requests">Lesson requests</Link>
           </Button>
         </div>
       </div>
