@@ -20,19 +20,19 @@
   },
   "dependencies": {
     "@studdy/configuration": "workspace:*",
-    "@supabase/supabase-js": "^2.50.0",
-    "drizzle-orm": "^0.44.0",
+    "@supabase/supabase-js": "^2.117.1",
+    "drizzle-orm": "^0.45.3",
     "postgres": "^3.4.5",
     "@studdy/domain": "workspace:*"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",
     "@types/node": "^24.13.3",
-    "drizzle-kit": "^0.31.0",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9.30.0",
-    "tsx": "^4.19.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.0",
-    "typescript-eslint": "^8.35.0",
+    "typescript-eslint": "^8.70.1",
     "vitest": "^3.2.0"
   }
 }
