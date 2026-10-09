@@ -4,7 +4,7 @@
 slice. If this and another document disagree about what works, this one is right and the other
 needs fixing; if this one disagrees with the code, the code is right and this needs fixing.
 
-Last updated: **9 October 2026**, with the Booking entity slice.
+Last updated: **10 October 2026**, with the refund execution slice (after the Booking entity).
 
 How to read it: **Works** means built, tested and reachable by that role. **Partial** means a
 real piece exists but the journey does not finish. **Not started** means nothing a user can
@@ -37,7 +37,8 @@ visibly usable product by the end of October.
 | Choose the tutor and time once a tutor accepts                                                                                | Works                                |
 | Pay inside the payment window (Stripe Payment Element, retry on decline)                                                      | Works in Stripe test mode            |
 | Booking confirmed automatically when payment succeeds                                                                         | Works in Stripe test mode            |
-| Emails: payment required, booking confirmed, request expired                                                                  | Built, **not sending** (see Blocked) |
+| Emails: payment required, booking confirmed, request expired, payment refunded                                                | Built, **not sending** (see Blocked) |
+| Get the money back when a paid lesson could not be booked (an operator starts it; the family is emailed)                      | Works in Stripe test mode            |
 | The locked Parent screens: Students, individual Student, Bookings, Calendar, Payments, Find a Tutor, My Tutors, Book a Lesson | Not started (Week 3)                 |
 | Cancel or reschedule a booking, get a refund on request                                                                       | Not started                          |
 | Lessons, summaries, homework, progress                                                                                        | Not started                          |
@@ -107,9 +108,9 @@ dependent student sees when they do have a login is open and is a product decisi
 | Parent payment, server-priced, retry on the same intent                                         | Works in Stripe test mode |
 | Webhook-authoritative fulfilment, idempotent, race-safe                                         | Works                     |
 | Late success is recorded and flagged for refund, never re-taken                                 | Works                     |
-| **Durable Booking entity** (`bookings.bookings`, approved four states, written at confirmation) | **Done in this slice**    |
-| Refund execution (the flag exists, nothing issues the refund)                                   | Next                      |
-| Tutor settlement and payout (the obligation is recorded, nothing sends it)                      | After refunds             |
+| **Durable Booking entity** (`bookings.bookings`, approved four states, written at confirmation) | Works                     |
+| **Refund execution** for a payment that arrived with no booking (operator-started)              | **Done in this slice**    |
+| Tutor settlement and payout (the obligation is recorded, nothing sends it)                      | Next                      |
 | Cancellation and reschedule against a Booking                                                   | Not started               |
 
 ---
@@ -126,6 +127,12 @@ dependent student sees when they do have a login is open and is a product decisi
   who carries a tutor's unpaid negative balance. Sandbox only until then.
 - **Production rehearsal with sandbox keys is not possible** by design: the payments webhook
   only accepts live-mode events when `STUDDY_ENVIRONMENT=production`.
+- **Refunds are started by a person**, by design: Studdy neither confirms nor refunds silently
+  (approved late-success rule). The runbook is `documentation/operations/refunds.md`. The
+  refund route is behind the same Deployment Protection as the other `/api/jobs/*` routes, so
+  until those are exempt an operator can reach it only from the Vercel side or a local run.
+- **Local Docker is down on the development machine** (Docker Desktop's WSL engine fails to
+  start), so database and Playwright suites run only in CI for now.
 
 ## Where the plan stands
 

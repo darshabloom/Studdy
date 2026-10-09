@@ -566,6 +566,13 @@ counts found while implementing slice 6:
 is recorded honestly, the booking is not fabricated, no tutor is owed for a lesson that is
 not happening, and a human is told.
 
+> **Implemented 10 October 2026 (`feat/refund-execution`), within the rule above.** A person
+> starts the refund; Studdy never does. `payments.refunds` records the intent before Stripe is
+> called, the family is emailed once Stripe has accepted it, and a sweep only finishes refunds a
+> person already started. It refuses any payment that has a booking, and it refunds the whole
+> amount only: refunding a booked lesson and partial refunds belong to the cancellation slice.
+> Operator runbook: `documentation/operations/refunds.md`.
+
 The `processing` guard plus reconciliation shrink this window to near-nothing. "Near-nothing"
 is not "never", and real money needs the branch to exist — visibly, for an operator, rather
 than quietly, for nobody.

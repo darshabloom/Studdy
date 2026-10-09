@@ -235,11 +235,12 @@ function bookingConfirmedTutor(context: NotificationContext, siteUrl: string): R
 /**
  * An operations alert. NEVER a customer message.
  *
- * IT DOES NOT CLAIM A REFUND HAS HAPPENED, because none has: this slice does
- * not execute refunds, and a message saying otherwise would be false at the
- * moment it was sent. It says money arrived, the booking could not be
- * confirmed, and a person now has to act — with the references support needs to
- * find it, and no provider identifier at all.
+ * IT DOES NOT CLAIM A REFUND HAS HAPPENED, because none has: a refund is
+ * executed on purpose by a person, after they have looked, and this alert is
+ * sent at the moment the payment is flagged — before anyone has done anything.
+ * It says money arrived, the booking could not be confirmed, and a person now
+ * has to act — with the references support needs to find it, the one way to
+ * issue the refund, and no provider identifier at all.
  */
 function paymentRefundRequiredOps(context: NotificationContext, siteUrl: string): RenderedEmail {
   const rows: (readonly [string, string])[] = [
@@ -258,9 +259,10 @@ function paymentRefundRequiredOps(context: NotificationContext, siteUrl: string)
         'booking because the booking state was no longer valid. The payment is recorded as ',
         'succeeded and flagged as requiring a refund.</p>',
         detailRows(rows),
-        '<p><strong>No refund has been issued.</strong> Studdy does not process refunds ',
-        'automatically. Someone needs to review this payment and refund it in Stripe, and ',
-        'decide what the family is told.</p>',
+        '<p><strong>No refund has been issued.</strong> Studdy does not refund ',
+        'automatically. Someone needs to review this payment and then issue the refund from ',
+        'Studdy with the refund job, quoting the payment reference above. The family is ',
+        'emailed once Stripe has accepted the refund.</p>',
         `<p style="font-size:13px;color:#6b6b70">${escapeHtml(siteUrl)}</p>`,
       ].join(''),
     ),
@@ -271,9 +273,112 @@ function paymentRefundRequiredOps(context: NotificationContext, siteUrl: string)
       '',
       detailLines(rows),
       '',
-      'NO REFUND HAS BEEN ISSUED. Studdy does not process refunds automatically.',
-      'Someone needs to review this payment, refund it in Stripe, and decide what the',
-      'family is told.',
+      'NO REFUND HAS BEEN ISSUED. Studdy does not refund automatically.',
+      'Someone needs to review this payment and then issue the refund from Studdy with',
+      'the refund job, quoting the payment reference above. The family is emailed once',
+      'Stripe has accepted the refund.',
+      '',
+      'Studdy',
+    ].join('\n'),
+  };
+}
+
+/**
+ * The family's money is on its way back.
+ *
+ * SENT ONLY AFTER THE PROVIDER ACCEPTED THE REFUND, so every sentence here is
+ * already true. It says what happened to THEIR money, how much, and that nothing
+ * further is needed — and it does not explain why the booking could not be
+ * confirmed, because the reason is an internal one (a swept request, a released
+ * slot) the family cannot act on and which would, said badly, read as blame.
+ *
+ * "A few business days" rather than a date: how long a refund takes to appear is
+ * the card issuer's, not Studdy's, and a date here would be a promise Studdy
+ * cannot keep.
+ *
+ * Names no provider: the family paid Studdy, and Stripe is not who they deal
+ * with.
+ */
+function paymentRefundedFamily(context: NotificationContext, siteUrl: string): RenderedEmail {
+  const student = context.studentFirstName;
+  const tutor = context.tutorFirstName;
+  const findUrl = `${siteUrl}/tutors`;
+  const amount = formatMoney(context.amountMinor, context.currencyCode);
+  const rows: (readonly [string, string])[] = [
+    ['Lesson', tutor === null ? '' : `With ${tutor}`],
+    ['Refunded', amount],
+    ['Reference', context.requestReference ?? ''],
+  ];
+
+  const lesson = student === null ? 'your lesson' : `${student}'s lesson`;
+  const subject = `We have refunded your payment for ${lesson}`;
+  const html = page(
+    'Your payment has been refunded',
+    [
+      `<p>We took a payment for ${escapeHtml(lesson)}, but could not confirm the booking. `,
+      '<strong>The full amount has been refunded to the card you paid with.</strong></p>',
+      detailRows(rows),
+      '<p>It can take a few business days to appear on your statement, depending on your bank. ',
+      'Nothing else is needed from you, and you have not been charged for a lesson that did not happen.</p>',
+      button(findUrl, 'Find another tutor'),
+    ].join(''),
+  );
+  const text = [
+    `We took a payment for ${lesson}, but could not confirm the booking.`,
+    'The full amount has been refunded to the card you paid with.',
+    '',
+    detailLines(rows),
+    '',
+    'It can take a few business days to appear on your statement, depending on your',
+    'bank. Nothing else is needed from you, and you have not been charged for a',
+    'lesson that did not happen.',
+    '',
+    `Find another tutor: ${findUrl}`,
+    '',
+    'Studdy',
+  ].join('\n');
+
+  return { subject, html, text };
+}
+
+/**
+ * An operations alert: a refund Stripe would not make. NEVER a customer message.
+ *
+ * The family's money is STILL HELD, and the one attempt to return it failed — so
+ * this is more urgent than the alert that flagged the payment. The family has
+ * been told nothing, because nothing has happened to their money, and a person
+ * has to decide what to do next. It carries the references and Stripe's own
+ * machine-readable reason, and no provider identifier.
+ */
+function paymentRefundFailedOps(context: NotificationContext, siteUrl: string): RenderedEmail {
+  const rows: (readonly [string, string])[] = [
+    ['Payment', context.paymentReference ?? ''],
+    ['Request', context.requestReference ?? ''],
+    ['Amount still held', formatMoney(context.amountMinor, context.currencyCode)],
+    ['Reason given', context.reason ?? ''],
+  ];
+
+  return {
+    subject: `Action needed: a refund failed and the money is still held (${context.paymentReference ?? 'unknown'})`,
+    html: page(
+      'A refund did not go through',
+      [
+        '<p>Studdy asked Stripe to refund a payment and <strong>the refund failed</strong>. ',
+        'The family&rsquo;s money has not been returned and they have not been told anything.</p>',
+        detailRows(rows),
+        '<p>Check the payment in Stripe. Once the cause is fixed, run the refund job again ',
+        'for the same payment reference; a new attempt is made only because this one failed.</p>',
+        `<p style="font-size:13px;color:#6b6b70">${escapeHtml(siteUrl)}</p>`,
+      ].join(''),
+    ),
+    text: [
+      'Studdy asked Stripe to refund a payment and THE REFUND FAILED. The family’s money',
+      'has not been returned and they have not been told anything.',
+      '',
+      detailLines(rows),
+      '',
+      'Check the payment in Stripe. Once the cause is fixed, run the refund job again for',
+      'the same payment reference; a new attempt is made only because this one failed.',
       '',
       'Studdy',
     ].join('\n'),
@@ -520,6 +625,10 @@ export function renderNotification(item: NotificationWorkItem, siteUrl: string):
       return tutorRequestClosedTutor(item.context, siteUrl);
     case 'request_closed_family':
       return requestClosedFamily(item.context, siteUrl);
+    case 'payment_refunded_family':
+      return paymentRefundedFamily(item.context, siteUrl);
+    case 'payment_refund_failed_ops':
+      return paymentRefundFailedOps(item.context, siteUrl);
     default:
       throw new Error(`Unknown notification template: ${item.templateCode}`);
   }

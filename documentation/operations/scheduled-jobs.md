@@ -206,3 +206,23 @@ or a provider outage that outlasted the retries. There is no automatic recovery 
 | `RESEND_FROM_ADDRESS`   | production                      | As above. Must be a domain verified in Resend                                              |
 | `STUDDY_OPS_EMAIL`      | **production, or throws**       | The drain refuses to run rather than address refund alerts to a `.test` domain             |
 | `EMAIL_DEV_REDIRECT_TO` | any non-production using Resend | The drain refuses to send at all, rather than mail whoever a development database contains |
+
+---
+
+## Refund sweep — `settle-open-refunds`
+
+| Property         | Value                                                             |
+| ---------------- | ----------------------------------------------------------------- |
+| Function id      | `settle-open-refunds`                                             |
+| Trigger          | `cron: */5 * * * *`                                               |
+| Concurrency      | 1 — one run at a time                                             |
+| Business command | `settleOpenRefunds` in `apps/web/src/lib/jobs/refunds.ts`         |
+| Manual route     | `POST /api/jobs/refunds` with no body (same secret, same command) |
+
+It finishes refunds **a person already started**: it resumes one whose answer from Stripe was
+never recorded, and reads pending ones back until they settle. **It never starts a refund** —
+that is an operator's decision, made through the same route with a `paymentReference`. See
+[refunds.md](./refunds.md) for the runbook.
+
+Five minutes rather than one: a family is waiting on money, but a refund taking an extra few
+minutes to be recorded harms nobody, and an empty pass is a single indexed query.

@@ -170,3 +170,16 @@ export {
   type NotificationContext,
   type NotificationWorkItem,
 } from './repositories/notifications';
+export {
+  beginRefund,
+  recordRefundOutcome,
+  unsettledRefunds,
+  refundReport,
+  type BeginRefundInput,
+  type BeginRefundResult,
+  type RecordRefundOutcomeInput,
+  type RefundOutcome,
+  type RefundReport,
+  type RefundToExecute,
+  type UnsettledRefund,
+} from './repositories/refunds';

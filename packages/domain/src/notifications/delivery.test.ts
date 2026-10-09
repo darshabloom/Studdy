@@ -33,6 +33,8 @@ describe('the events this slice delivers', () => {
       'tutor_request.accepted',
       'tutor_request.closed',
       'intended_lesson_request.expired',
+      'payment.refunded',
+      'payment.refund_failed',
     ]);
   });
 
@@ -129,6 +131,30 @@ describe('recipients', () => {
   it('knows exactly three roles', () => {
     expect([...RECIPIENT_ROLES]).toEqual(['family', 'tutor', 'ops']);
   });
+
+  /**
+   * THE FAMILY IS TOLD AFTER THE PROVIDER ACCEPTED THE REFUND, and only the
+   * family — the tutor was never owed anything for a lesson that did not
+   * happen and learns nothing about it.
+   */
+  it('sends payment.refunded to the family alone', () => {
+    const roles = recipientRolesFor('payment.refunded');
+    expect([...roles]).toEqual(['family']);
+    expect(roles).not.toContain('tutor');
+    expect(roles).not.toContain('ops');
+  });
+
+  /**
+   * A FAILED REFUND IS AN OPERATIONS PROBLEM. The family's money is still held
+   * and nothing has happened to it, so telling them anything would promise a
+   * refund that has not occurred.
+   */
+  it('sends payment.refund_failed to operations and nobody else', () => {
+    const roles = recipientRolesFor('payment.refund_failed');
+    expect([...roles]).toEqual(['ops']);
+    expect(roles).not.toContain('family');
+    expect(roles).not.toContain('tutor');
+  });
 });
 
 describe('templates', () => {
@@ -137,6 +163,8 @@ describe('templates', () => {
     expect(templateFor('booking.confirmed', 'family')).toBe('booking_confirmed_family');
     expect(templateFor('booking.confirmed', 'tutor')).toBe('booking_confirmed_tutor');
     expect(templateFor('payment.refund_required', 'ops')).toBe('payment_refund_required_ops');
+    expect(templateFor('payment.refunded', 'family')).toBe('payment_refunded_family');
+    expect(templateFor('payment.refund_failed', 'ops')).toBe('payment_refund_failed_ops');
   });
 
   /** The family and the tutor get DIFFERENT copy, not the same mail twice. */
