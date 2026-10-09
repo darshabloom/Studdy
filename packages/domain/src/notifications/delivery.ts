@@ -42,6 +42,10 @@ export const DELIVERABLE_EVENT_TYPES = [
   'tutor_request.accepted',
   'tutor_request.closed',
   'intended_lesson_request.expired',
+  // Refund execution (feat/refund-execution). Told AFTER the provider has
+  // accepted the refund, never before — see RECIPIENTS_BY_EVENT.
+  'payment.refunded',
+  'payment.refund_failed',
 ] as const;
 
 export type DeliverableEventType = (typeof DELIVERABLE_EVENT_TYPES)[number];
@@ -112,6 +116,20 @@ const RECIPIENTS_BY_EVENT: Record<DeliverableEventType, readonly RecipientRole[]
    * booking. The copy distinguishes the two; the delivery does not need to.
    */
   'intended_lesson_request.expired': ['family'],
+  /*
+   * THE FAMILY, once the provider has ACCEPTED the refund. The ops alert above
+   * deliberately tells a family nothing, because at that point no refund has
+   * happened and anything said would promise one. Once Stripe has accepted it,
+   * the promise is kept and the family is owed the news: money is on its way
+   * back, how much, and that nothing else is needed.
+   */
+  'payment.refunded': ['family'],
+  /*
+   * OPERATIONS ONLY. A refund the provider refused means a family's money is
+   * still held and the one attempt to return it did not work. The family is told
+   * nothing — nothing has happened to their money — and a person has to act.
+   */
+  'payment.refund_failed': ['ops'],
 };
 
 export function recipientRolesFor(eventType: DeliverableEventType): readonly RecipientRole[] {
@@ -133,6 +151,8 @@ export const NOTIFICATION_TEMPLATES = [
   'tutor_request_accepted_family',
   'tutor_request_closed_tutor',
   'request_closed_family',
+  'payment_refunded_family',
+  'payment_refund_failed_ops',
 ] as const;
 
 export type NotificationTemplate = (typeof NOTIFICATION_TEMPLATES)[number];
@@ -151,6 +171,8 @@ const TEMPLATE_BY_EVENT_AND_ROLE: Record<string, NotificationTemplate> = {
    * stop being a pair, for two messages that differ by one sentence.
    */
   'intended_lesson_request.expired:family': 'request_closed_family',
+  'payment.refunded:family': 'payment_refunded_family',
+  'payment.refund_failed:ops': 'payment_refund_failed_ops',
 };
 
 export function templateFor(

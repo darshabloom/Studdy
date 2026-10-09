@@ -161,6 +161,11 @@
       "policy": null,
       "notes": "Settlement obligations to tutors. Server-only: a tutor's own earnings reach them through a projection that shows lesson price, Studdy fee and entitlement — never this table, and never Studdy's provider cost."
     },
+    "payments.refunds": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Money returned to a family: the payment it reverses, the amount, the provider refund id and its state. Server-only: no anon/authenticated grant and no browser policy. A family learns of a refund by being told, never by querying this table."
+    },
     "communications.notification_deliveries": {
       "classification": "server_only",
       "policy": null,

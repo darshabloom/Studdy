@@ -28,6 +28,8 @@ import { notificationDeliveries, outboxEntries } from '../schema/index';
  *   payment.required        { tutorRequestId, paymentDeadlineAt }
  *   booking.confirmed       { intendedLessonRequestId, tutorRequestId }
  *   payment.refund_required { paymentId, reason }
+ *   payment.refunded        { tutorRequestId, paymentId, refundId }
+ *   payment.refund_failed   { paymentId, refundId, reason }
  *
  * No name, address or amount is in any of them, and none is added: an outbox
  * row is a durable record of a business event, and filling it with a copy of
@@ -693,7 +695,8 @@ async function resolveContext(
     };
   }
 
-  if (eventType === 'payment.refund_required') {
+  // Both are operations alerts about one payment, and both carry a `reason`.
+  if (eventType === 'payment.refund_required' || eventType === 'payment.refund_failed') {
     const paymentId = payload['paymentId'];
     if (typeof paymentId !== 'string') return null;
     const [row] = await tx.execute(raw`

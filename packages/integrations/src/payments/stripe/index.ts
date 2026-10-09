@@ -10,3 +10,4 @@
  */
 export * from './connect';
 export * from './payment-intents';
+export * from './refunds';

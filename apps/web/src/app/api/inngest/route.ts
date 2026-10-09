@@ -3,6 +3,7 @@ import { inngest } from '@/inngest/client';
 import { drainOutboxScheduled } from '@/inngest/functions/drain-outbox';
 import { expireRequestsScheduled } from '@/inngest/functions/expire-requests';
 import { reconcilePaymentsScheduled } from '@/inngest/functions/reconcile-payments';
+import { settleRefundsScheduled } from '@/inngest/functions/settle-refunds';
 
 /**
  * The Inngest endpoint: where Inngest discovers and invokes Studdy's scheduled
@@ -50,5 +51,10 @@ export const maxDuration = 300;
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [expireRequestsScheduled, reconcilePaymentsScheduled, drainOutboxScheduled],
+  functions: [
+    expireRequestsScheduled,
+    reconcilePaymentsScheduled,
+    drainOutboxScheduled,
+    settleRefundsScheduled,
+  ],
 });

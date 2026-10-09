@@ -65,6 +65,7 @@ export { connectedAccounts } from './payments/connected-accounts';
 export { payments } from './payments/payments';
 export { paymentEvents } from './payments/payment-events';
 export { tutorTransfers } from './payments/tutor-transfers';
+export { refunds } from './payments/refunds';
 
 // The durable Booking (feat/booking-entity)
 export { bookings } from './bookings/bookings';

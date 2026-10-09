@@ -218,6 +218,88 @@ describe('payment.refund_required — operations only', () => {
     expect(rendered.html).toContain('manual intervention');
     expect(rendered.text).toContain('Someone needs to review this payment');
   });
+
+  /** It must point at the one way a refund is actually issued now. */
+  it('says how to issue the refund, and that the family is told afterwards', () => {
+    expect(rendered.text).toContain('refund job');
+    expect(rendered.text).toContain('The family is emailed once');
+  });
+});
+
+describe('payment.refunded — the family, after the provider accepted it', () => {
+  const rendered = renderNotification(item('payment_refunded_family'), SITE);
+
+  it('says the full amount was refunded, and how much', () => {
+    expect(rendered.subject).toContain('refunded');
+    expect(rendered.html).toContain('The full amount has been refunded');
+    expect(rendered.html).toContain('NZD $40.00');
+    expect(rendered.text).toContain('NZD $40.00');
+  });
+
+  it('says nothing else is needed and that a bank can take a few days', () => {
+    expect(rendered.text).toContain('Nothing else is needed');
+    expect(rendered.text).toContain('a few business days');
+  });
+
+  /** A date here would be a promise only the card issuer can keep. */
+  it('promises no date', () => {
+    expect(rendered.text).not.toMatch(/\bby (monday|tuesday|wednesday|thursday|friday)\b/i);
+  });
+
+  /**
+   * IT DOES NOT EXPLAIN WHY the booking failed: the reason is internal, the
+   * family cannot act on it, and said badly it reads as blame.
+   */
+  it('does not leak the internal reason', () => {
+    expect(rendered.html).not.toContain('The reservation was already released.');
+    expect(rendered.text).not.toContain('The reservation was already released.');
+  });
+
+  it('carries no payment reference and names no provider', () => {
+    const body = `${rendered.subject}\n${rendered.html}\n${rendered.text}`;
+    expect(body).not.toContain('PAY-10000078');
+    expect(/stripe/i.test(body)).toBe(false);
+  });
+
+  it('offers a way on', () => {
+    expect(rendered.text).toContain(`${SITE}/tutors`);
+  });
+
+  it('degrades gracefully with no names', () => {
+    const bare = renderNotification(
+      item('payment_refunded_family', { studentFirstName: null, tutorFirstName: null }),
+      SITE,
+    );
+    expect(bare.subject).toContain('your lesson');
+    expect(bare.html).not.toContain('With ');
+  });
+});
+
+describe('payment.refund_failed — operations only', () => {
+  const rendered = renderNotification(
+    item('payment_refund_failed_ops', { reason: 'charge_already_refunded' }),
+    SITE,
+  );
+
+  it('says the refund failed and the money is still held', () => {
+    expect(rendered.subject).toContain('refund failed');
+    expect(rendered.subject).toContain('still held');
+    expect(rendered.html).toContain('the refund failed');
+  });
+
+  it('carries the references and the provider’s reason', () => {
+    expect(rendered.subject).toContain('PAY-10000078');
+    expect(rendered.html).toContain('LR-10000077');
+    expect(rendered.html).toContain('charge_already_refunded');
+  });
+
+  /** The family's money is still held and they must not be told otherwise. */
+  it('does not claim the money was returned', () => {
+    const body = `${rendered.html}\n${rendered.text}`.toLowerCase();
+    expect(body).not.toContain('has been refunded');
+    expect(body).not.toContain('we have refunded');
+    expect(body).toContain('has not been returned');
+  });
 });
 
 describe('tutor_request.sent — the tutor', () => {
@@ -357,6 +439,8 @@ describe('no template leaks provider or platform-private data', () => {
     'booking_confirmed_family',
     'booking_confirmed_tutor',
     'payment_refund_required_ops',
+    'payment_refunded_family',
+    'payment_refund_failed_ops',
   ];
 
   it.each(templates)('%s renders none of the forbidden values', (template) => {
