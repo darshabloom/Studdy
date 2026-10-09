@@ -574,11 +574,12 @@ describe.skipIf(!available)('payment fulfilment (integration)', () => {
 
       const { sql } = createDatabaseClient();
       try {
+        // Derived from the STORED instant, inside the database, so no value is
+        // round-tripped through a string that could lose sub-millisecond digits.
         const [expected] = await sql`
-          select (${new Date(booking.scheduled_start_at).toISOString()}::timestamptz
-                    at time zone 'Pacific/Auckland')::date::text as local_date,
-                 (${new Date(booking.scheduled_start_at).toISOString()}::timestamptz
-                    at time zone 'Pacific/Auckland')::time::text as local_start_time`;
+          select (scheduled_start_at at time zone 'Pacific/Auckland')::date::text as local_date,
+                 (scheduled_start_at at time zone 'Pacific/Auckland')::time::text as local_start_time
+          from bookings.bookings where reference = ${booking.reference}`;
         expect(booking.local_date).toBe(expected!['local_date']);
         expect(booking.local_start_time).toBe(expected!['local_start_time']);
       } finally {
