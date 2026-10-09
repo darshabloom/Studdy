@@ -2,7 +2,9 @@ import { and, eq, exists, gte, inArray, isNull, lte, ne, not, or, sql as raw } f
 import {
   DELIVERABLE_EVENT_TYPES,
   deliveryIdempotencyKey,
+  isApplicationEventType,
   isDeliverableEventType,
+  isServiceEventType,
   recipientRolesFor,
   templateFor,
   type DeliverableEventType,
@@ -134,6 +136,19 @@ export interface NotificationContext {
    * says nothing at all about why.
    */
   readonly closeReasonCode: string | null;
+
+  /* --- tutor onboarding (feat/tutor-onboarding-emails) ------------------ */
+
+  /**
+   * The first name the applicant or tutor chose to be known by. Never a legal
+   * name: an application holds one, and it is not selected.
+   */
+  readonly recipientFirstName: string | null;
+  /** The `APP-` reference. A handle for the applicant and for the reviewer. */
+  readonly applicationReference: string | null;
+  /** The `SERVICE-` reference, the path segment of the service's own page. */
+  readonly serviceReference: string | null;
+  readonly serviceDisplayName: string | null;
 }
 
 const EMPTY_CONTEXT: NotificationContext = {
@@ -154,6 +169,10 @@ const EMPTY_CONTEXT: NotificationContext = {
   respondByAt: null,
   offeredStartAts: [],
   closeReasonCode: null,
+  recipientFirstName: null,
+  applicationReference: null,
+  serviceReference: null,
+  serviceDisplayName: null,
 };
 
 export interface ClaimNotificationWorkInput {
@@ -470,6 +489,46 @@ async function resolveRecipient(
   if (role === 'ops') return null;
 
   /*
+   * AN APPLICANT IS THE PERSON WHO OWNS THE APPLICATION, and nobody else. The
+   * payload names the application; the address comes from that row's own
+   * `applicant_user_id`. Referees have email addresses on an application too,
+   * and are never selected here: Studdy does not email referees.
+   */
+  if (isApplicationEventType(eventType)) {
+    if (role !== 'applicant') return null;
+    const applicationId = payload['applicationId'];
+    if (typeof applicationId !== 'string') return null;
+    const [row] = await tx.execute(raw`
+      select l.authentication_email as address, u.id as user_id
+      from tutors.tutor_applications a
+      join identity.users u on u.id = a.applicant_user_id
+      join identity.auth_identity_links l on l.user_id = u.id
+      where a.id = ${applicationId}::uuid
+        and l.authentication_email is not null
+      limit 1`);
+    if (row === undefined) return null;
+    return { userId: row['user_id'] as string, address: row['address'] as string };
+  }
+
+  /* THE TUTOR WHO OWNS THE SERVICE, through the service's own profile. */
+  if (isServiceEventType(eventType)) {
+    if (role !== 'tutor') return null;
+    const serviceId = payload['serviceId'];
+    if (typeof serviceId !== 'string') return null;
+    const [row] = await tx.execute(raw`
+      select l.authentication_email as address, u.id as user_id
+      from services.services s
+      join tutors.tutor_profiles tp on tp.id = s.tutor_profile_id
+      join identity.users u on u.id = tp.user_id
+      join identity.auth_identity_links l on l.user_id = u.id
+      where s.id = ${serviceId}::uuid
+        and l.authentication_email is not null
+      limit 1`);
+    if (row === undefined) return null;
+    return { userId: row['user_id'] as string, address: row['address'] as string };
+  }
+
+  /*
    * THE FAMILY OF A WHOLE REQUEST, not of one invited tutor. Only
    * `intended_lesson_request.expired` addresses the ILR directly; every other
    * event names a single tutor request.
@@ -692,6 +751,50 @@ async function resolveContext(
       respondByAt: row['respond_by_at'] === null ? null : new Date(row['respond_by_at'] as string),
       lessonStartAt: claimed,
       offeredStartAts: offered.map((option) => new Date(option['starts_at'] as string)),
+    };
+  }
+
+  /*
+   * A TUTOR APPLICATION. The reference and the first name the applicant chose,
+   * and NOTHING ELSE from a record that also holds a legal name, a phone number
+   * and other people's email addresses. The reviewer's message is not selected
+   * either: it is read behind a sign-in, so no template could quote it.
+   */
+  if (isApplicationEventType(eventType)) {
+    const applicationId = payload['applicationId'];
+    if (typeof applicationId !== 'string') return null;
+    const [row] = await tx.execute(raw`
+      select a.reference, r.preferred_first_name
+      from tutors.tutor_applications a
+      left join tutors.tutor_application_revisions r
+        on r.application_id = a.id and r.revision_number = a.current_revision_number
+      where a.id = ${applicationId}::uuid
+      limit 1`);
+    if (row === undefined) return null;
+    return {
+      ...EMPTY_CONTEXT,
+      applicationReference: row['reference'] as string,
+      recipientFirstName: (row['preferred_first_name'] as string | null) ?? null,
+    };
+  }
+
+  /* THE REVIEW OF A SERVICE. Its name and reference, and the tutor's first name. */
+  if (isServiceEventType(eventType)) {
+    const serviceId = payload['serviceId'];
+    if (typeof serviceId !== 'string') return null;
+    const [row] = await tx.execute(raw`
+      select s.reference, s.display_name, tp.public_first_name
+      from services.services s
+      join tutors.tutor_profiles tp on tp.id = s.tutor_profile_id
+      where s.id = ${serviceId}::uuid
+      limit 1`);
+    if (row === undefined) return null;
+    return {
+      ...EMPTY_CONTEXT,
+      serviceReference: row['reference'] as string,
+      serviceDisplayName: row['display_name'] as string,
+      recipientFirstName: row['public_first_name'] as string,
+      tutorFirstName: row['public_first_name'] as string,
     };
   }
 

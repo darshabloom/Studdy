@@ -36,6 +36,10 @@ const BASE: NotificationContext = {
   closeReasonCode: null,
   paymentReference: 'PAY-10000078',
   reason: 'The reservation was already released.',
+  recipientFirstName: 'Tama',
+  applicationReference: 'APP-10000090',
+  serviceReference: 'SERVICE-10000091',
+  serviceDisplayName: 'Year 11 to 13 biology',
 };
 
 function item(
@@ -509,5 +513,142 @@ describe('an unknown template is refused', () => {
     expect(() => renderNotification(item('not_a_template'), SITE)).toThrow(
       /Unknown notification template/,
     );
+  });
+});
+
+/* ------------------------------------------------------------------------ *
+ * Tutor onboarding
+ * ------------------------------------------------------------------------ */
+
+const ONBOARDING_TEMPLATES = [
+  'application_received_applicant',
+  'application_received_ops',
+  'application_changes_requested_applicant',
+  'application_declined_applicant',
+  'application_approved_applicant',
+  'service_submitted_ops',
+  'service_approved_tutor',
+  'service_changes_requested_tutor',
+] as const;
+
+describe('tutor onboarding — every message', () => {
+  /**
+   * The context here is loaded with a family's request, a student's name, money
+   * and an internal reason, none of which has anything to do with onboarding.
+   * Nothing from it may surface: these templates read four fields and no more.
+   */
+  it.each(ONBOARDING_TEMPLATES)('%s carries nothing from a lesson or a payment', (template) => {
+    const email = renderNotification(item(template), SITE);
+    for (const body of [email.subject, email.html, email.text]) {
+      expect(body).not.toContain('LR-10000077');
+      expect(body).not.toContain('TREQ-TESTTEST');
+      expect(body).not.toContain('PAY-10000078');
+      // A whole word: the font stack contains "Arial".
+      expect(body).not.toMatch(/\bAri\b/);
+      expect(body).not.toContain('The reservation was already released.');
+      expect(body).not.toMatch(/\$\s?40/);
+    }
+  });
+
+  it.each(ONBOARDING_TEMPLATES)(
+    '%s renders in both HTML and plain text, with one link',
+    (template) => {
+      const email = renderNotification(item(template), SITE);
+      expect(email.subject.length).toBeGreaterThan(0);
+      expect(email.html).toContain(`href="${SITE}/`);
+      expect(email.text).toContain(`${SITE}/`);
+      expect(email.text.trimEnd().endsWith('Studdy')).toBe(true);
+    },
+  );
+
+  it.each(ONBOARDING_TEMPLATES)('%s escapes a name that is really markup', (template) => {
+    const email = renderNotification(
+      item(template, {
+        recipientFirstName: '<img src=x onerror=alert(1)>',
+        tutorFirstName: '<img src=x onerror=alert(1)>',
+        serviceDisplayName: '<script>alert(1)</script>',
+      }),
+      SITE,
+    );
+    expect(email.html).not.toContain('<img src=x');
+    expect(email.html).not.toContain('<script>');
+  });
+});
+
+describe('tutor_application.submitted', () => {
+  it('tells the applicant it arrived and promises no date', () => {
+    const email = renderNotification(item('application_received_applicant'), SITE);
+    expect(email.subject).toBe('We have your application to tutor with Studdy');
+    expect(email.text).toContain('Kia ora Tama,');
+    expect(email.text).toContain('has been received');
+    expect(email.text).toContain(`${SITE}/apply/tutor`);
+    expect(email.text).not.toMatch(/within \d+|working days|by (Monday|Tuesday|Friday)/i);
+  });
+
+  it('greets someone whose name is not known without inventing one', () => {
+    const email = renderNotification(
+      item('application_received_applicant', { recipientFirstName: null }),
+      SITE,
+    );
+    expect(email.text).toContain('Kia ora,');
+    expect(email.text).not.toContain('null');
+  });
+
+  it('gives operations the reference and the review link, and no name', () => {
+    const email = renderNotification(item('application_received_ops'), SITE);
+    expect(email.subject).toBe('Tutor application to review: APP-10000090');
+    expect(email.text).toContain(`${SITE}/manager/tutor-applications/APP-10000090`);
+    // Who applied is read behind MFA, not from a shared inbox.
+    expect(email.text).not.toContain('Tama');
+    expect(email.html).not.toContain('Tama');
+  });
+});
+
+describe('a decision on an application', () => {
+  it('asks for changes and sends the applicant to read what was asked', () => {
+    const email = renderNotification(item('application_changes_requested_applicant'), SITE);
+    expect(email.text).toContain('edit your application and send it again');
+    expect(email.text).toContain(`${SITE}/apply/tutor`);
+  });
+
+  it('declines without saying why, and without sounding like an approval', () => {
+    const email = renderNotification(item('application_declined_applicant'), SITE);
+    expect(email.subject).toBe('A decision on your Studdy application');
+    expect(email.text).toContain('not able to approve it');
+    expect(email.text).toContain('Sign in to read our message to you.');
+    expect(email.text).not.toMatch(/because|reason|congratulations|welcome/i);
+  });
+
+  it('approves, and says plainly that families cannot find the tutor yet', () => {
+    const email = renderNotification(item('application_approved_applicant'), SITE);
+    expect(email.subject).toBe('You are approved to tutor with Studdy');
+    expect(email.text).toContain('Families cannot find you yet.');
+    for (const step of ['create a service', 'review it', 'availability', 'paid', 'publish']) {
+      expect(email.text).toContain(step);
+    }
+    expect(email.text).toContain(`Finish setting up: ${SITE}/tutor`);
+  });
+});
+
+describe('the review of a service', () => {
+  it('tells operations which service is waiting, and where', () => {
+    const email = renderNotification(item('service_submitted_ops'), SITE);
+    expect(email.subject).toBe('Service to review: SERVICE-10000091');
+    expect(email.text).toContain('Year 11 to 13 biology');
+    expect(email.text).toContain(`${SITE}/manager/services/SERVICE-10000091`);
+  });
+
+  it('tells the tutor an approved service is not on sale until they publish it', () => {
+    const email = renderNotification(item('service_approved_tutor'), SITE);
+    expect(email.subject).toBe('Approved: Year 11 to 13 biology');
+    expect(email.text).toContain('It is not on sale yet.');
+    expect(email.text).toContain(`${SITE}/tutor/services/SERVICE-10000091`);
+  });
+
+  it('tells the tutor a change is needed and where to read it', () => {
+    const email = renderNotification(item('service_changes_requested_tutor'), SITE);
+    expect(email.subject).toBe('Changes needed: Year 11 to 13 biology');
+    expect(email.text).toContain('edit the service and send it again');
+    expect(email.text).toContain(`${SITE}/tutor/services/SERVICE-10000091`);
   });
 });

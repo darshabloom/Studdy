@@ -108,6 +108,9 @@ test.describe('a person applying to tutor', () => {
       timeout: 15_000,
     });
     await expect(field(page, 'headline')).toHaveValue('Patient maths tutor for years 7 to 10');
+    // The dropdowns too: a form reset would put them back to "Choose".
+    await expect(field(page, 'yearLevelFrom')).toHaveValue('7');
+    await expect(field(page, 'yearLevelTo')).toHaveValue('10');
     await expect(page.getByText('Application submitted')).toHaveCount(0);
   });
 

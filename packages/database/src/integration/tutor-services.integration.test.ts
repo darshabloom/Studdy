@@ -84,6 +84,8 @@ describe.skipIf(!available)('tutor services (integration)', () => {
           await sql`select id::text as id from services.services where tutor_profile_id = any(${profiles}::uuid[])`
         ).map((row) => row['id'] as string);
 
+        // Sending and deciding a service each queue an email; nothing here drains them.
+        await sql`delete from audit.outbox_entries where payload->>'serviceId' = any(${serviceIds})`;
         await sql`delete from services.service_reviews where service_id = any(${serviceIds}::uuid[])`;
         await sql`delete from services.service_versions where service_id = any(${serviceIds}::uuid[])`;
         // A replacement points at the service it replaces; unlink before deleting.
@@ -348,10 +350,12 @@ describe.skipIf(!available)('tutor services (integration)', () => {
       expect(
         await updateTutorService({ ...as(tutor), reference, service: await validService() }),
       ).toEqual({ status: 'not_allowed' });
-      // Sending it twice is refused rather than queued twice.
-      expect(await submitTutorService({ ...as(tutor), reference })).toEqual({
-        status: 'not_allowed',
-      });
+      // Sending it twice is one submission: it succeeds, and nothing is queued twice.
+      expect(await submitTutorService({ ...as(tutor), reference })).toEqual({ status: 'done' });
+      expect(
+        (await serviceReviewQueue()).filter((entry) => entry.reference === reference),
+      ).toHaveLength(1);
+      expect((await serviceForReview(reference))?.history).toHaveLength(1);
     });
 
     it('approves without publishing: an approved service is still not on sale', async () => {
@@ -524,6 +528,34 @@ describe.skipIf(!available)('tutor services (integration)', () => {
       expect(await findPublicTutorByReference(tutor.reference)).toHaveLength(1);
     });
 
+    it('answers a request that arrives twice with the same success, and does it once', async () => {
+      // A double click on Publish, then on Unpublish. The second must not turn a
+      // success into "cannot be published", and must not record a second change.
+      const { tutor, reference } = await onSale();
+      expect(await publishTutorService({ ...as(tutor), reference })).toEqual({
+        status: 'published',
+      });
+      expect(await unpublishTutorService({ ...as(tutor), reference })).toEqual({ status: 'done' });
+      expect(await unpublishTutorService({ ...as(tutor), reference })).toEqual({ status: 'done' });
+
+      const { sql } = createDatabaseClient();
+      try {
+        const rows = await sql`
+          select t.to_status_code, count(*)::int as times
+          from audit.status_transitions t
+          join services.services s on s.id::text = t.entity_id
+          where s.reference = ${reference} and t.entity_type = 'service'
+            and t.to_status_code in ('published', 'unpublished')
+          group by t.to_status_code order by t.to_status_code`;
+        expect(rows.map((row) => [row['to_status_code'], row['times']])).toEqual([
+          ['published', 1],
+          ['unpublished', 1],
+        ]);
+      } finally {
+        await sql.end();
+      }
+    });
+
     it('cannot be removed while it is on sale', async () => {
       const { tutor, reference } = await onSale();
       expect(await archiveTutorService({ ...as(tutor), reference })).toEqual({
@@ -637,9 +669,11 @@ describe.skipIf(!available)('tutor services (integration)', () => {
         listed: false,
         pausedByTutor: true,
       });
-      // Pausing twice is refused, so the remembered state cannot be overwritten.
-      expect(await pauseTutorListing(as(tutor))).toEqual({ status: 'not_allowed' });
+      // Pausing twice does nothing the second time, so what was remembered is kept.
+      expect(await pauseTutorListing(as(tutor))).toEqual({ status: 'done' });
 
+      expect(await resumeTutorListing(as(tutor))).toEqual({ status: 'done' });
+      // And resuming twice is as harmless.
       expect(await resumeTutorListing(as(tutor))).toEqual({ status: 'done' });
       expect(await findPublicTutorByReference(tutor.reference)).toHaveLength(1);
       expect(await tutorOwnProfile(tutor.userId)).toMatchObject({

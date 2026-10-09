@@ -600,6 +600,197 @@ function requestClosedFamily(context: NotificationContext, siteUrl: string): Ren
   return { subject, html, text };
 }
 
+/* ------------------------------------------------------------------------ *
+ * Tutor onboarding: the application, and the review of a service.
+ *
+ * NONE OF THESE QUOTES A REVIEWER. A decision email says that a decision was
+ * made and where to read it. Why an application was declined, or what a
+ * reviewer wants changed, is read behind a sign-in: it can be personal, and an
+ * inbox is not a place Studdy controls. The context does not even carry the
+ * message, so a template could not quote it by mistake.
+ * ------------------------------------------------------------------------ */
+
+function greeting(context: NotificationContext): string {
+  return context.recipientFirstName === null
+    ? 'Kia ora,'
+    : `Kia ora ${context.recipientFirstName},`;
+}
+
+/** A short message with one link: every onboarding email has this shape. */
+function simpleEmail(input: {
+  readonly subject: string;
+  readonly heading: string;
+  readonly greeting: string | null;
+  readonly paragraphs: readonly string[];
+  readonly href: string;
+  readonly linkLabel: string;
+}): RenderedEmail {
+  const lead = input.greeting === null ? [] : [input.greeting];
+  const html = page(
+    input.heading,
+    [
+      ...[...lead, ...input.paragraphs].map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`),
+      button(input.href, input.linkLabel),
+    ].join(''),
+  );
+  const text = [
+    ...[...lead, ...input.paragraphs].flatMap((paragraph) => [paragraph, '']),
+    `${input.linkLabel}: ${input.href}`,
+    '',
+    'Studdy',
+  ].join('\n');
+  return { subject: input.subject, html, text };
+}
+
+/** It arrived, and a person will read it. Promises no date. */
+function applicationReceivedApplicant(
+  context: NotificationContext,
+  siteUrl: string,
+): RenderedEmail {
+  return simpleEmail({
+    subject: 'We have your application to tutor with Studdy',
+    heading: 'Your application is with us',
+    greeting: greeting(context),
+    paragraphs: [
+      'Thank you for applying to tutor with Studdy. Your application has been received.',
+      'A person at Studdy reads every application, contacts your referees and speaks with you before anyone is approved. We will email you when there is something for you to do or a decision has been made.',
+      'You can see where your application is, or withdraw it, at any time.',
+    ],
+    href: `${siteUrl}/apply/tutor`,
+    linkLabel: 'View your application',
+  });
+}
+
+/**
+ * Operations: there is an application to review.
+ *
+ * THE REFERENCE AND NOTHING ABOUT THE PERSON. Who applied is read in the
+ * manager workspace, behind a role check and MFA, not from a shared inbox.
+ */
+function applicationReceivedOps(context: NotificationContext, siteUrl: string): RenderedEmail {
+  const reference = context.applicationReference ?? '';
+  return simpleEmail({
+    subject: `Tutor application to review: ${reference}`,
+    heading: 'A tutor application is waiting',
+    greeting: null,
+    paragraphs: [
+      `Application ${reference} has been submitted and is waiting for a reviewer.`,
+      'Open it in the manager workspace to record the checks and decide. You will need your MFA code.',
+    ],
+    href: `${siteUrl}/manager/tutor-applications/${reference}`,
+    linkLabel: 'Review the application',
+  });
+}
+
+function applicationChangesRequestedApplicant(
+  context: NotificationContext,
+  siteUrl: string,
+): RenderedEmail {
+  return simpleEmail({
+    subject: 'Your Studdy application needs a change',
+    heading: 'We need something more from you',
+    greeting: greeting(context),
+    paragraphs: [
+      'We have read your application to tutor with Studdy and need you to change or add something before we can go further.',
+      'Sign in to read what we have asked for. You can then edit your application and send it again.',
+    ],
+    href: `${siteUrl}/apply/tutor`,
+    linkLabel: 'Read the message and edit',
+  });
+}
+
+/** Plain and kind, and says nothing about why. The reason is behind a sign-in. */
+function applicationDeclinedApplicant(
+  context: NotificationContext,
+  siteUrl: string,
+): RenderedEmail {
+  return simpleEmail({
+    subject: 'A decision on your Studdy application',
+    heading: 'A decision on your application',
+    greeting: greeting(context),
+    paragraphs: [
+      'Thank you for applying to tutor with Studdy, and for the time you put into it.',
+      'We have made a decision on your application and are not able to approve it. Sign in to read our message to you.',
+    ],
+    href: `${siteUrl}/apply/tutor`,
+    linkLabel: 'Read our message',
+  });
+}
+
+/**
+ * Approved. THE MOST IMPORTANT SENTENCE IS THAT FAMILIES CANNOT FIND THEM YET:
+ * approval makes someone a tutor, it does not put anything on sale, and a new
+ * tutor who thinks they are done will wait for requests that cannot come.
+ */
+function applicationApprovedApplicant(
+  context: NotificationContext,
+  siteUrl: string,
+): RenderedEmail {
+  return simpleEmail({
+    subject: 'You are approved to tutor with Studdy',
+    heading: 'Welcome to Studdy',
+    greeting: greeting(context),
+    paragraphs: [
+      'Your application to tutor with Studdy has been approved. Your tutor workspace is open.',
+      'Families cannot find you yet. To become bookable you still need to create a service, have Studdy review it, set your availability, get set up to be paid, and publish.',
+      'Your workspace lists each step and tells you which one is next.',
+    ],
+    href: `${siteUrl}/tutor`,
+    linkLabel: 'Finish setting up',
+  });
+}
+
+/** Operations: a service is waiting. Named by its own title, which is not personal. */
+function serviceSubmittedOps(context: NotificationContext, siteUrl: string): RenderedEmail {
+  const reference = context.serviceReference ?? '';
+  const name = context.serviceDisplayName ?? 'A service';
+  return simpleEmail({
+    subject: `Service to review: ${reference}`,
+    heading: 'A service is waiting for review',
+    greeting: null,
+    paragraphs: [
+      `${context.tutorFirstName ?? 'A tutor'} has sent “${name}” (${reference}) for review. They cannot publish it until it is approved.`,
+      'Open it in the manager workspace to decide. You will need your MFA code.',
+    ],
+    href: `${siteUrl}/manager/services/${reference}`,
+    linkLabel: 'Review the service',
+  });
+}
+
+/** Approved, and NOT published: publishing is the tutor's own step. */
+function serviceApprovedTutor(context: NotificationContext, siteUrl: string): RenderedEmail {
+  const name = context.serviceDisplayName ?? 'Your service';
+  return simpleEmail({
+    subject: `Approved: ${name}`,
+    heading: 'Your service is approved',
+    greeting: greeting(context),
+    paragraphs: [
+      `Studdy has approved “${name}”.`,
+      'It is not on sale yet. Publish it when you want families to be able to find it and ask you for a lesson.',
+    ],
+    href: `${siteUrl}/tutor/services/${context.serviceReference ?? ''}`,
+    linkLabel: 'Open your service',
+  });
+}
+
+function serviceChangesRequestedTutor(
+  context: NotificationContext,
+  siteUrl: string,
+): RenderedEmail {
+  const name = context.serviceDisplayName ?? 'Your service';
+  return simpleEmail({
+    subject: `Changes needed: ${name}`,
+    heading: 'Your service needs a change',
+    greeting: greeting(context),
+    paragraphs: [
+      `Studdy has reviewed “${name}” and asked for a change before it can be published.`,
+      'Sign in to read what we have asked for. You can then edit the service and send it again.',
+    ],
+    href: `${siteUrl}/tutor/services/${context.serviceReference ?? ''}`,
+    linkLabel: 'Read the message and edit',
+  });
+}
+
 /**
  * Render one work item.
  *
@@ -629,6 +820,22 @@ export function renderNotification(item: NotificationWorkItem, siteUrl: string):
       return paymentRefundedFamily(item.context, siteUrl);
     case 'payment_refund_failed_ops':
       return paymentRefundFailedOps(item.context, siteUrl);
+    case 'application_received_applicant':
+      return applicationReceivedApplicant(item.context, siteUrl);
+    case 'application_received_ops':
+      return applicationReceivedOps(item.context, siteUrl);
+    case 'application_changes_requested_applicant':
+      return applicationChangesRequestedApplicant(item.context, siteUrl);
+    case 'application_declined_applicant':
+      return applicationDeclinedApplicant(item.context, siteUrl);
+    case 'application_approved_applicant':
+      return applicationApprovedApplicant(item.context, siteUrl);
+    case 'service_submitted_ops':
+      return serviceSubmittedOps(item.context, siteUrl);
+    case 'service_approved_tutor':
+      return serviceApprovedTutor(item.context, siteUrl);
+    case 'service_changes_requested_tutor':
+      return serviceChangesRequestedTutor(item.context, siteUrl);
     default:
       throw new Error(`Unknown notification template: ${item.templateCode}`);
   }

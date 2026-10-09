@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  APPLICATION_EVENT_TYPES,
   DELIVERABLE_EVENT_TYPES,
   DELIVERY_STATUSES,
   RECIPIENT_ROLES,
+  SERVICE_EVENT_TYPES,
   deliveryIdempotencyKey,
+  isApplicationEventType,
   isDeliverableEventType,
+  isServiceEventType,
   recipientRolesFor,
   templateFor,
 } from './delivery';
@@ -35,6 +39,13 @@ describe('the events this slice delivers', () => {
       'intended_lesson_request.expired',
       'payment.refunded',
       'payment.refund_failed',
+      'tutor_application.submitted',
+      'tutor_application.changes_requested',
+      'tutor_application.rejected',
+      'tutor.approved',
+      'service.submitted',
+      'service.approved',
+      'service.changes_requested',
     ]);
   });
 
@@ -128,8 +139,8 @@ describe('recipients', () => {
     expect(roles).not.toContain('tutor');
   });
 
-  it('knows exactly three roles', () => {
-    expect([...RECIPIENT_ROLES]).toEqual(['family', 'tutor', 'ops']);
+  it('knows exactly four roles', () => {
+    expect([...RECIPIENT_ROLES]).toEqual(['family', 'tutor', 'applicant', 'ops']);
   });
 
   /**
@@ -233,5 +244,53 @@ describe('delivery statuses', () => {
    */
   it('has exactly pending, sent and failed', () => {
     expect([...DELIVERY_STATUSES]).toEqual(['pending', 'sent', 'failed']);
+  });
+});
+
+describe('tutor onboarding, as decided', () => {
+  it('tells the applicant their application arrived, and operations that it needs review', () => {
+    expect([...recipientRolesFor('tutor_application.submitted')]).toEqual(['applicant', 'ops']);
+    expect(templateFor('tutor_application.submitted', 'applicant')).toBe(
+      'application_received_applicant',
+    );
+    expect(templateFor('tutor_application.submitted', 'ops')).toBe('application_received_ops');
+  });
+
+  it('tells the applicant alone about each decision', () => {
+    expect([...recipientRolesFor('tutor_application.changes_requested')]).toEqual(['applicant']);
+    expect([...recipientRolesFor('tutor_application.rejected')]).toEqual(['applicant']);
+    expect([...recipientRolesFor('tutor.approved')]).toEqual(['applicant']);
+    expect(templateFor('tutor.approved', 'applicant')).toBe('application_approved_applicant');
+    expect(templateFor('tutor_application.rejected', 'applicant')).toBe(
+      'application_declined_applicant',
+    );
+  });
+
+  it('tells operations a service is waiting, and the tutor what was decided', () => {
+    expect([...recipientRolesFor('service.submitted')]).toEqual(['ops']);
+    expect([...recipientRolesFor('service.approved')]).toEqual(['tutor']);
+    expect([...recipientRolesFor('service.changes_requested')]).toEqual(['tutor']);
+  });
+
+  it('has a template for every recipient of every event', () => {
+    for (const eventType of DELIVERABLE_EVENT_TYPES) {
+      for (const role of recipientRolesFor(eventType)) {
+        expect(() => templateFor(eventType, role)).not.toThrow();
+      }
+    }
+  });
+
+  it('never sends an application decision to a tutor or a family role', () => {
+    for (const eventType of APPLICATION_EVENT_TYPES) {
+      expect(recipientRolesFor(eventType)).not.toContain('tutor');
+      expect(recipientRolesFor(eventType)).not.toContain('family');
+      expect(isApplicationEventType(eventType)).toBe(true);
+      expect(isServiceEventType(eventType)).toBe(false);
+    }
+    for (const eventType of SERVICE_EVENT_TYPES) {
+      expect(recipientRolesFor(eventType)).not.toContain('applicant');
+      expect(recipientRolesFor(eventType)).not.toContain('family');
+      expect(isServiceEventType(eventType)).toBe(true);
+    }
   });
 });

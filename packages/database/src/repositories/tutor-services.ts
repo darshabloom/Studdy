@@ -21,6 +21,7 @@ import {
   auditEvents,
   connectedAccounts,
   domainEvents,
+  outboxEntries,
   ruleSettings,
   serviceReviews,
   services,
@@ -56,6 +57,11 @@ import { publiclyListedTutor } from './tutor-visibility';
  * Every state change is `UPDATE ... WHERE status_code IN (<what may move here>)`
  * on a row locked for the decision, so a tutor and a reviewer acting at once
  * serialise and the loser is told the service has moved on.
+ *
+ * THE TUTOR'S OWN MOVES ARE IDEMPOTENT. Sending, publishing or unpublishing a
+ * service that is already in that state succeeds and does nothing: no second
+ * review row, no second event, no second email. A request that arrives twice
+ * (a double click, a retried submission) must not turn a success into an error.
  *
  * A REVIEWED SERVICE IS NEVER EDITED IN PLACE. `startServiceRevision` copies it
  * into a new draft that is reviewed like any other; publishing the copy retires
@@ -360,7 +366,24 @@ async function recordTransition(
     correlationId: input.correlationId,
     occurredAt: input.now,
   });
+  /*
+   * The three moments somebody other than the actor has to hear about, queued in
+   * the same transaction as the change they describe. Ids only: the outbox is a
+   * durable record and carries no name or address.
+   */
+  if (NOTIFIED_REASON_CODES.includes(input.reasonCode)) {
+    await tx.insert(outboxEntries).values({
+      eventType: `service.${input.reasonCode}`,
+      payload: { serviceId: input.serviceId },
+      // One per decision: a service can be sent and decided more than once.
+      idempotencyKey: `service.${input.reasonCode}:${input.serviceId}:${input.correlationId}`,
+      correlationId: input.correlationId,
+    });
+  }
 }
+
+/** Service transitions that owe somebody an email. See `RECIPIENTS_BY_EVENT`. */
+const NOTIFIED_REASON_CODES: readonly string[] = ['submitted', 'approved', 'changes_requested'];
 
 export type CreateServiceResult =
   { readonly status: 'created'; readonly reference: string } | { readonly status: 'limit_reached' };
@@ -511,6 +534,8 @@ export async function submitTutorService(
     return await db.transaction(async (tx): Promise<TutorServiceActionResult> => {
       const service = await lockOwnService(tx, input.tutorProfileId, input.reference);
       if (service === null) return { status: 'not_found' };
+      // Already sent: the same request arriving twice is one submission, not an error.
+      if (service.statusCode === 'pending_approval') return { status: 'done' };
       const moved = await move(tx, service.id, EDITABLE_SERVICE_STATUSES, {
         statusCode: 'pending_approval',
         updatedAt: now,
@@ -650,6 +675,13 @@ export async function publishTutorService(
       if (profile === undefined) return { status: 'not_found' };
       const service = await lockOwnService(tx, input.tutorProfileId, input.reference);
       if (service === null) return { status: 'not_found' };
+      /*
+       * ALREADY ON SALE IS SUCCESS, NOT A REFUSAL. A double click, or a request a
+       * browser sends twice, reaches here a second time after the first has
+       * committed. Answering "not ready" would tell a tutor their service could
+       * not be published on the very page that shows it published.
+       */
+      if (service.statusCode === 'published') return { status: 'published' };
 
       const versions = await tx
         .select({ id: serviceVersions.id })
@@ -784,6 +816,8 @@ async function simpleMove(
     return await db.transaction(async (tx): Promise<TutorServiceActionResult> => {
       const service = await lockOwnService(tx, input.tutorProfileId, input.reference);
       if (service === null) return { status: 'not_found' };
+      // Already there: the same request arriving twice has one effect and one answer.
+      if (service.statusCode === to) return { status: 'done' };
       const moved = await move(tx, service.id, from, { statusCode: to, updatedAt: now, ...extra });
       if (!moved) return { status: 'not_allowed' };
       // A service leaving review by being removed closes its open review too.

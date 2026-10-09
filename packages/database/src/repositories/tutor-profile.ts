@@ -272,11 +272,17 @@ async function moveListing(
 
       let to: string;
       if (direction === 'pause') {
+        // Already paused by the tutor: nothing to do, and what was remembered is kept.
+        if (current.visibility === 'unlisted' && current.before !== null) return { status: 'done' };
         if (!isListedVisibility(current.visibility) || current.before !== null) {
           return { status: 'not_allowed' };
         }
         to = 'unlisted';
       } else {
+        // Already listed with no pause to undo: the same request arriving twice.
+        if (isListedVisibility(current.visibility) && current.before === null) {
+          return { status: 'done' };
+        }
         if (
           current.visibility !== 'unlisted' ||
           current.before === null ||
