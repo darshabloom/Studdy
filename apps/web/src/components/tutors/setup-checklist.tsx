@@ -78,13 +78,15 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
           return (
             <li
               key={step.code}
-              className="flex flex-wrap items-start justify-between gap-3 rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card p-4"
+              // Stacked on a phone: side by side, the badge and link took the row and
+              // squeezed the words into a one-word column.
+              className="flex flex-col gap-3 rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card p-4 sm:flex-row sm:items-start sm:justify-between"
             >
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 sm:flex-1">
                 <p className="font-semibold">{copy.title}</p>
                 <p className="mt-0.5 text-sm text-text-secondary">{copy.detail[step.status]}</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex shrink-0 items-center gap-3">
                 <StatusBadge family={STEP_FAMILY[step.status]}>
                   {STEP_LABEL[step.status]}
                 </StatusBadge>

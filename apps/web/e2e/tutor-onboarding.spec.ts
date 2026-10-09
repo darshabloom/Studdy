@@ -116,6 +116,11 @@ test.describe('an approved tutor getting on sale', () => {
     });
     await expect(page.getByText(/Enter a price between/)).toBeVisible();
     await expect(field(page, 'displayName')).toHaveValue(SERVICE_NAME);
+    // The dropdowns too: a form reset would put them back to "Choose".
+    await expect(field(page, 'yearLevelFrom')).toHaveValue('11');
+    await expect(field(page, 'yearLevelTo')).toHaveValue('13');
+    await expect(field(page, 'options.0.durationMinutes')).toHaveValue('60');
+    await expect(field(page, 'subjectId')).not.toHaveValue('');
     await snap(page, '02-service-form-errors');
 
     await field(page, 'options.0.price').fill('65');

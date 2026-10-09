@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { startTransition, useActionState, useState, type FormEvent } from 'react';
 import { Alert, Button, Field, Label, TextareaField } from '@studdy/design-system';
 import type { TutorProfileInput } from '@studdy/domain/tutors';
 import { INITIAL_TUTOR_FORM_STATE, type TutorFormState } from '@/lib/tutors/form-state';
@@ -42,8 +42,21 @@ export function ProfileForm({ initial, saveAction }: ProfileFormProps) {
   const set = <K extends keyof TutorProfileInput>(key: K, value: TutorProfileInput[K]) =>
     setValues((current) => ({ ...current, [key]: value }));
 
+  /*
+   * SUBMITTED BY HAND, NOT THROUGH `action=`. React resets a form after its
+   * action finishes, and a reset puts every <select> back to its first option
+   * even though it is controlled: after a failed save the dropdowns read
+   * "Choose" while the typed text stayed. Calling the action ourselves skips the
+   * reset, so what is on screen is always what the state holds.
+   */
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => save(formData));
+  };
+
   return (
-    <form action={save} className="flex flex-col gap-6" noValidate>
+    <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
       {state.error !== null ? <Alert tone="critical">{state.error}</Alert> : null}
       {state.message !== null ? <Alert tone="success">{state.message}</Alert> : null}
 

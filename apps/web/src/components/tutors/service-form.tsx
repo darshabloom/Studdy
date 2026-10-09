@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { startTransition, useActionState, useState, type FormEvent } from 'react';
 import { Alert, Button, Field, Label, TextareaField } from '@studdy/design-system';
 import {
   SERVICE_DURATION_MINUTES,
@@ -84,6 +84,19 @@ export function ServiceForm({
       options: current.options.filter((_, slot) => slot !== index),
     }));
 
+  /*
+   * SUBMITTED BY HAND, NOT THROUGH `action=`. React resets a form after its
+   * action finishes, and a reset puts every <select> back to its first option
+   * even though it is controlled: after a failed save the dropdowns read
+   * "Choose" while the typed text stayed. Calling the action ourselves skips the
+   * reset, so what is on screen is always what the state holds.
+   */
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => save(formData));
+  };
+
   const formats = [
     offersOnline ? { value: 'online', label: 'Online' } : null,
     offersInPerson ? { value: 'in_person', label: 'In person' } : null,
@@ -91,7 +104,7 @@ export function ServiceForm({
   ].filter((format): format is { value: string; label: string } => format !== null);
 
   return (
-    <form action={save} className="flex flex-col gap-8" noValidate>
+    <form onSubmit={onSubmit} className="flex flex-col gap-8" noValidate>
       {reference !== undefined ? <input type="hidden" name="reference" value={reference} /> : null}
       {state.error !== null ? <Alert tone="critical">{state.error}</Alert> : null}
 
