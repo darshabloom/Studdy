@@ -11,3 +11,5 @@
 export * from './connect';
 export * from './payment-intents';
 export * from './refunds';
+export * from './errors';
+export * from './transfers';
