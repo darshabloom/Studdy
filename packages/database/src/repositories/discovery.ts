@@ -29,6 +29,8 @@ export interface PublicTutorRow {
   currencyCode: string;
   startingPriceDurationMinutes: number;
   verificationLabels: readonly string[];
+  /** A development seed, labelled as an example wherever it is shown. */
+  isExampleProfile: boolean;
 }
 
 interface RawTutorRow {
@@ -55,6 +57,7 @@ function mapTutorRow(row: RawTutorRow): PublicTutorRow {
     currencyCode: row['currency_code'] as string,
     startingPriceDurationMinutes: row['starting_price_duration_minutes'] as number,
     verificationLabels: (row['verification_labels'] as string[] | null) ?? [],
+    isExampleProfile: row['is_example_profile'] === true,
   };
 }
 

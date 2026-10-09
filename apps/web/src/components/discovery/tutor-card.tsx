@@ -109,7 +109,9 @@ export function TutorCard({
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <StatusBadge family="pending">Example profile</StatusBadge>
+        {tutor.isExampleProfile ? (
+          <StatusBadge family="pending">Example profile</StatusBadge>
+        ) : null}
         {tutor.isNewToStuddy ? <StatusBadge family="active">New to Studdy</StatusBadge> : null}
         <StatusBadge family="active">{availabilityLabel(tutor.availabilityLabelCode)}</StatusBadge>
         {rating !== null ? <StatusBadge family="complete">{rating} rating</StatusBadge> : null}

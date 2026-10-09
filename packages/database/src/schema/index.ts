@@ -47,7 +47,7 @@ export {
 } from './tutors/tutor-applications';
 
 // services
-export { services, serviceVersions } from './services/services';
+export { services, serviceReviews, serviceVersions } from './services/services';
 
 // platform reference data
 export { subjects } from './platform/subjects';

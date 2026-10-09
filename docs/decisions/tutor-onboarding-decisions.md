@@ -1,6 +1,7 @@
 # Tutor onboarding — decisions
 
-Recorded 10 October 2026 with the tutor application slice (`feat/tutor-applications`).
+Recorded 10 October 2026 with the tutor application slice (`feat/tutor-applications`); TO-009
+onward added the same day with tutor setup (`feat/tutor-onboarding-setup`).
 
 Each decision below was made inside the approved planning pack (docs 03, 04, 07, 09, 12), which
 describes tutor onboarding in far more detail than this slice builds. Where the pack leaves a
@@ -83,6 +84,91 @@ chose to be known by, not their legal name.
 
 ---
 
+## TO-009 — Every service is reviewed before it can be published
+
+Doc 04 §15 requires Studdy to review every new tutor service before publication, and doc 09
+§45-47 gives the workflow. Built from it: draft, pending approval, changes requested, approved,
+published, unpublished, archived. Scheduled publication, restriction and suspension are in the
+approved workflow and are **not built**, because nothing here could drive them.
+
+**Approval does not publish.** The reviewer approves; the tutor publishes, when they choose. Going
+on sale is always the tutor's own act, and coming off sale is too.
+
+The review outcomes built are **approve** and **request changes**. Doc 04 also lists "approve with
+conditions" and "reject". Neither is built: the approved status list has no rejected state for a
+service, a service that should not exist is handled by requesting changes (the tutor can remove
+it), and conditions have nothing to attach to yet. **Needs the owner** if an outright rejection is
+wanted.
+
+## TO-010 — A reviewed service is never edited in place
+
+The database spec (§8.2) makes published and approved versions immutable. So a tutor changing a
+reviewed service drafts a **replacement**, which is reviewed like any other service. The original
+stays on sale, unchanged, until the tutor publishes the replacement; the same transaction retires
+the original. A price change therefore never takes a tutor off sale while Studdy reviews it, and a
+request or booking already made keeps the version, and the price, it was agreed on.
+
+Consequence worth knowing: **every change to a reviewed service is reviewed, including a price
+change.** That is what doc 04 §15 says ("review should cover ... price"). Doc 04 §16 (trusted
+publishing for eligible tutors) is the approved way to relax it later and is not built.
+
+## TO-011 — A tutor must be payable before a service can be published — **needs the owner**
+
+The database spec says publishing validates payment rules, and a family who chooses a tutor Stripe
+cannot pay is refused at the payment step, after the tutor has accepted and the family has chosen.
+So publication is refused until Stripe reports the tutor's account can receive payments.
+
+This is a versioned rule, `services.publication_requires_payout_readiness`, **on by default and
+failing closed**: only a stored literal `false` relaxes it. The setup checklist lists payouts as
+required either way, because a tutor who is visible but cannot be paid is not bookable.
+
+The cost is real: in any environment, a new tutor appears in discovery only after completing
+Stripe's hosted onboarding, which in the sandbox still needs a person to do once.
+
+## TO-012 — What a tutor may change about their own profile, without review
+
+Headline, teaching approach, year levels, formats and one of two availability labels ("accepting
+new students", "limited availability"). These take effect immediately and are **not reviewed**;
+every edit writes the old and new text to the audit trail. **Needs the owner:** whether public
+profile text should pass through review as services do. Not changeable by the tutor: their name
+(checked against a real person at approval), their status, their verification labels, and the
+labels that change who may book ("existing students only", "waiting list").
+
+A tutor cannot stop offering a format that one of their live services is taught in. They change
+the service first, which is reviewed.
+
+## TO-013 — A tutor can pause their own listing, and only undo their own pause
+
+Pausing takes a tutor out of discovery and stops new requests; requests and bookings already made
+are untouched. The visibility state they paused from is remembered, and resuming restores exactly
+that. An unlisted profile with nothing remembered was unlisted by someone else, and the tutor
+cannot relist themselves out of it. This is what lets a future moderation tool reduce or remove a
+tutor's visibility without the tutor being able to reverse it.
+
+## TO-014 — Review records are server-only, kept apart from the service
+
+`services.services` is readable by signed-in browsers once a service is published. So who reviewed
+a service, the message written for the tutor and the reviewer's own note live in
+`services.service_reviews`, which no browser role can read. A tutor is shown the message written
+for them while changes are requested, and never the staff note.
+
+## TO-015 — Discovery describes the published service, and says which profiles are examples
+
+The public view now reports the year range of a tutor's **published services** for a subject
+(falling back to the profile's range where a service states none), so a tutor who publishes "Year
+9 to 10 maths" is not advertised for their profile's whole range. It also exposes one boolean,
+`is_example_profile`, so the "Example profile" label is shown on seeded profiles only and not on
+real tutors. The earlier decision to withhold `source_type_code` stands; this is the single fact
+the interface already printed on every seeded profile.
+
+## TO-016 — An approved tutor is `approved`; a tutor with something on sale is `active`
+
+Approval creates the profile as `approved`. Publishing a first service makes it `active`. Both may
+enter the tutor workspace and both may be listed. (Before this slice the workspace accepted only
+`active`, which locked every newly approved tutor out of their own setup.)
+
+---
+
 ## Still open
 
 - **Retention of a declined or withdrawn applicant's personal data** (legal name, phone, referees'
@@ -93,3 +179,10 @@ chose to be known by, not their legal name.
 - **Emails to the applicant** (received, changes requested, approved, declined). The decisions are
   recorded as events; delivering them is the next piece.
 - **Contacting referees** is a manual step for the reviewer. Studdy does not email referees.
+- **Service price bounds.** A lesson may be priced from $10 to $500 and sold in 30, 45, 60, 90 or
+  120 minutes. The bounds guard against a slipped key; they are not a pricing policy, and the
+  owner may want one.
+- **A limit of 20 live services per tutor**, as a guard against runaway creation.
+- **Unpublishing does not notify anyone.** Doc 09 has an "unpublishing" state for assessing the
+  impact on active bookings. Today existing requests and bookings simply continue on their agreed
+  terms, which needs no notification; if that ever changes, this is where it is decided.

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import {
   bookableSlotsForSubjectSection,
   findPublicTutorByReference,
+  listPublicServicesForTutor,
   listShortlist,
 } from '@studdy/database';
 import { Alert, Button, Card, StatusBadge } from '@studdy/design-system';
@@ -16,6 +17,7 @@ import {
   yearLevelRangeLabel,
 } from '@studdy/domain/discovery';
 import { TutorAvailabilityWeek } from '@/components/discovery/tutor-availability-week';
+import { ServiceSummary } from '@/components/tutors/service-summary';
 import {
   bookableSlotBlocks,
   mergeContiguousBlocks,
@@ -52,6 +54,13 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
   const rows = await findPublicTutorByReference(reference);
   const tutor = rows[0];
   if (tutor === undefined) notFound();
+
+  // What this tutor has on sale, as they wrote it and Studdy approved it. Only
+  // services with a description: a seeded example has none, and its facts are
+  // already in the summary below.
+  const services = (await listPublicServicesForTutor(reference)).filter(
+    (service) => service.description !== null && service.description !== '',
+  );
 
   const context = await resolveDiscoveryContext();
   const activeSection =
@@ -141,7 +150,9 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
               <h1 className="font-display text-3xl font-semibold text-brand-purple-deep">
                 {tutor.firstName}
               </h1>
-              <StatusBadge family="pending">Example profile</StatusBadge>
+              {tutor.isExampleProfile ? (
+                <StatusBadge family="pending">Example profile</StatusBadge>
+              ) : null}
               {tutor.isNewToStuddy ? (
                 <StatusBadge family="active">New to Studdy</StatusBadge>
               ) : null}
@@ -224,6 +235,24 @@ export default async function TutorProfilePage({ params, searchParams }: PagePro
           <div>
             <h2 className="text-sm font-semibold text-text-primary">What a lesson is like</h2>
             <p className="mt-1 text-text-secondary">{tutor.teachingApproach}</p>
+          </div>
+        ) : null}
+
+        {services.length > 0 ? (
+          <div className="border-t border-surface-border pt-4">
+            <h2 className="text-sm font-semibold text-text-primary">
+              What {tutor.firstName} offers
+            </h2>
+            <ul className="mt-3 flex flex-col gap-5">
+              {services.map((service) => (
+                <li key={`${service.subjectDisplayName}-${service.displayName}`}>
+                  <h3 className="font-semibold text-text-primary">{service.displayName}</h3>
+                  <div className="mt-1">
+                    <ServiceSummary {...service} />
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
 

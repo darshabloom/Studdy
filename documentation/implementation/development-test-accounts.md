@@ -13,23 +13,24 @@ in the local inbox at http://127.0.0.1:14324.
 Shared local-only password: `Studdy-local-only-1` (synthetic; local environment only;
 defined in `packages/database/src/seed/synthetic-users.ts`).
 
-| Email                                 | Roles                           |
-| ------------------------------------- | ------------------------------- |
-| owner@local.studdy.test               | Platform Owner                  |
-| manager@local.studdy.test             | Platform Manager                |
-| parent.one@local.studdy.test          | Parent or guardian              |
-| parent.two@local.studdy.test          | Parent or guardian              |
-| student.independent@local.studdy.test | Independent student             |
-| student.dependent@local.studdy.test   | Dependent student               |
-| tutor.a@local.studdy.test             | Tutor                           |
-| tutor.b@local.studdy.test             | Tutor                           |
-| tutor.c@local.studdy.test             | Tutor                           |
-| restricted.tutor@local.studdy.test    | Tutor (restricted scenarios)    |
-| parent.tutor@local.studdy.test        | Parent and tutor                |
-| parent.requests@local.studdy.test     | Parent — lesson-request spec    |
-| student.requests@local.studdy.test    | Independent student — same      |
-| parent.booking@local.studdy.test      | Parent — booking-journey spec   |
-| parent.applicant@local.studdy.test    | Parent — tutor-application spec |
+| Email                                 | Roles                            |
+| ------------------------------------- | -------------------------------- |
+| owner@local.studdy.test               | Platform Owner                   |
+| manager@local.studdy.test             | Platform Manager                 |
+| parent.one@local.studdy.test          | Parent or guardian               |
+| parent.two@local.studdy.test          | Parent or guardian               |
+| student.independent@local.studdy.test | Independent student              |
+| student.dependent@local.studdy.test   | Dependent student                |
+| tutor.onboarding@local.studdy.test    | Tutor (approved, nothing set up) |
+| tutor.a@local.studdy.test             | Tutor                            |
+| tutor.b@local.studdy.test             | Tutor                            |
+| tutor.c@local.studdy.test             | Tutor                            |
+| restricted.tutor@local.studdy.test    | Tutor (restricted scenarios)     |
+| parent.tutor@local.studdy.test        | Parent and tutor                 |
+| parent.requests@local.studdy.test     | Parent — lesson-request spec     |
+| student.requests@local.studdy.test    | Independent student — same       |
+| parent.booking@local.studdy.test      | Parent — booking-journey spec    |
+| parent.applicant@local.studdy.test    | Parent — tutor-application spec  |
 
 ### Accounts owned by one end-to-end spec
 

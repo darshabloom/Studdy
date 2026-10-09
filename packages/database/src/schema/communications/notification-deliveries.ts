@@ -124,7 +124,7 @@ export const notificationDeliveries = communicationsSchema.table(
     ),
     check(
       'notification_delivery_role_check',
-      sql`${table.recipientRoleCode} in ('family', 'tutor', 'ops')`,
+      sql`${table.recipientRoleCode} in ('family', 'tutor', 'applicant', 'ops')`,
     ),
     check('notification_delivery_channel_check', sql`${table.channelCode} in ('email')`),
     check('notification_delivery_attempts_check', sql`${table.attempts} >= 0`),

@@ -31,7 +31,14 @@ export const tutorProfiles = tutorsSchema.table(
     statusCode: text('status_code').notNull().default('active'),
     /** public_recommended | public_reduced | recommendations_paused | unlisted | existing_only | suspended */
     visibilityStateCode: text('visibility_state_code').notNull().default('public_recommended'),
-    /** development_seed | approved_application */
+    /**
+     * Set while the TUTOR has paused their own listing: the visibility state to
+     * put back when they resume. Null means the tutor has not paused, so an
+     * `unlisted` profile with null here was unlisted by someone else, and the
+     * tutor cannot relist themselves out of it.
+     */
+    visibilityBeforePauseCode: text('visibility_before_pause_code'),
+    /** development_seed | tutor_application */
     sourceTypeCode: text('source_type_code').notNull().default('development_seed'),
     yearLevelFrom: integer('year_level_from'),
     yearLevelTo: integer('year_level_to'),
