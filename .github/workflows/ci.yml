@@ -95,11 +95,26 @@ jobs:
       - run: pnpm db:seed
       - run: pnpm --filter @studdy/web exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      # Pictures of screens a spec chose to keep, so a new layout can be looked
+      # at rather than inferred from text assertions. Kept on success too.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-screens
+          path: apps/web/test-results/screens
+          if-no-files-found: ignore
+          retention-days: 7
+      # What the page looked like when a test failed (error-context.md) and the
+      # trace of its retry. The `github` reporter writes no HTML report, so
+      # without this a browser failure in CI leaves nothing to look at.
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
-          path: apps/web/playwright-report
+          name: playwright-failures
+          path: |
+            apps/web/test-results
+            !apps/web/test-results/screens
+          if-no-files-found: ignore
           retention-days: 7
 
   secret-scan:

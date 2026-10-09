@@ -24,7 +24,10 @@ export default function Layout({ children }: { children: ReactNode }) {
       requireMfa
       accepts={['platform_manager', 'platform_owner']}
       navItems={NAV_ITEMS}
-      navLinks={[{ label: 'Tutor applications', href: '/manager/tutor-applications' }]}
+      navLinks={[
+        { label: 'Tutor applications', href: '/manager/tutor-applications' },
+        { label: 'Service review', href: '/manager/services' },
+      ]}
       homeHref="/manager"
     >
       {children}

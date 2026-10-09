@@ -92,6 +92,13 @@
       "when": 1791546814486,
       "tag": "0012_sticky_eternals",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791582633425,
+      "tag": "0013_supreme_george_stacy",
+      "breakpoints": true
     }
   ]
 }

@@ -44,6 +44,8 @@ interface TutorSeed {
   completedLessonCount: number;
   ratingHundredths: number | null;
   isNewToStuddy: boolean;
+  /** Defaults to `development_seed`, which is what labels a profile as an example. */
+  sourceTypeCode?: string;
   verifications: readonly string[];
   services: ReadonlyArray<{
     subjectCode: string;
@@ -247,6 +249,32 @@ const TUTOR_SEED: readonly TutorSeed[] = [
     ],
   },
   {
+    // A newly APPROVED tutor who has set nothing up, exactly as approval leaves
+    // one: no service, no availability. Absent from discovery until the
+    // onboarding journey publishes a service for them. Biology, which no other
+    // seeded tutor teaches, so that journey cannot change what another spec
+    // sees when it searches.
+    email: 'tutor.onboarding@local.studdy.test',
+    publicFirstName: 'Tama',
+    headline: 'Biology tutor who makes the hard parts visual',
+    teachingApproach:
+      'I draw everything. We build each process up as a diagram together, then you explain it back to me.',
+    statusCode: 'approved',
+    visibilityStateCode: 'public_recommended',
+    sourceTypeCode: 'tutor_application',
+    yearLevelFrom: 9,
+    yearLevelTo: 13,
+    offersOnline: true,
+    offersInPerson: false,
+    availabilityLabelCode: 'accepting_new',
+    completedLessonCount: 0,
+    ratingHundredths: null,
+    isNewToStuddy: true,
+    verifications: ['identity_verified', 'references_completed', 'interviewed'],
+    services: [],
+    availability: [],
+  },
+  {
     // Negative fixture: suspended tutors must never reach public discovery.
     email: 'restricted.tutor@local.studdy.test',
     publicFirstName: 'Riley',
@@ -332,7 +360,7 @@ export async function seedDiscoveryTutors(): Promise<void> {
             teachingApproach: seed.teachingApproach,
             statusCode: seed.statusCode,
             visibilityStateCode: seed.visibilityStateCode,
-            sourceTypeCode: 'development_seed',
+            sourceTypeCode: seed.sourceTypeCode ?? 'development_seed',
             yearLevelFrom: seed.yearLevelFrom,
             yearLevelTo: seed.yearLevelTo,
             offersOnline: seed.offersOnline,
@@ -390,7 +418,12 @@ export async function seedDiscoveryTutors(): Promise<void> {
         } else {
           const [created] = await db
             .insert(services)
-            .values({ tutorProfileId, subjectId, displayName: service.displayName })
+            .values({
+              tutorProfileId,
+              subjectId,
+              displayName: service.displayName,
+              statusCode: 'published',
+            })
             .returning({ id: services.id });
           if (created === undefined) throw new Error('service insert returned no row');
           serviceId = created.id;

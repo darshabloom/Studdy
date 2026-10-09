@@ -40,6 +40,7 @@ export interface PublicTutorResult {
   readonly currencyCode: string;
   readonly startingPriceDurationMinutes: number;
   readonly verificationLabels: readonly string[];
+  readonly isExampleProfile: boolean;
 }
 
 /** Availability labels (doc 14 §13) — fixed strings, never free text. */
@@ -57,6 +58,8 @@ export const VERIFICATION_LABELS: Record<string, string> = {
   qualification_verified: 'Qualification verified',
   references_completed: 'References completed',
   studdy_interviewed: 'Studdy interviewed',
+  // The code an approved application writes for the interview check.
+  interviewed: 'Studdy interviewed',
 };
 
 export function availabilityLabel(code: string): string {

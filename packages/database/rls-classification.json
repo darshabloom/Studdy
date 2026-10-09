@@ -116,6 +116,11 @@
       "policy": "public_read_published_services",
       "notes": "Published services only; no anon grant."
     },
+    "services.service_reviews": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Each submission of a service to Studdy and its outcome: who decided, the message written for the tutor, and a staff-only note. Server-only; kept out of services.services because that table is browser-readable once published."
+    },
     "services.service_versions": {
       "classification": "public_view_backed",
       "policy": "public_read_current_service_versions",

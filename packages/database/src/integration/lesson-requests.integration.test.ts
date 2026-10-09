@@ -115,6 +115,7 @@ async function buildFixture(label: string): Promise<Fixture> {
           tutorProfileId: profile!.id,
           subjectId: subject!.id,
           displayName: `Service ${label}-${index}`,
+          statusCode: 'published',
         })
         .returning({ id: services.id });
       const [version] = await db
@@ -2710,7 +2711,7 @@ describe.skipIf(!available)(
         ): Promise<string> => {
           const [service] = await db
             .insert(services)
-            .values({ tutorProfileId, subjectId, displayName })
+            .values({ tutorProfileId, subjectId, displayName, statusCode: 'published' })
             .returning({ id: services.id });
           const [version] = await db
             .insert(serviceVersions)

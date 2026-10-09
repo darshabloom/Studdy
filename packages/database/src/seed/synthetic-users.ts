@@ -93,6 +93,18 @@ export const SYNTHETIC_USERS: readonly SyntheticUser[] = [
     roleCodes: ['parent_guardian'],
     deterministicAuthId: '00000000-0000-4000-9000-000000000015',
   },
+  /**
+   * A tutor who has JUST BEEN APPROVED and has set nothing up: no service, no
+   * availability, no payouts. Reserved for the tutor-onboarding journey, which
+   * creates, publishes and removes services on this account and so must not
+   * share it with any spec that reads discovery in parallel.
+   */
+  {
+    email: 'tutor.onboarding@local.studdy.test',
+    displayName: 'Synthetic Onboarding Tutor',
+    roleCodes: ['tutor'],
+    deterministicAuthId: '00000000-0000-4000-9000-000000000016',
+  },
   {
     email: 'tutor.a@local.studdy.test',
     displayName: 'Synthetic Tutor A',

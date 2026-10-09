@@ -43,7 +43,7 @@ export default defineConfig({
       // in two projects races. Functional coverage runs on desktop; mobile
       // keeps the read-only layout specs.
       testIgnore:
-        /identity-flows|family-students-discovery|discovery-presentation|lesson-requests|booking-journey/,
+        /identity-flows|family-students-discovery|discovery-presentation|lesson-requests|booking-journey|tutor-application|tutor-onboarding/,
     },
   ],
   webServer: {

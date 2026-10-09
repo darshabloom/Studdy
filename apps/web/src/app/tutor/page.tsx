@@ -5,9 +5,12 @@ import {
   listAvailabilityRules,
   listRequestsForTutor,
   tutorProfileForUser,
+  tutorSetupFacts,
 } from '@studdy/database';
 import { Alert, Button, Card, EmptyState, RestrictedState } from '@studdy/design-system';
+import { tutorSetupChecklist } from '@studdy/domain/tutors';
 import { formatDeadline } from '@/components/requests/request-status';
+import { SetupChecklist } from '@/components/tutors/setup-checklist';
 import { resolveIdentity } from '@/lib/identity/resolve';
 
 export const metadata = { title: 'Tutor workspace' };
@@ -46,7 +49,7 @@ export default async function TutorDashboardPage() {
   }
 
   const now = new Date();
-  const [rules, exceptions, slotsByTutor, requests] = await Promise.all([
+  const [rules, exceptions, slotsByTutor, requests, setupFacts] = await Promise.all([
     listAvailabilityRules(profile.id),
     listAvailabilityExceptions(profile.id, now),
     bookableSlotsForTutors({
@@ -57,8 +60,12 @@ export default async function TutorDashboardPage() {
       now,
     }),
     listRequestsForTutor(profile.id),
+    tutorSetupFacts(profile.id),
   ]);
 
+  // Shown until the tutor is bookable, and gone the moment they are: a finished
+  // checklist is noise above the work a working tutor came here to do.
+  const setup = setupFacts === null ? null : tutorSetupChecklist(setupFacts);
   const timeZone = rules[0]?.ianaTimeZone ?? DEFAULT_TIME_ZONE;
   const slots = slotsByTutor.get(profile.id) ?? [];
   const awaiting = requests.filter((request) => request.statusCode === 'sent');
@@ -80,12 +87,20 @@ export default async function TutorDashboardPage() {
         Your tutoring at a glance
       </h1>
 
+      {setup !== null && !setup.bookable ? (
+        <div className="mt-4">
+          <SetupChecklist checklist={setup} />
+        </div>
+      ) : null}
+
       {/*
         A tutor with no availability receives nothing at all. Saying so loudly
         is the difference between a workspace that looks broken and one that
-        tells you what to do next.
+        tells you what to do next. The checklist above already says it while
+        setup is unfinished, so this is for a tutor who was bookable and has
+        since removed their hours.
       */}
-      {rules.length === 0 ? (
+      {rules.length === 0 && (setup === null || setup.bookable) ? (
         <div className="mt-4">
           <Alert tone="warning" title="Set your availability to start receiving requests">
             Families can only ask you for times you are free. Until you add your regular hours, you

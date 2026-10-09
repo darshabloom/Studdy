@@ -1,4 +1,5 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { TUTOR_WORKSPACE_PROFILE_STATUSES } from '@studdy/domain/tutors';
 import { createDatabaseClient } from '../client';
 import {
   intendedLessonRequests,
@@ -457,7 +458,17 @@ export async function tutorProfileForUser(userId: string): Promise<{ id: string 
     const [row] = await db
       .select({ id: tutorProfiles.id })
       .from(tutorProfiles)
-      .where(and(eq(tutorProfiles.userId, userId), eq(tutorProfiles.statusCode, 'active')));
+      .where(
+        and(
+          eq(tutorProfiles.userId, userId),
+          // `approved` as well as `active`: a tutor is approved before they have
+          // published anything, and that is exactly when they need the workspace
+          // to set themselves up. Requiring `active` locked every newly approved
+          // tutor out of it.
+          inArray(tutorProfiles.statusCode, [...TUTOR_WORKSPACE_PROFILE_STATUSES]),
+          isNull(tutorProfiles.archivedAt),
+        ),
+      );
     return row ?? null;
   } finally {
     await sql.end();
