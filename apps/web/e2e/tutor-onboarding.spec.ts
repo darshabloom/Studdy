@@ -86,6 +86,23 @@ test.describe('an approved tutor getting on sale', () => {
 
   let tutor: OnboardingTutor;
 
+  /*
+   * Say where a failed step actually ended up. CI keeps a failure's snapshot only
+   * when the whole job fails, so an attempt that is retried to green would
+   * otherwise leave nothing but "element not found".
+   */
+  test.afterEach(async ({ page }, testInfo) => {
+    if (testInfo.status === testInfo.expectedStatus) return;
+    const text = await page
+      .locator('body')
+      .innerText()
+      .catch(() => '(page text unavailable)');
+    console.log(
+      `[tutor-onboarding] "${testInfo.title}" attempt ${String(testInfo.retry)} ended at ${page.url()}
+` + text.replace(/\s+/g, ' ').slice(0, 900),
+    );
+  });
+
   test('is told what is left, and creates a service', async ({ page }) => {
     tutor = await resetOnboardingTutor(TUTOR);
     await signIn(page, TUTOR);
