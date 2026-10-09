@@ -490,8 +490,8 @@ describe.skipIf(!available)('payment fulfilment (integration)', () => {
       selected_tutor_request_id: string;
       intended_lesson_request_id: string;
       tutor_profile_id: string;
-      scheduled_start_at: Date;
-      scheduled_end_at: Date;
+      scheduled_start_at: string;
+      scheduled_end_at: string;
       duration_minutes: number;
       iana_time_zone: string;
       local_date: string;
@@ -502,7 +502,7 @@ describe.skipIf(!available)('payment fulfilment (integration)', () => {
       total_charged_minor: string;
       platform_fee_amount_minor: string;
       tutor_entitlement_minor: string;
-      confirmed_at: Date | null;
+      confirmed_at: string | null;
     }
 
     const bookingsFor = async (fixture: Fixture): Promise<BookingRow[]> => {
@@ -510,11 +510,14 @@ describe.skipIf(!available)('payment fulfilment (integration)', () => {
       try {
         return (await sql`
           select reference, status_code, payment_id, reservation_id, selected_tutor_request_id,
-                 intended_lesson_request_id, tutor_profile_id, scheduled_start_at, scheduled_end_at,
+                 intended_lesson_request_id, tutor_profile_id,
+                 to_char(scheduled_start_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as scheduled_start_at,
+                 to_char(scheduled_end_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as scheduled_end_at,
                  duration_minutes, iana_time_zone, local_date::text as local_date,
                  local_start_time::text as local_start_time, lesson_format_code, currency_code,
                  lesson_amount_minor::text, total_charged_minor::text,
-                 platform_fee_amount_minor::text, tutor_entitlement_minor::text, confirmed_at
+                 platform_fee_amount_minor::text, tutor_entitlement_minor::text,
+                 to_char(confirmed_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as confirmed_at
           from bookings.bookings
           where intended_lesson_request_id = ${fixture.ilrId}`) as unknown as BookingRow[];
       } finally {
@@ -546,9 +549,10 @@ describe.skipIf(!available)('payment fulfilment (integration)', () => {
       expect(booking.duration_minutes).toBe(60);
       expect(booking.lesson_format_code).toBe('online');
       expect(booking.iana_time_zone).toBe('Pacific/Auckland');
-      expect(booking.scheduled_end_at.getTime() - booking.scheduled_start_at.getTime()).toBe(
-        60 * 60 * 1000,
-      );
+      expect(
+        new Date(booking.scheduled_end_at).getTime() -
+          new Date(booking.scheduled_start_at).getTime(),
+      ).toBe(60 * 60 * 1000);
 
       // The agreed price: $40 in, $4 Studdy's, $36 the tutor's.
       expect(booking.currency_code).toBe('NZD');
@@ -571,9 +575,9 @@ describe.skipIf(!available)('payment fulfilment (integration)', () => {
       const { sql } = createDatabaseClient();
       try {
         const [expected] = await sql`
-          select (${booking.scheduled_start_at.toISOString()}::timestamptz
+          select (${new Date(booking.scheduled_start_at).toISOString()}::timestamptz
                     at time zone 'Pacific/Auckland')::date::text as local_date,
-                 (${booking.scheduled_start_at.toISOString()}::timestamptz
+                 (${new Date(booking.scheduled_start_at).toISOString()}::timestamptz
                     at time zone 'Pacific/Auckland')::time::text as local_start_time`;
         expect(booking.local_date).toBe(expected!['local_date']);
         expect(booking.local_start_time).toBe(expected!['local_start_time']);
