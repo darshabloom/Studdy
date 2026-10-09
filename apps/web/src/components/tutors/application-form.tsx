@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { startTransition, useActionState, useState, type FormEvent } from 'react';
 import { Alert, Button, Field, Label, TextareaField } from '@studdy/design-system';
 import type { TutorApplicationInput } from '@studdy/domain/tutors';
 import { INITIAL_TUTOR_FORM_STATE, type TutorFormState } from '@/lib/tutors/form-state';
@@ -62,8 +62,24 @@ export function ApplicationForm({
 
   const busy = saving || submitting;
 
+  /*
+   * SUBMITTED BY HAND, NOT THROUGH `formAction`. React resets a form after its
+   * action finishes, and a reset puts every <select> back to its first option
+   * even though it is controlled: after a failed submission the year levels read
+   * "Choose" while the typed text stayed. Calling the action ourselves skips the
+   * reset. Which button was pressed decides which action runs; Enter in a field
+   * has no submitter and submits, as it did before.
+   */
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const saveOnly = submitter instanceof HTMLButtonElement && submitter.value === 'save';
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => (saveOnly ? save(formData) : submit(formData)));
+  };
+
   return (
-    <form className="flex flex-col gap-8" noValidate>
+    <form className="flex flex-col gap-8" noValidate onSubmit={onSubmit}>
       {submitState.error !== null ? <Alert tone="critical">{submitState.error}</Alert> : null}
       {saveState.error !== null ? <Alert tone="critical">{saveState.error}</Alert> : null}
       {saveState.message !== null && submitState.error === null ? (
@@ -336,14 +352,14 @@ export function ApplicationForm({
       </section>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" formAction={submit} disabled={busy}>
+        <Button type="submit" value="submit" disabled={busy}>
           {submitting
             ? 'Submitting…'
             : resubmitting
               ? 'Resubmit application'
               : 'Submit application'}
         </Button>
-        <Button type="submit" variant="secondary" formAction={save} disabled={busy}>
+        <Button type="submit" variant="secondary" value="save" disabled={busy}>
           {saving ? 'Saving…' : 'Save draft'}
         </Button>
       </div>
