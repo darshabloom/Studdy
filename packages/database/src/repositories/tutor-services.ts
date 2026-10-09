@@ -21,6 +21,7 @@ import {
   auditEvents,
   connectedAccounts,
   domainEvents,
+  outboxEntries,
   ruleSettings,
   serviceReviews,
   services,
@@ -360,7 +361,24 @@ async function recordTransition(
     correlationId: input.correlationId,
     occurredAt: input.now,
   });
+  /*
+   * The three moments somebody other than the actor has to hear about, queued in
+   * the same transaction as the change they describe. Ids only: the outbox is a
+   * durable record and carries no name or address.
+   */
+  if (NOTIFIED_REASON_CODES.includes(input.reasonCode)) {
+    await tx.insert(outboxEntries).values({
+      eventType: `service.${input.reasonCode}`,
+      payload: { serviceId: input.serviceId },
+      // One per decision: a service can be sent and decided more than once.
+      idempotencyKey: `service.${input.reasonCode}:${input.serviceId}:${input.correlationId}`,
+      correlationId: input.correlationId,
+    });
+  }
 }
+
+/** Service transitions that owe somebody an email. See `RECIPIENTS_BY_EVENT`. */
+const NOTIFIED_REASON_CODES: readonly string[] = ['submitted', 'approved', 'changes_requested'];
 
 export type CreateServiceResult =
   { readonly status: 'created'; readonly reference: string } | { readonly status: 'limit_reached' };

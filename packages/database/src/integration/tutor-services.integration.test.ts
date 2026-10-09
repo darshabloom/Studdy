@@ -84,6 +84,8 @@ describe.skipIf(!available)('tutor services (integration)', () => {
           await sql`select id::text as id from services.services where tutor_profile_id = any(${profiles}::uuid[])`
         ).map((row) => row['id'] as string);
 
+        // Sending and deciding a service each queue an email; nothing here drains them.
+        await sql`delete from audit.outbox_entries where payload->>'serviceId' = any(${serviceIds})`;
         await sql`delete from services.service_reviews where service_id = any(${serviceIds}::uuid[])`;
         await sql`delete from services.service_versions where service_id = any(${serviceIds}::uuid[])`;
         // A replacement points at the service it replaces; unlink before deleting.

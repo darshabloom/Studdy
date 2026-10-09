@@ -167,6 +167,39 @@ Approval creates the profile as `approved`. Publishing a first service makes it 
 enter the tutor workspace and both may be listed. (Before this slice the workspace accepted only
 `active`, which locked every newly approved tutor out of their own setup.)
 
+## TO-017 — Who is emailed during onboarding, and what an email never says
+
+| When                               | Who is told                          |
+| ---------------------------------- | ------------------------------------ |
+| An application is submitted        | The applicant, and Studdy operations |
+| Changes are requested on it        | The applicant                        |
+| It is declined                     | The applicant                        |
+| It is approved                     | The applicant                        |
+| A service is sent for review       | Studdy operations                    |
+| A service is approved              | The tutor                            |
+| Changes are requested on a service | The tutor                            |
+
+Nobody is emailed when a tutor saves a draft, publishes, unpublishes, pauses or edits their
+profile: those are the tutor's own acts and they are looking at the result.
+
+**A decision email never quotes the reviewer.** It says a decision was made and links to where it
+is read, behind a sign-in. Why an application was declined can be personal, and an inbox is not a
+place Studdy controls. The facts handed to a template do not include the message, so no template
+could quote it.
+
+**The operations email about an application carries its reference and no name.** Who applied is
+read in the manager workspace, behind a role check and MFA.
+
+**Referees are never emailed.** An application holds their addresses; the notification resolver
+selects only the applicant's own.
+
+The approval email's most important sentence is that families cannot find the tutor yet, and what
+is left. A new tutor who believes approval made them bookable would wait for requests that cannot
+come.
+
+Delivery uses the existing outbox and is subject to the same block as every other email: nothing
+sends until `RESEND_API_KEY` is set.
+
 ---
 
 ## Still open
@@ -176,8 +209,6 @@ enter the tutor workspace and both may be listed. (Before this slice the workspa
   alongside SP-011's treatment of notification records.
 - **The wording of the declarations and the tutor terms.** The form says what is declared in
   plain words and records which version was accepted; the legal text itself is the owner's.
-- **Emails to the applicant** (received, changes requested, approved, declined). The decisions are
-  recorded as events; delivering them is the next piece.
 - **Contacting referees** is a manual step for the reviewer. Studdy does not email referees.
 - **Service price bounds.** A lesson may be priced from $10 to $500 and sold in 30, 45, 60, 90 or
   120 minutes. The bounds guard against a slipped key; they are not a pricing policy, and the

@@ -60,6 +60,10 @@ function workItem(overrides: Partial<NotificationWorkItem> = {}): NotificationWo
       closeReasonCode: null,
       paymentReference: 'PAY-1',
       reason: null,
+      recipientFirstName: null,
+      applicationReference: null,
+      serviceReference: null,
+      serviceDisplayName: null,
     },
     ...overrides,
   };

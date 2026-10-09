@@ -46,6 +46,15 @@ export const DELIVERABLE_EVENT_TYPES = [
   // accepted the refund, never before — see RECIPIENTS_BY_EVENT.
   'payment.refunded',
   'payment.refund_failed',
+  // Tutor onboarding (feat/tutor-onboarding-emails): the application and the
+  // review of a service. See RECIPIENTS_BY_EVENT for who is told what.
+  'tutor_application.submitted',
+  'tutor_application.changes_requested',
+  'tutor_application.rejected',
+  'tutor.approved',
+  'service.submitted',
+  'service.approved',
+  'service.changes_requested',
 ] as const;
 
 export type DeliverableEventType = (typeof DELIVERABLE_EVENT_TYPES)[number];
@@ -66,8 +75,14 @@ export function isDeliverableEventType(value: string): value is DeliverableEvent
 export const RECIPIENT_ROLES = [
   /** The parent or guardian who made the request and pays for it. */
   'family',
-  /** The tutor who was selected. */
+  /** The tutor who was selected, or whose service was reviewed. */
   'tutor',
+  /**
+   * Someone applying to tutor. NOT YET A TUTOR, which is why this is its own
+   * role: an applicant has no profile and no workspace, and is addressed
+   * through their application rather than through anything a tutor has.
+   */
+  'applicant',
   /** Studdy operations. Never a customer. */
   'ops',
 ] as const;
@@ -130,6 +145,29 @@ const RECIPIENTS_BY_EVENT: Record<DeliverableEventType, readonly RecipientRole[]
    * nothing — nothing has happened to their money — and a person has to act.
    */
   'payment.refund_failed': ['ops'],
+  /*
+   * THE APPLICANT, so they know it arrived, AND OPERATIONS, because a person
+   * has to review it and until now learned there was something to review only
+   * by opening the queue.
+   */
+  'tutor_application.submitted': ['applicant', 'ops'],
+  /*
+   * The applicant alone, for each of the three decisions. The email says a
+   * decision was made and where to read it. It never carries the reviewer's
+   * message: why an application was declined is read behind a sign-in, not
+   * left in an inbox.
+   */
+  'tutor_application.changes_requested': ['applicant'],
+  'tutor_application.rejected': ['applicant'],
+  'tutor.approved': ['applicant'],
+  /*
+   * OPERATIONS ONLY. The tutor pressed the button and can see the state on
+   * their own screen; the person who has to act is a reviewer.
+   */
+  'service.submitted': ['ops'],
+  /* The tutor, because both decisions leave the next move with them. */
+  'service.approved': ['tutor'],
+  'service.changes_requested': ['tutor'],
 };
 
 export function recipientRolesFor(eventType: DeliverableEventType): readonly RecipientRole[] {
@@ -153,6 +191,14 @@ export const NOTIFICATION_TEMPLATES = [
   'request_closed_family',
   'payment_refunded_family',
   'payment_refund_failed_ops',
+  'application_received_applicant',
+  'application_received_ops',
+  'application_changes_requested_applicant',
+  'application_declined_applicant',
+  'application_approved_applicant',
+  'service_submitted_ops',
+  'service_approved_tutor',
+  'service_changes_requested_tutor',
 ] as const;
 
 export type NotificationTemplate = (typeof NOTIFICATION_TEMPLATES)[number];
@@ -173,6 +219,14 @@ const TEMPLATE_BY_EVENT_AND_ROLE: Record<string, NotificationTemplate> = {
   'intended_lesson_request.expired:family': 'request_closed_family',
   'payment.refunded:family': 'payment_refunded_family',
   'payment.refund_failed:ops': 'payment_refund_failed_ops',
+  'tutor_application.submitted:applicant': 'application_received_applicant',
+  'tutor_application.submitted:ops': 'application_received_ops',
+  'tutor_application.changes_requested:applicant': 'application_changes_requested_applicant',
+  'tutor_application.rejected:applicant': 'application_declined_applicant',
+  'tutor.approved:applicant': 'application_approved_applicant',
+  'service.submitted:ops': 'service_submitted_ops',
+  'service.approved:tutor': 'service_approved_tutor',
+  'service.changes_requested:tutor': 'service_changes_requested_tutor',
 };
 
 export function templateFor(
@@ -221,4 +275,27 @@ export function deliveryIdempotencyKey(
   role: RecipientRole,
 ): string {
   return `${eventType}/${outboxEntryId}/${role}`;
+}
+
+/** The four events about one tutor application. Their payload names `applicationId`. */
+export const APPLICATION_EVENT_TYPES = [
+  'tutor_application.submitted',
+  'tutor_application.changes_requested',
+  'tutor_application.rejected',
+  'tutor.approved',
+] as const satisfies readonly DeliverableEventType[];
+
+/** The three events about the review of one service. Their payload names `serviceId`. */
+export const SERVICE_EVENT_TYPES = [
+  'service.submitted',
+  'service.approved',
+  'service.changes_requested',
+] as const satisfies readonly DeliverableEventType[];
+
+export function isApplicationEventType(value: string): boolean {
+  return (APPLICATION_EVENT_TYPES as readonly string[]).includes(value);
+}
+
+export function isServiceEventType(value: string): boolean {
+  return (SERVICE_EVENT_TYPES as readonly string[]).includes(value);
 }

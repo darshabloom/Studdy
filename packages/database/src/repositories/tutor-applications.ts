@@ -21,6 +21,7 @@ import {
   auditEvents,
   authIdentityLinks,
   domainEvents,
+  outboxEntries,
   roleDefinitions,
   ruleSettings,
   statusTransitions,
@@ -548,6 +549,14 @@ export async function submitApplication(input: {
         correlationId: input.correlationId,
         occurredAt: now,
       });
+      // Queued with the submission: the applicant is told it arrived, and a
+      // reviewer that there is something to review. Ids only.
+      await tx.insert(outboxEntries).values({
+        eventType: 'tutor_application.submitted',
+        payload: { applicationId: locked.id, revisionNumber },
+        idempotencyKey: `tutor_application.submitted:${locked.id}:${String(revisionNumber)}`,
+        correlationId: input.correlationId,
+      });
       return { status: 'submitted', revisionNumber };
     });
   } finally {
@@ -1030,6 +1039,14 @@ async function applyDecision(
     correlationId: input.correlationId,
     occurredAt: input.now,
   });
+  // The applicant is told a decision was made. The message itself is NOT in the
+  // payload: it is read behind a sign-in, never from an inbox.
+  await tx.insert(outboxEntries).values({
+    eventType: `tutor_application.${to}`,
+    payload: { applicationId: application.id },
+    idempotencyKey: `tutor_application.${to}:${application.id}:${String(application.currentRevisionNumber)}`,
+    correlationId: input.correlationId,
+  });
   return true;
 }
 
@@ -1326,6 +1343,12 @@ export async function approveApplication(input: {
         },
         correlationId: input.correlationId,
         occurredAt: now,
+      });
+      await tx.insert(outboxEntries).values({
+        eventType: 'tutor.approved',
+        payload: { applicationId: application.id },
+        idempotencyKey: `tutor.approved:${application.id}`,
+        correlationId: input.correlationId,
       });
 
       return { status: 'approved', tutorProfileId: profile.id, tutorReference: profile.reference };

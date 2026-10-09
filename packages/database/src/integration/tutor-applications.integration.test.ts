@@ -75,6 +75,8 @@ describe.skipIf(!available)('tutor applications (integration)', () => {
           await sql`select id::text as id from identity.user_role_assignments where user_id = any(${userIds}::uuid[])`
         ).map((row) => row['id'] as string);
 
+        // Submitting and deciding an application each queue an email; nothing here drains them.
+        await sql`delete from audit.outbox_entries where payload->>'applicationId' = any(${apps})`;
         await sql`delete from tutors.tutor_verifications where tutor_profile_id = any(${profiles}::uuid[])`;
         await sql`delete from tutors.tutor_application_checks where application_id = any(${apps}::uuid[])`;
         await sql`delete from tutors.tutor_application_revision_references where revision_id = any(${revisions}::uuid[])`;
