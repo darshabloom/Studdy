@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clickUntilNavigated } from './helpers/navigation';
 import {
   approvePendingService,
   makeTutorPayable,
@@ -65,10 +66,18 @@ async function snap(page: Page, name: string): Promise<void> {
 const field = (page: Page, name: string) =>
   page.locator(`input[name="${name}"], textarea[name="${name}"], select[name="${name}"]`);
 
+/*
+ * EVERY CLICK THAT FOLLOWS A NAVIGATION GOES THROUGH `clickUntilNavigated`. A
+ * click that lands before the page has hydrated is swallowed: the page stays
+ * exactly as it was, with no error. Each of these lands on a new URL (a new page,
+ * or the same page with its outcome), which is what that helper waits for, and
+ * it retries only when the URL has not moved, so an action never runs twice.
+ */
+
 /** The tutor's one service page, reached the way a tutor reaches it. */
 async function openService(page: Page): Promise<void> {
   await page.goto('/tutor/services');
-  await page.getByRole('link', { name: `Open ${SERVICE_NAME}` }).click();
+  await clickUntilNavigated(page, page.getByRole('link', { name: `Open ${SERVICE_NAME}` }));
   await expect(page.getByRole('heading', { level: 1, name: SERVICE_NAME })).toBeVisible({
     timeout: 15_000,
   });
@@ -116,7 +125,7 @@ test.describe('an approved tutor getting on sale', () => {
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toBeVisible();
     await snap(page, '01-dashboard-checklist');
 
-    await page.getByRole('link', { name: 'Next: Create a service' }).click();
+    await clickUntilNavigated(page, page.getByRole('link', { name: 'Next: Create a service' }));
     await expect(page.getByRole('heading', { level: 1, name: 'Create a service' })).toBeVisible({
       timeout: 15_000,
     });
@@ -152,7 +161,7 @@ test.describe('an approved tutor getting on sale', () => {
     await snap(page, '03-service-draft');
 
     // Sent to Studdy: no longer editable, and still not public.
-    await page.getByRole('button', { name: 'Send for review' }).click();
+    await clickUntilNavigated(page, page.getByRole('button', { name: 'Send for review' }));
     await expect(page.getByText('Sent to Studdy for review.')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
     expect(await publicProfileStatus(page, tutor)).toBe(404);
@@ -175,7 +184,7 @@ test.describe('an approved tutor getting on sale', () => {
 
     await makeTutorPayable(TUTOR);
     await openService(page);
-    await page.getByRole('button', { name: 'Publish this service' }).click();
+    await clickUntilNavigated(page, page.getByRole('button', { name: 'Publish this service' }));
     await expect(page.getByText('Published. Families can now find this service.')).toBeVisible({
       timeout: 15_000,
     });
@@ -214,14 +223,14 @@ test.describe('an approved tutor getting on sale', () => {
     await signIn(page, TUTOR);
 
     await openService(page);
-    await page.getByRole('button', { name: 'Unpublish' }).click();
+    await clickUntilNavigated(page, page.getByRole('button', { name: 'Unpublish' }));
     await expect(page.getByText(/Unpublished\. Families can no longer ask for it/)).toBeVisible({
       timeout: 15_000,
     });
     expect(await publicProfileStatus(page, tutor)).toBe(404);
 
     // Back on sale without another review.
-    await page.getByRole('button', { name: 'Publish this service' }).click();
+    await clickUntilNavigated(page, page.getByRole('button', { name: 'Publish this service' }));
     await expect(page.getByText('Published. Families can now find this service.')).toBeVisible({
       timeout: 15_000,
     });
@@ -232,13 +241,13 @@ test.describe('an approved tutor getting on sale', () => {
       timeout: 15_000,
     });
     await snap(page, '07-tutor-profile');
-    await page.getByRole('button', { name: 'Pause my listing' }).click();
+    await clickUntilNavigated(page, page.getByRole('button', { name: 'Pause my listing' }));
     await expect(page.getByText(/Your listing is paused\. Families cannot find you/)).toBeVisible({
       timeout: 15_000,
     });
     expect(await publicProfileStatus(page, tutor)).toBe(404);
 
-    await page.getByRole('button', { name: 'Resume my listing' }).click();
+    await clickUntilNavigated(page, page.getByRole('button', { name: 'Resume my listing' }));
     await expect(page.getByText('Your listing is live again.')).toBeVisible({ timeout: 15_000 });
     expect(await publicProfileStatus(page, tutor)).toBe(200);
   });
