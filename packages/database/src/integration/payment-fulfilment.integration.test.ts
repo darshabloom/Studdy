@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { createDatabaseClient } from '../client';
@@ -85,6 +88,12 @@ describe.skipIf(!available)('payment fulfilment (integration)', () => {
     try {
       if (createdIlrIds.length > 0) {
         const ilrs = createdIlrIds;
+        // A confirmed booking now references the request, the payment and the
+        // reservation with ON DELETE restrict, so it goes first.
+        await sql`
+          delete from audit.status_transitions where entity_type = 'booking' and entity_id in (
+            select id::text from bookings.bookings where intended_lesson_request_id = any(${ilrs}::uuid[]))`;
+        await sql`delete from bookings.bookings where intended_lesson_request_id = any(${ilrs}::uuid[])`;
         await sql`
           delete from payments.tutor_transfers where payment_id in (
             select id from payments.payments where intended_lesson_request_id = any(${ilrs}::uuid[]))`;
@@ -469,6 +478,246 @@ describe.skipIf(!available)('payment fulfilment (integration)', () => {
       } finally {
         await sql.end();
       }
+    });
+  });
+
+  describe('the durable Booking', () => {
+    interface BookingRow {
+      reference: string;
+      status_code: string;
+      payment_id: string | null;
+      reservation_id: string;
+      selected_tutor_request_id: string;
+      intended_lesson_request_id: string;
+      tutor_profile_id: string;
+      scheduled_start_at: Date;
+      scheduled_end_at: Date;
+      duration_minutes: number;
+      iana_time_zone: string;
+      local_date: string;
+      local_start_time: string;
+      lesson_format_code: string;
+      currency_code: string;
+      lesson_amount_minor: string;
+      total_charged_minor: string;
+      platform_fee_amount_minor: string;
+      tutor_entitlement_minor: string;
+      confirmed_at: Date | null;
+    }
+
+    const bookingsFor = async (fixture: Fixture): Promise<BookingRow[]> => {
+      const { sql } = createDatabaseClient();
+      try {
+        return (await sql`
+          select reference, status_code, payment_id, reservation_id, selected_tutor_request_id,
+                 intended_lesson_request_id, tutor_profile_id, scheduled_start_at, scheduled_end_at,
+                 duration_minutes, iana_time_zone, local_date::text as local_date,
+                 local_start_time::text as local_start_time, lesson_format_code, currency_code,
+                 lesson_amount_minor::text, total_charged_minor::text,
+                 platform_fee_amount_minor::text, tutor_entitlement_minor::text, confirmed_at
+          from bookings.bookings
+          where intended_lesson_request_id = ${fixture.ilrId}`) as unknown as BookingRow[];
+      } finally {
+        await sql.end();
+      }
+    };
+
+    /**
+     * A PAID LESSON HAS A BOOKING. The row is the thing every later feature
+     * attaches to, so it has to carry the agreed schedule and price itself.
+     */
+    it('is written by the fulfilment transaction, confirmed, from the snapshots', async () => {
+      const fixture = await awaitingPayment();
+      expect(await deliver(fixture)).toBe('fulfilled');
+
+      const rows = await bookingsFor(fixture);
+      expect(rows).toHaveLength(1);
+      const booking = rows[0]!;
+
+      expect(booking.reference).toMatch(/^BK-\d{8}$/);
+      expect(booking.status_code).toBe('confirmed');
+      expect(booking.confirmed_at).not.toBeNull();
+      expect(booking.payment_id).toBe(fixture.paymentId);
+      expect(booking.reservation_id).toBe(fixture.reservationId);
+      expect(booking.selected_tutor_request_id).toBe(fixture.tutorRequestId);
+      expect(booking.tutor_profile_id).toBe(fixture.tutorProfileId);
+
+      // The agreed schedule is the reservation's own, and the zone is the request's.
+      expect(booking.duration_minutes).toBe(60);
+      expect(booking.lesson_format_code).toBe('online');
+      expect(booking.iana_time_zone).toBe('Pacific/Auckland');
+      expect(booking.scheduled_end_at.getTime() - booking.scheduled_start_at.getTime()).toBe(
+        60 * 60 * 1000,
+      );
+
+      // The agreed price: $40 in, $4 Studdy's, $36 the tutor's.
+      expect(booking.currency_code).toBe('NZD');
+      expect(booking.lesson_amount_minor).toBe('4000');
+      expect(booking.total_charged_minor).toBe('4000');
+      expect(booking.platform_fee_amount_minor).toBe('400');
+      expect(booking.tutor_entitlement_minor).toBe('3600');
+    });
+
+    /**
+     * THE LOCAL DATE AND TIME ARE DERIVED IN THE DATABASE, in the request's own
+     * zone — so "4pm Tuesday" stays 4pm Tuesday for the family regardless of
+     * where the server runs or which side of daylight saving it falls on.
+     */
+    it('records the wall-clock date and time in the request zone', async () => {
+      const fixture = await awaitingPayment();
+      await deliver(fixture);
+      const booking = (await bookingsFor(fixture))[0]!;
+
+      const { sql } = createDatabaseClient();
+      try {
+        const [expected] = await sql`
+          select (${booking.scheduled_start_at.toISOString()}::timestamptz
+                    at time zone 'Pacific/Auckland')::date::text as local_date,
+                 (${booking.scheduled_start_at.toISOString()}::timestamptz
+                    at time zone 'Pacific/Auckland')::time::text as local_start_time`;
+        expect(booking.local_date).toBe(expected!['local_date']);
+        expect(booking.local_start_time).toBe(expected!['local_start_time']);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('is written exactly once across duplicate, distinct and concurrent deliveries', async () => {
+      const fixture = await awaitingPayment();
+      await Promise.all([deliver(fixture), deliver(fixture), deliver(fixture), deliver(fixture)]);
+      await deliver(fixture, { providerEventId: `evt_dup_${randomUUID()}` });
+      expect(await bookingsFor(fixture)).toHaveLength(1);
+    });
+
+    it('is not written when the money does not match the snapshot', async () => {
+      const fixture = await awaitingPayment();
+      expect(await deliver(fixture, { authoritative: { amountReceivedMinor: 3999n } })).toBe(
+        'amount_mismatch',
+      );
+      expect(await bookingsFor(fixture)).toHaveLength(0);
+    });
+
+    it('is not written when the booking cannot be confirmed (flagged for refund instead)', async () => {
+      const fixture = await awaitingPayment({ payable: false });
+      expect(await deliver(fixture)).toBe('fulfilment_blocked');
+      expect(await bookingsFor(fixture)).toHaveLength(0);
+      expect((await stateOf(fixture)).refundRequired).toBe(true);
+    });
+
+    it('records the creation in the status history', async () => {
+      const fixture = await awaitingPayment();
+      await deliver(fixture);
+      const booking = (await bookingsFor(fixture))[0]!;
+      const { sql } = createDatabaseClient();
+      try {
+        const rows = await sql`
+          select from_status_code, to_status_code, reason_code
+          from audit.status_transitions
+          where entity_type = 'booking'
+            and entity_id = (select id::text from bookings.bookings where reference = ${booking.reference})`;
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!['from_status_code']).toBeNull();
+        expect(rows[0]!['to_status_code']).toBe('confirmed');
+        expect(rows[0]!['reason_code']).toBe('payment_succeeded');
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /** The database refuses what the domain would never write, even to a hand-run INSERT. */
+    it('refuses a second booking for the same winning tutor request', async () => {
+      const fixture = await awaitingPayment();
+      await deliver(fixture);
+      const { sql } = createDatabaseClient();
+      try {
+        await expect(
+          sql`
+            insert into bookings.bookings (
+              intended_lesson_request_id, selected_tutor_request_id, reservation_id,
+              student_profile_id, student_subject_section_id, tutor_profile_id, booked_by_user_id,
+              service_version_id, subject_id, scheduled_start_at, scheduled_end_at,
+              duration_minutes, iana_time_zone, local_date, local_start_time, lesson_format_code,
+              currency_code, lesson_amount_minor, total_charged_minor,
+              platform_fee_amount_minor, tutor_entitlement_minor, confirmed_at)
+            select intended_lesson_request_id, selected_tutor_request_id, reservation_id,
+                   student_profile_id, student_subject_section_id, tutor_profile_id, booked_by_user_id,
+                   service_version_id, subject_id, scheduled_start_at, scheduled_end_at,
+                   duration_minutes, iana_time_zone, local_date, local_start_time, lesson_format_code,
+                   currency_code, lesson_amount_minor, total_charged_minor,
+                   platform_fee_amount_minor, tutor_entitlement_minor, now()
+            from bookings.bookings where selected_tutor_request_id = ${fixture.tutorRequestId}`,
+        ).rejects.toThrow(/booking_selected_tutor_request_unique_idx|duplicate key/);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('refuses a booking whose fee and entitlement do not sum to the lesson price', async () => {
+      const fixture = await awaitingPayment();
+      await deliver(fixture);
+      const { sql } = createDatabaseClient();
+      try {
+        await expect(
+          sql`
+            update bookings.bookings set tutor_entitlement_minor = tutor_entitlement_minor + 1
+            where selected_tutor_request_id = ${fixture.tutorRequestId}`,
+        ).rejects.toThrow(/booking_amounts_check/);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    it('refuses a confirmed booking with no confirmation time', async () => {
+      const fixture = await awaitingPayment();
+      await deliver(fixture);
+      const { sql } = createDatabaseClient();
+      try {
+        await expect(
+          sql`
+            update bookings.bookings set confirmed_at = null
+            where selected_tutor_request_id = ${fixture.tutorRequestId}`,
+        ).rejects.toThrow(/booking_status_timestamps_check/);
+      } finally {
+        await sql.end();
+      }
+    });
+
+    /**
+     * THE BACKFILL AND THE LIVE WRITE MUST AGREE. The migration that gave
+     * already-confirmed lessons a booking is run here against a freshly
+     * fulfilled one whose booking was removed: it must rebuild an identical row,
+     * and running it again must change nothing.
+     */
+    it('is rebuilt identically by the backfill, and the backfill is idempotent', async () => {
+      const fixture = await awaitingPayment();
+      await deliver(fixture);
+      const before = (await bookingsFor(fixture))[0]!;
+
+      const backfill = readFileSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          '../../migrations/reviewed-sql/transformations/0010_backfill_bookings.sql',
+        ),
+        'utf8',
+      );
+
+      const { sql } = createDatabaseClient();
+      try {
+        await sql`
+          delete from audit.status_transitions where entity_type = 'booking'
+            and entity_id = (select id::text from bookings.bookings where reference = ${before.reference})`;
+        await sql`delete from bookings.bookings where selected_tutor_request_id = ${fixture.tutorRequestId}`;
+        await sql.unsafe(backfill);
+        await sql.unsafe(backfill);
+      } finally {
+        await sql.end();
+      }
+
+      const after = await bookingsFor(fixture);
+      expect(after).toHaveLength(1);
+      const { reference: _beforeReference, ...beforeRest } = before;
+      const { reference: _afterReference, ...afterRest } = after[0]!;
+      expect(afterRest).toEqual(beforeRest);
     });
   });
 
