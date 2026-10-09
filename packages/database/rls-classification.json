@@ -86,6 +86,31 @@
       "policy": "public_read_visible_tutor_verifications",
       "notes": "Labels for visible tutors; no anon grant."
     },
+    "tutors.tutor_applications": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "The workflow record of someone applying to become a tutor: status, the applicant's working draft, the decision and the message the applicant is shown. Server-only: no anon/authenticated grant and no browser policy. It holds personal data, and an applicant reads their own through a projection scoped by user id."
+    },
+    "tutors.tutor_application_revisions": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "An immutable submitted revision of a tutor application: legal names, phone, experience and the declarations accepted. Server-only; personal data. Written once at submission and never updated."
+    },
+    "tutors.tutor_application_revision_subjects": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "The subjects a tutor application revision says the applicant teaches. Server-only."
+    },
+    "tutors.tutor_application_revision_references": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "The referees a tutor application revision names, including their email addresses: personal data about people who are not Studdy users. Server-only."
+    },
+    "tutors.tutor_application_checks": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "What a reviewer verified about an applicant (identity, safeguarding, references, interview), with who and when, and a staff-only note. Server-only; never shown to the applicant."
+    },
     "services.services": {
       "classification": "public_view_backed",
       "policy": "public_read_published_services",

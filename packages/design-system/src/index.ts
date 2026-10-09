@@ -6,6 +6,8 @@ export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from '.
 export { Input, type InputProps } from './primitives/input';
 export { Label } from './primitives/label';
 export { Field, type FieldProps } from './primitives/field';
+export { Textarea, type TextareaProps } from './primitives/textarea';
+export { TextareaField, type TextareaFieldProps } from './primitives/textarea-field';
 
 // Components
 export { Card, type CardProps } from './components/card';

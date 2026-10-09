@@ -46,10 +46,13 @@ export default async function WelcomePage() {
             </div>
             <div className="mt-4 flex flex-col gap-4">
               <Alert tone="information" title="Your tutor interest is registered">
-                Tutor applications open with the tutor-onboarding release. We&rsquo;ll email you
-                when you can complete your application, interview and verification. Until approval,
-                tutor tools stay locked.
+                The next step is your application: who you are, what you teach and two or three
+                referees. A person at Studdy reviews every application and speaks with you before
+                anyone is approved. Until approval, tutor tools stay locked.
               </Alert>
+              <Button asChild>
+                <Link href="/apply/tutor">Continue to my application</Link>
+              </Button>
               <p className="text-sm text-text-secondary">
                 Also here as a parent or student? You can add that later from your account.
               </p>

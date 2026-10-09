@@ -13,6 +13,7 @@ const PROTECTED_PREFIXES = [
   // segment-aware test below keeps this clear of any future '/bookings'.
   '/book',
   '/requests',
+  '/apply',
   '/parent',
   '/tutor',
   '/student',

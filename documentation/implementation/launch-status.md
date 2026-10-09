@@ -4,7 +4,7 @@
 slice. If this and another document disagree about what works, this one is right and the other
 needs fixing; if this one disagrees with the code, the code is right and this needs fixing.
 
-Last updated: **10 October 2026**, with the tutor settlement slice (after refund execution and the Booking entity).
+Last updated: **10 October 2026**, with the tutor application slice (after settlement, refunds and the Booking entity).
 
 How to read it: **Works** means built, tested and reachable by that role. **Partial** means a
 real piece exists but the journey does not finish. **Not started** means nothing a user can
@@ -45,17 +45,18 @@ visibly usable product by the end of October.
 
 ### Tutor
 
-| Journey                                                      | Status                                           |
-| ------------------------------------------------------------ | ------------------------------------------------ |
-| Set weekly availability and exceptions                       | Works                                            |
-| See lesson requests, accept with a time or decline           | Works                                            |
-| Held time and release when a request closes                  | Works                                            |
-| Start Stripe Connect onboarding and see payout status        | Works in Stripe test mode                        |
-| Notified by email when asked, and when a request closes      | Built, **not sending**                           |
-| Apply to become a tutor, and be approved                     | Not started. Today a tutor exists only if seeded |
-| Edit profile, create and price services, publish             | Not started. Services are seed-only              |
-| The locked Tutor dashboard, calendar, earnings               | Not started                                      |
-| Paid out (operator-run settlement, weekly, after the lesson) | Built; **not proven end to end** (see Blocked)   |
+| Journey                                                      | Status                                         |
+| ------------------------------------------------------------ | ---------------------------------------------- |
+| Set weekly availability and exceptions                       | Works                                          |
+| See lesson requests, accept with a time or decline           | Works                                          |
+| Held time and release when a request closes                  | Works                                          |
+| Start Stripe Connect onboarding and see payout status        | Works in Stripe test mode                      |
+| Notified by email when asked, and when a request closes      | Built, **not sending**                         |
+| Apply to become a tutor (draft, submit, resubmit, withdraw)  | Works                                          |
+| Be approved into a real tutor profile and workspace          | Works (a reviewer decides; see Admin)          |
+| Edit profile, create and price services, publish             | Not started. Services are seed-only            |
+| The locked Tutor dashboard, calendar, earnings               | Not started                                    |
+| Paid out (operator-run settlement, weekly, after the lesson) | Built; **not proven end to end** (see Blocked) |
 
 ### Independent student
 
@@ -78,10 +79,11 @@ dependent student sees when they do have a login is open and is a product decisi
 
 ### Admin / Platform Manager
 
-| Journey                                                                                | Status                                  |
-| -------------------------------------------------------------------------------------- | --------------------------------------- |
-| Workspace shell with the MFA gate                                                      | Works                                   |
-| Everything an admin does (tutor approval, support, refunds, settlement, configuration) | Not started. The pages are empty states |
+| Journey                                                                                    | Status                                                                 |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Workspace shell with the MFA gate                                                          | Works                                                                  |
+| Review tutor applications: read, record the four checks, approve, request changes, decline | Works. Refunds and settlement run through operator routes, not screens |
+| Everything else an admin does (service review, support, configuration, users)              | Not started. The pages are empty states                                |
 
 ### Platform Owner
 
@@ -145,5 +147,8 @@ Execution order: **A** money and booking foundation, **B** complete tutor onboar
 approved Parent experience, **D** the approved Tutor workspace, **E** student experiences and
 the lesson lifecycle, **F** admin, owner and organisation, **G** launch hardening.
 
-Currently in **A**. Out of scope for launch: chat, advanced analytics, external calendar sync,
-a large Resources system.
+**A** is done apart from one end-to-end sandbox run that needs a payable tutor. Currently in
+**B**: applying and being approved works; still to do are the tutor's profile editing, services
+and pricing, Studdy's review of a service, publishing, the setup checklist, and emails to the
+applicant. Out of scope for launch: chat, advanced analytics, external calendar sync, a large
+Resources system.

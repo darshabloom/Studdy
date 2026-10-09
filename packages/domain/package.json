@@ -11,7 +11,8 @@
     "./bookings": "./src/bookings/index.ts",
     "./availability": "./src/availability/index.ts",
     "./payments": "./src/payments/index.ts",
-    "./notifications": "./src/notifications/index.ts"
+    "./notifications": "./src/notifications/index.ts",
+    "./tutors": "./src/tutors/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

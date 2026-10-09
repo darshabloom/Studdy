@@ -20,7 +20,7 @@ const ROLE_OPTIONS = [
   {
     value: 'tutor',
     title: 'I want to tutor on Studdy',
-    description: 'Register your interest — applications open soon.',
+    description: 'Apply to teach — a person at Studdy reviews every application.',
   },
 ] as const;
 
@@ -123,8 +123,8 @@ export function WelcomeForm() {
 
       {roleChoice === 'tutor' ? (
         <Alert tone="information" title="About tutor accounts">
-          This registers your interest. Tutor applications, interviews and verification open with
-          the tutor-onboarding release — tutoring tools unlock after approval.
+          After this you will complete an application. It is reviewed by a person at Studdy, who
+          also speaks with your referees and with you — tutoring tools unlock after approval.
         </Alert>
       ) : null}
 
