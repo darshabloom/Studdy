@@ -66,5 +66,8 @@ export { payments } from './payments/payments';
 export { paymentEvents } from './payments/payment-events';
 export { tutorTransfers } from './payments/tutor-transfers';
 
+// The durable Booking (feat/booking-entity)
+export { bookings } from './bookings/bookings';
+
 // Communications — transactional notification delivery (feat/resend-outbox-notifications)
 export { notificationDeliveries } from './communications/notification-deliveries';

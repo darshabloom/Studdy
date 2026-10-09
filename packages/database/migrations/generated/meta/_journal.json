@@ -71,6 +71,13 @@
       "when": 1788302594176,
       "tag": "0009_silent_thor_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791537827678,
+      "tag": "0010_absurd_stardust",
+      "breakpoints": true
     }
   ]
 }

@@ -34,6 +34,14 @@ export {
   type IncludedTutor,
 } from './fan-out-eligibility';
 export {
+  ACTIVE_BOOKING_STATUSES,
+  BOOKING_STATUSES,
+  bookingStatusesThatMayMoveTo,
+  canTransitionBooking,
+  isTerminalBookingStatus,
+  type BookingStatus,
+} from './booking-transitions';
+export {
   ILR_STATUSES,
   TUTOR_REQUEST_STATUSES,
   RESERVATION_STATUSES,

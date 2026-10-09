@@ -23,13 +23,13 @@ import {
  * units, an upper-case currency, a couple of provider references — and every
  * decision made from it is made here, against Studdy's own snapshot.
  *
- * FOUR RECORDS MOVE, OR NONE DO. A confirmed booking is the ILR at `fulfilled`,
- * the reservation at `booking_confirmed`, the payment at `succeeded` and a
- * transfer obligation to the tutor. Those are one fact wearing four hats, so
- * they are written in ONE transaction. A partial fulfilment is the failure this
- * file exists to make unrepresentable: a paid parent with a released slot, or a
- * confirmed booking with nothing owed to the tutor, are both worse than an
- * error.
+ * FIVE RECORDS MOVE, OR NONE DO. A confirmed booking is the ILR at `fulfilled`,
+ * the reservation at `booking_confirmed`, the payment at `succeeded`, the
+ * durable `bookings.bookings` row, and a transfer obligation to the tutor. Those
+ * are one fact wearing five hats, so they are written in ONE transaction. A
+ * partial fulfilment is the failure this file exists to make unrepresentable: a
+ * paid parent with a released slot, or a confirmed booking with nothing owed to
+ * the tutor, are both worse than an error.
  *
  * IDEMPOTENCY IS FIVE LAYERS DEEP, AND FOUR OF THEM ARE THE DATABASE:
  *
@@ -251,7 +251,9 @@ type PaymentRow = typeof payments.$inferSelect;
 type Applied = { outcome: FulfilmentOutcome; paymentId: string | null; note: string | null };
 
 /**
- * THE AUTHORITATIVE TRANSITION. Four records, one transaction, or none.
+ * THE AUTHORITATIVE TRANSITION. Five records, one transaction, or none: the
+ * payment, the request, the reservation, the Booking and the tutor's
+ * obligation.
  */
 async function applySucceeded(
   tx: Tx,
@@ -487,7 +489,54 @@ async function applySucceeded(
     );
 
   /*
-   * 4. What Studdy now owes the tutor. Written from the PAYMENT SNAPSHOT — the
+   * 4. The durable Booking. Written FROM THE ROWS THAT JUST MOVED, in SQL, by the
+   *    same statement shape as the backfill migration, so a booking made today
+   *    and one backfilled yesterday cannot differ in how they were derived.
+   *
+   *    Only ids cross into the statement: every schedule, price and owner value
+   *    is read inside the database from the immutable snapshots, never passed
+   *    from a payload and never recomputed. (A JS `Date` is not bound here at
+   *    all — postgres-js refuses one in hand-written SQL, and the local date and
+   *    wall-clock time are derived in the database from the reservation's own
+   *    timestamps and the request's zone.)
+   *
+   *    `ON CONFLICT DO NOTHING` against the unique winning-tutor-request index,
+   *    so a caller that reached here twice still writes one booking.
+   */
+  const bookingInserted = await tx.execute(raw`
+    insert into bookings.bookings (
+      intended_lesson_request_id, selected_tutor_request_id, payment_id, reservation_id,
+      student_profile_id, student_subject_section_id, tutor_profile_id, family_account_id,
+      booked_by_user_id, service_version_id, subject_id,
+      status_code, confirmed_at,
+      scheduled_start_at, scheduled_end_at, duration_minutes, iana_time_zone,
+      local_date, local_start_time, lesson_format_code,
+      currency_code, lesson_amount_minor, total_charged_minor,
+      platform_fee_amount_minor, tutor_entitlement_minor
+    )
+    select
+      p.intended_lesson_request_id, p.tutor_request_id, p.id, r.id,
+      sss.student_profile_id, ilr.student_subject_section_id, p.tutor_profile_id, p.family_account_id,
+      p.payer_user_id, p.service_version_id, sss.subject_id,
+      'confirmed', p.succeeded_at,
+      r.start_at, r.end_at, ilr.duration_minutes, ilr.time_zone,
+      (r.start_at at time zone ilr.time_zone)::date,
+      (r.start_at at time zone ilr.time_zone)::time,
+      ilr.format_code,
+      p.currency_code, p.lesson_amount_minor, p.total_charged_minor,
+      p.platform_fee_amount_minor, p.tutor_entitlement_minor
+    from payments.payments p
+    join bookings.intended_lesson_requests ilr on ilr.id = p.intended_lesson_request_id
+    join students.student_subject_sections sss on sss.id = ilr.student_subject_section_id
+    join availability.tutor_time_reservations r on r.id = ${reservation.id}
+    where p.id = ${payment.id}
+    on conflict (selected_tutor_request_id) do nothing
+    returning id
+  `);
+  const bookingId = (bookingInserted as unknown as readonly { id: string }[])[0]?.id ?? null;
+
+  /*
+   * 5. What Studdy now owes the tutor. Written from the PAYMENT SNAPSHOT — the
    *    entitlement computed server-side at pricing time — and never from
    *    anything the provider or a browser said. $40 charged, $4 Studdy fee,
    *    $36 owed: the transfer amount is `tutor_entitlement_minor`, verbatim.
@@ -531,6 +580,18 @@ async function applySucceeded(
     correlationId: input.correlationId,
     occurredAt: now,
   });
+  if (bookingId !== null) {
+    await tx.insert(statusTransitions).values({
+      entityType: 'booking',
+      entityId: bookingId,
+      fromStatusCode: null,
+      toStatusCode: 'confirmed',
+      actorUserId: null,
+      reasonCode: 'payment_succeeded',
+      correlationId: input.correlationId,
+      occurredAt: now,
+    });
+  }
   await tx.insert(auditEvents).values({
     category: 'financial',
     action: 'payment.succeeded',
@@ -552,7 +613,7 @@ async function applySucceeded(
     eventType: 'booking.confirmed',
     entityType: 'intended_lesson_request',
     entityId: payment.intendedLessonRequestId,
-    payload: { paymentId: payment.id, tutorRequestId: payment.tutorRequestId },
+    payload: { paymentId: payment.id, tutorRequestId: payment.tutorRequestId, bookingId },
     correlationId: input.correlationId,
     occurredAt: now,
   });

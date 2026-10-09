@@ -98,6 +98,12 @@ describe.skipIf(!available)('notification delivery (integration)', () => {
           delete from communications.notification_deliveries where outbox_entry_id in (
             select id from audit.outbox_entries
             where payload->>'intendedLessonRequestId' = any(${ilrs}))`;
+        // A confirmed booking now references the request, the payment and the
+        // reservation with ON DELETE restrict, so it goes first.
+        await sql`
+          delete from audit.status_transitions where entity_type = 'booking' and entity_id in (
+            select id::text from bookings.bookings where intended_lesson_request_id = any(${ilrs}::uuid[]))`;
+        await sql`delete from bookings.bookings where intended_lesson_request_id = any(${ilrs}::uuid[])`;
         await sql`
           delete from payments.tutor_transfers where payment_id in (
             select id from payments.payments where intended_lesson_request_id = any(${ilrs}::uuid[]))`;

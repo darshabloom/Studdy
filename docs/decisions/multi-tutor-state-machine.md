@@ -101,7 +101,16 @@ slot cannot both succeed, and the loser receives a plain "no longer available" o
 
 ## Booking — 4 states in this package
 
-`pending_payment`, `confirmed`, `cancelled`, `completed`. Not yet implemented.
+`pending_payment`, `confirmed`, `cancelled`, `completed`.
+
+**Implemented 9 October 2026** as `bookings.bookings` (`feat/booking-entity`). The row is
+written **at confirmation**, inside the fulfilment transaction, so in the one-off flow it is
+born `confirmed`; the request machines above already say everything a booking row would say
+while a family is still paying. `pending_payment` stays in the approved vocabulary and the
+database check for a later flow that creates the row earlier, but nothing drives it today.
+No transition trigger, per the enforcement section below: `cancelled` and `completed` will
+each be a guarded `UPDATE ... WHERE status_code IN (...)` written from
+`canTransitionBooking`, in the cancellation and lesson slices.
 
 ## Close reasons (server-only)
 
