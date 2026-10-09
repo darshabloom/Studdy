@@ -4,7 +4,7 @@
 slice. If this and another document disagree about what works, this one is right and the other
 needs fixing; if this one disagrees with the code, the code is right and this needs fixing.
 
-Last updated: **10 October 2026**, with the refund execution slice (after the Booking entity).
+Last updated: **10 October 2026**, with the tutor settlement slice (after refund execution and the Booking entity).
 
 How to read it: **Works** means built, tested and reachable by that role. **Partial** means a
 real piece exists but the journey does not finish. **Not started** means nothing a user can
@@ -45,17 +45,17 @@ visibly usable product by the end of October.
 
 ### Tutor
 
-| Journey                                                 | Status                                              |
-| ------------------------------------------------------- | --------------------------------------------------- |
-| Set weekly availability and exceptions                  | Works                                               |
-| See lesson requests, accept with a time or decline      | Works                                               |
-| Held time and release when a request closes             | Works                                               |
-| Start Stripe Connect onboarding and see payout status   | Works in Stripe test mode                           |
-| Notified by email when asked, and when a request closes | Built, **not sending**                              |
-| Apply to become a tutor, and be approved                | Not started. Today a tutor exists only if seeded    |
-| Edit profile, create and price services, publish        | Not started. Services are seed-only                 |
-| The locked Tutor dashboard, calendar, earnings          | Not started                                         |
-| Paid out                                                | **Not operational.** See the money foundation below |
+| Journey                                                      | Status                                           |
+| ------------------------------------------------------------ | ------------------------------------------------ |
+| Set weekly availability and exceptions                       | Works                                            |
+| See lesson requests, accept with a time or decline           | Works                                            |
+| Held time and release when a request closes                  | Works                                            |
+| Start Stripe Connect onboarding and see payout status        | Works in Stripe test mode                        |
+| Notified by email when asked, and when a request closes      | Built, **not sending**                           |
+| Apply to become a tutor, and be approved                     | Not started. Today a tutor exists only if seeded |
+| Edit profile, create and price services, publish             | Not started. Services are seed-only              |
+| The locked Tutor dashboard, calendar, earnings               | Not started                                      |
+| Paid out (operator-run settlement, weekly, after the lesson) | Built; **not proven end to end** (see Blocked)   |
 
 ### Independent student
 
@@ -109,8 +109,8 @@ dependent student sees when they do have a login is open and is a product decisi
 | Webhook-authoritative fulfilment, idempotent, race-safe                                         | Works                     |
 | Late success is recorded and flagged for refund, never re-taken                                 | Works                     |
 | **Durable Booking entity** (`bookings.bookings`, approved four states, written at confirmation) | Works                     |
-| **Refund execution** for a payment that arrived with no booking (operator-started)              | **Done in this slice**    |
-| Tutor settlement and payout (the obligation is recorded, nothing sends it)                      | Next                      |
+| Refund execution for a payment that arrived with no booking (operator-started)                  | Works in Stripe test mode |
+| **Tutor settlement** (operator-run, weekly; sends only after the lesson has ended)              | **Done in this slice**    |
 | Cancellation and reschedule against a Booking                                                   | Not started               |
 
 ---
@@ -127,10 +127,15 @@ dependent student sees when they do have a login is open and is a product decisi
   who carries a tutor's unpaid negative balance. Sandbox only until then.
 - **Production rehearsal with sandbox keys is not possible** by design: the payments webhook
   only accepts live-mode events when `STUDDY_ENVIRONMENT=production`.
-- **Refunds are started by a person**, by design: Studdy neither confirms nor refunds silently
-  (approved late-success rule). The runbook is `documentation/operations/refunds.md`. The
-  refund route is behind the same Deployment Protection as the other `/api/jobs/*` routes, so
-  until those are exempt an operator can reach it only from the Vercel side or a local run.
+- **Refunds and settlement are started by a person**, by design (the approved late-success and
+  alpha-settlement rules). Runbooks: `documentation/operations/refunds.md` and `settlement.md`.
+  Their routes sit behind the same Deployment Protection as the other `/api/jobs/*` routes, so
+  until those are exempt an operator can reach them only from the Vercel side or a local run.
+- **No payable tutor exists in the Stripe sandbox**, so a real settlement transfer has not yet been
+  seen end to end. The three sandbox accounts all stopped before finishing onboarding. A tutor has
+  to complete Stripe's hosted onboarding once (identity details, which only a person should
+  enter), and then the settlement path can be run against real Stripe test mode. Until then it is
+  proved against the real API only as far as Stripe judging the destination.
 - **Local Docker is down on the development machine** (Docker Desktop's WSL engine fails to
   start), so database and Playwright suites run only in CI for now.
 

@@ -274,7 +274,12 @@ export function paymentFixtures(dayCursorStart: number) {
           select id::text as id from bookings.bookings
           where intended_lesson_request_id = any(${ilrs}::uuid[])`;
         const bookingIds = bookingRows.map((row) => row['id'] as string);
+        const transferRows = await sql`
+          select id::text as id from payments.tutor_transfers where payment_id = any(${payIds}::uuid[])`;
+        const transferIds = transferRows.map((row) => row['id'] as string);
 
+        await sql`delete from audit.status_transitions where entity_id = any(${transferIds})`;
+        await sql`delete from audit.audit_events where entity_id = any(${transferIds})`;
         await sql`delete from audit.status_transitions where entity_id = any(${refundIds})`;
         await sql`delete from payments.refunds where payment_id = any(${payIds}::uuid[])`;
         await sql`delete from audit.status_transitions where entity_id = any(${bookingIds})`;

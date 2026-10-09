@@ -1,4 +1,5 @@
 import type Stripe from 'stripe';
+import { classifyStripeError, type StripeErrorClassification } from './errors';
 
 /**
  * Stripe refunds — the provider half of giving a parent's money back.
@@ -126,32 +127,6 @@ export async function findRefundByStuddyId(
   return match === undefined ? null : snapshotOf(match);
 }
 
-export interface RefundErrorClassification {
-  /**
-   * True when Stripe has definitively REFUSED, and asking again cannot help:
-   * the payment is already refunded, the amount is wrong, the charge is gone.
-   * False for everything that is merely a failure to get an answer — a network
-   * error, a rate limit, a bad key — where the right move is to leave the refund
-   * `requested` and ask again later.
-   */
-  readonly definitive: boolean;
-  /** Stripe's machine-readable code, e.g. `charge_already_refunded`. Operational. */
-  readonly code: string | null;
-}
-
-/**
- * Decide whether a Stripe error ends a refund attempt or merely interrupts it.
- *
- * DEFAULTS TO "NOT DEFINITIVE". Marking a refund `failed` raises an ops alert
- * and lets a new attempt be made, so doing it for a transient fault would be
- * both noisy and — if the first request actually reached Stripe — a route to a
- * double refund. Only the two error types that mean "Stripe understood and said
- * no" qualify. Duck-typed on `type`, because the web layer does not import the
- * SDK and an `instanceof` across a package boundary is fragile.
- */
-export function classifyRefundError(error: unknown): RefundErrorClassification {
-  if (typeof error !== 'object' || error === null) return { definitive: false, code: null };
-  const { type, code } = error as { type?: unknown; code?: unknown };
-  const definitive = type === 'StripeInvalidRequestError' || type === 'StripeCardError';
-  return { definitive, code: typeof code === 'string' ? code : null };
-}
+/** A refund error is judged by the same rule as any money-moving call; see `errors.ts`. */
+export type RefundErrorClassification = StripeErrorClassification;
+export const classifyRefundError = classifyStripeError;

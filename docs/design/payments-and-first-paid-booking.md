@@ -379,6 +379,11 @@ the transaction is treated for tax.
 
 Automated settlement timing is a later slice. The record is not.
 
+> **Implemented 10 October 2026 (`feat/tutor-settlement`).** The operator reviews what is owed, then
+> sends it quoting the eligible total they reviewed; a different total sends nothing. Eligibility is one
+> pure rule and is re-judged per transfer immediately before it is sent. Cadence stays manual (§15 item
+> 4). Operator runbook: `documentation/operations/settlement.md`.
+
 ---
 
 ## 6. PaymentIntent vs Checkout
