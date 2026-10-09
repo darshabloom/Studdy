@@ -38,6 +38,13 @@ export { subjectSectionShortlistEntries } from './students/subject-section-short
 // tutors
 export { tutorProfiles } from './tutors/tutor-profiles';
 export { tutorVerifications } from './tutors/tutor-verifications';
+export {
+  tutorApplicationChecks,
+  tutorApplicationRevisionReferences,
+  tutorApplicationRevisions,
+  tutorApplicationRevisionSubjects,
+  tutorApplications,
+} from './tutors/tutor-applications';
 
 // services
 export { services, serviceVersions } from './services/services';

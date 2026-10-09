@@ -19,12 +19,15 @@ export default function ForTutorsPage() {
         <li>Keep a professional record of every student&rsquo;s progress.</li>
       </ul>
       <p className="mt-6 text-sm text-text-secondary">
-        Tutor applications open with the onboarding release. Create an account now and we will let
-        you know when applications open.
+        Applications are open. Tell us about yourself and what you teach; a person at Studdy reads
+        every application, speaks with your referees and talks with you before anyone is approved.
       </p>
-      <div className="mt-6">
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         <Button asChild>
-          <Link href="/sign-up">Create an account</Link>
+          <Link href="/apply/tutor">Apply to teach</Link>
+        </Button>
+        <Button variant="quiet" asChild>
+          <Link href="/sign-up">Create an account first</Link>
         </Button>
       </div>
     </section>

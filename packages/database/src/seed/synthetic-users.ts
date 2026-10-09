@@ -82,6 +82,17 @@ export const SYNTHETIC_USERS: readonly SyntheticUser[] = [
     roleCodes: ['parent_guardian'],
     deterministicAuthId: '00000000-0000-4000-9000-000000000014',
   },
+  /**
+   * Dedicated to the tutor-application journey. It walks start, save, submit and
+   * withdraw, so it mutates an application and a pending tutor role, and must not
+   * share an account with anything that signs in and out in parallel.
+   */
+  {
+    email: 'parent.applicant@local.studdy.test',
+    displayName: 'Synthetic Applicant',
+    roleCodes: ['parent_guardian'],
+    deterministicAuthId: '00000000-0000-4000-9000-000000000015',
+  },
   {
     email: 'tutor.a@local.studdy.test',
     displayName: 'Synthetic Tutor A',
