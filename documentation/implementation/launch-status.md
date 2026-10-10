@@ -4,7 +4,7 @@
 slice. If this and another document disagree about what works, this one is right and the other
 needs fixing; if this one disagrees with the code, the code is right and this needs fixing.
 
-Last updated: **10 October 2026**, with tutor onboarding complete (after applications, settlement, refunds and the Booking entity).
+Last updated: **10 October 2026**, with the Parent workspace built (after tutor onboarding, applications, settlement, refunds and the Booking entity).
 
 How to read it: **Works** means built, tested and reachable by that role. **Partial** means a
 real piece exists but the journey does not finish. **Not started** means nothing a user can
@@ -28,20 +28,41 @@ visibly usable product by the end of October.
 
 ### Parent
 
-| Journey                                                                                                                       | Status                               |
-| ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| Add a student and a subject need                                                                                              | Works                                |
-| Shortlist tutors (cap of three)                                                                                               | Works                                |
-| Ask one tutor, or several tutors at once, for a lesson at chosen times                                                        | Works                                |
-| See, and come back to, their lesson requests (sidebar link and dashboard link, desktop and phone)                             | Works                                |
-| Choose the tutor and time once a tutor accepts                                                                                | Works                                |
-| Pay inside the payment window (Stripe Payment Element, retry on decline)                                                      | Works in Stripe test mode            |
-| Booking confirmed automatically when payment succeeds                                                                         | Works in Stripe test mode            |
-| Emails: payment required, booking confirmed, request expired, payment refunded                                                | Built, **not sending** (see Blocked) |
-| Get the money back when a paid lesson could not be booked (an operator starts it; the family is emailed)                      | Works in Stripe test mode            |
-| The locked Parent screens: Students, individual Student, Bookings, Calendar, Payments, Find a Tutor, My Tutors, Book a Lesson | Not started (Week 3)                 |
-| Cancel or reschedule a booking, get a refund on request                                                                       | Not started                          |
-| Lessons, summaries, homework, progress                                                                                        | Not started                          |
+The Parent workspace is one top navigation, **Home · Students · Bookings · Payments · Tutors**, with
+no sidebar, at every width. The same bar stays in place on tutor discovery and on the request screens.
+
+| Journey                                                                                                  | Status                                |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| **Home:** next lesson and payments due on one row, students as tiles, recent updates                     | Works                                 |
+| **Students:** list, add, open a student, correct their details                                           | Works                                 |
+| **Student page:** next lesson, their tutors, subjects and goals, their lessons                           | Works                                 |
+| Student page: latest lesson note, homework, progress                                                     | Honest empty state (needs Lessons)    |
+| Add a subject need, shortlist tutors (cap of three)                                                      | Works                                 |
+| **Tutors:** Find a Tutor (by student and subject), My Tutors (tutors with a booked lesson)               | Works                                 |
+| **Book a lesson:** with a tutor you already have, or a new one; student, subject, length, format, times  | Works                                 |
+| Ask one tutor, or several tutors at once, for a lesson at chosen times                                   | Works                                 |
+| Agree to policies before sending a request                                                               | Not built: wording is an owner call   |
+| **Bookings:** Upcoming, Requests (kept apart from bookings), Calendar (month), Past, one booking's page  | Works                                 |
+| Bookings: Recurring                                                                                      | Deferred, said so on the tab          |
+| Choose the tutor and time once a tutor accepts                                                           | Works                                 |
+| Pay inside the payment window (Stripe Payment Element, retry on decline)                                 | Works in Stripe test mode             |
+| Booking confirmed automatically when payment succeeds                                                    | Works in Stripe test mode             |
+| **Payments:** what is due, what has been paid, history, refunds, in parent-facing words only             | Works                                 |
+| Payments: saved cards (Payment Methods), account credit                                                  | Honest empty state (neither exists)   |
+| Emails: payment required, booking confirmed, request expired, payment refunded                           | Built, **not sending** (see Blocked)  |
+| Get the money back when a paid lesson could not be booked (an operator starts it; the family is emailed) | Works in Stripe test mode             |
+| Cancel or reschedule a booking, get a refund on request                                                  | Not started; the booking page says so |
+| Lessons, summaries, homework, progress                                                                   | Not started                           |
+
+**Start to finish:** sign up, choose Parent, add a child, add a subject, find a tutor, send a request,
+choose a tutor who accepted, pay, see the booking on Home, Bookings, the student's page and the
+calendar, see the payment under Payments, and book that tutor again from My Tutors.
+
+What a parent is shown is decided in one place. The family's bookings and payments are read through
+`family-overview.ts`, which is scoped to the student profiles the signed-in person may act for and
+selects no commission, tutor entitlement, provider cost or provider identifier, so no parent screen
+has an internal figure to show. Recent updates are derived from records (request sent, booking
+confirmed, refund completed); there is no notification feed behind them yet.
 
 ### Tutor
 
@@ -160,6 +181,12 @@ dependent student sees when they do have a login is open and is a product decisi
   that tutor.** This is the same action as the item above and unblocks both. The rule can be
   switched off (`services.publication_requires_payout_readiness` set to `false`), which lets tutors
   be found before they can be paid; a family choosing one would then be refused at payment.
+- **The Parent slice left three things for the owner.** (1) The approved Parent screen designs are not
+  in the repository, so the screens were built from the written specification and the existing
+  design system and need a visual review against the approved designs. (2) "Policies agreement" on
+  the request review step is not built: there is no cancellation or refund-on-request policy to
+  agree to yet, and its wording is a legal and product decision. (3) Saved cards are not built
+  (PD-014's card-on-file rule is still switched off), so Payment Methods is an honest empty state.
 - **Three onboarding policies are waiting on the owner** (`docs/decisions/tutor-onboarding-decisions.md`):
   whether a service can be rejected outright (TO-009), the payout rule above (TO-011), and whether
   profile text edits should be reviewed (TO-012, they are not today). Alongside the earlier open
@@ -179,6 +206,8 @@ the lesson lifecycle, **F** admin, owner and organisation, **G** launch hardenin
 **A** is done apart from one end-to-end sandbox run that needs a payable tutor. **B is done:** a
 new person can apply, be approved, set up, be reviewed, publish and be found, with the emails for
 each step built. What B leaves for later slices is staff-side control of a live service or tutor
-(restrict, suspend, unlist), which belongs to **F**. Next is **C**, the approved Parent
-experience. Out of scope for launch: chat, advanced analytics, external calendar sync, a large
+(restrict, suspend, unlist), which belongs to **F**. **C is built:** the Parent workspace covers
+Home, Students, Bookings, Payments and Tutors against the real backend, with honest empty states
+where the backend has nothing yet (lessons, recurring, saved cards, cancellation). Next is **D**,
+the approved Tutor workspace. Out of scope for launch: chat, advanced analytics, external calendar sync, a large
 Resources system.

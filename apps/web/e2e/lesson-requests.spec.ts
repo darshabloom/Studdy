@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { deliveriesForLatest, latestOutboxStatus } from './helpers/notifications';
+import { snap } from './helpers/screens';
 
 /**
  * End-to-end journeys for the Intended Lesson Request slice.
@@ -197,7 +198,39 @@ async function askMultipleAndReview(page: Page): Promise<void> {
  * The requests list is reachable from a workspace dashboard: through the
  * sidebar on desktop, and through the dashboard's own link below 768px, where
  * the sidebar is not rendered at all.
+ *
+ * That describes the sidebar workspaces. The Parent workspace has no sidebar:
+ * its navigation runs across the top at every width, and requests live under
+ * Bookings, beside the confirmed lessons they are not yet.
  */
+async function expectParentRequestsReachable(page: Page): Promise<void> {
+  for (const viewport of [null, { width: 375, height: 812 }]) {
+    if (viewport !== null) await page.setViewportSize(viewport);
+    await page.goto('/parent');
+    const bookings = page
+      .getByRole('navigation', { name: 'Workspace', exact: true })
+      .getByRole('link', { name: 'Bookings' });
+    await expect(bookings).toBeVisible({ timeout: 15_000 });
+    await bookings.click();
+    await expect(page).toHaveURL(/\/parent\/bookings$/, { timeout: 15_000 });
+
+    await page
+      .getByRole('navigation', { name: 'Booking views' })
+      .getByRole('link', { name: /^Requests/ })
+      .click();
+    await expect(page).toHaveURL(/view=requests/, { timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Open requests' })).toBeVisible();
+  }
+
+  // This account has real requests behind it, so these are the populated views.
+  await snap(page, 'parent-bookings-requests-populated');
+  await page.goto('/parent');
+  await expect(page.getByRole('heading', { name: 'Recent updates' })).toBeVisible({
+    timeout: 15_000,
+  });
+  await snap(page, 'parent-home-populated');
+}
+
 async function expectRequestsReachable(page: Page, dashboard: string): Promise<void> {
   const sidebarLink = page
     .getByRole('navigation', { name: 'Workspace' })
@@ -284,7 +317,7 @@ test.describe('lesson requests', () => {
     page,
   }) => {
     await signIn(page, REQUEST_PARENT);
-    await expectRequestsReachable(page, '/parent');
+    await expectParentRequestsReachable(page);
   });
 
   test('student: the requests list is reachable from the dashboard on desktop and phone', async ({

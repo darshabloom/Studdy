@@ -94,6 +94,16 @@ export const SYNTHETIC_USERS: readonly SyntheticUser[] = [
     deterministicAuthId: '00000000-0000-4000-9000-000000000015',
   },
   /**
+   * Owned by `parent-workspace.spec.ts`, which adds and renames a student. Its
+   * own account for the same reason as the three above.
+   */
+  {
+    email: 'parent.workspace@local.studdy.test',
+    displayName: 'Synthetic Workspace Parent',
+    roleCodes: ['parent_guardian'],
+    deterministicAuthId: '00000000-0000-4000-9000-000000000017',
+  },
+  /**
    * A tutor who has JUST BEEN APPROVED and has set nothing up: no service, no
    * availability, no payouts. Reserved for the tutor-onboarding journey, which
    * creates, publishes and removes services on this account and so must not

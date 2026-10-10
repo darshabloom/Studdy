@@ -4,7 +4,9 @@ import { Alert, RestrictedState, SidebarItem, WorkspaceShell } from '@studdy/des
 import { ROLE_DISPLAY_NAMES, type WorkspaceCode } from '@studdy/permissions';
 import type { ReactNode } from 'react';
 import { resolveIdentity } from '@/lib/identity/resolve';
+import { TopNavBar } from '@/components/layout/top-nav-bar';
 import { WORKSPACE_LABELS, WorkspaceTopBar } from '@/components/layout/workspace-top-bar';
+import type { TopNavItem } from '@/lib/parent/nav';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export interface WorkspaceChromeProps {
@@ -14,6 +16,12 @@ export interface WorkspaceChromeProps {
   /** Destinations that actually exist, rendered above the pending ones. */
   navLinks?: readonly { label: string; href: string }[];
   homeHref: string;
+  /**
+   * Render this workspace with its navigation across the top and no sidebar.
+   * The access check, the MFA gate and the restricted state are identical in
+   * both frames — only the furniture around them differs.
+   */
+  topNav?: readonly TopNavItem[];
   /** TOTP MFA required to enter (Platform Manager / Owner — approved 6 Aug 2026). */
   requireMfa?: boolean;
   children: ReactNode;
@@ -28,6 +36,7 @@ export async function WorkspaceChrome({
   navItems,
   navLinks = [],
   homeHref,
+  topNav,
   requireMfa = false,
   children,
 }: WorkspaceChromeProps) {
@@ -89,34 +98,71 @@ export async function WorkspaceChrome({
     </nav>
   );
 
+  const unavailable = !identity.databaseAvailable ? (
+    <div className="mb-4">
+      <Alert tone="warning" title="Workspace data unavailable">
+        The development database is not reachable from this environment, so roles and workspace
+        access cannot be resolved. Interface shown for layout review only.
+      </Alert>
+    </div>
+  ) : null;
+
+  const content = hasAccess ? (
+    children
+  ) : (
+    <RestrictedState
+      title={`You do not have access to the ${currentLabel} workspace`}
+      description={
+        !identity.databaseAvailable
+          ? 'Workspace access could not be verified while the database is unavailable. Try again shortly.'
+          : identity.roleAssignments.length === 0 && identity.pendingRoleCodes.length > 0
+            ? 'Your tutor application is registered but not yet approved. Tutor tools unlock after approval.'
+            : identity.roleAssignments.length === 0
+              ? 'Your account has no active roles yet.'
+              : `Your roles: ${identity.roleAssignments
+                  .map((assignment) => ROLE_DISPLAY_NAMES[assignment.roleCode])
+                  .join(', ')}.`
+      }
+    />
+  );
+
+  // Both frames take the SAME two children, so the access decision is made
+  // once and cannot differ between them.
+  if (topNav !== undefined) {
+    return (
+      <TopNavFrame
+        bar={
+          <TopNavBar
+            homeHref={homeHref}
+            items={topNav}
+            currentWorkspace={enteredWorkspace ?? accepts[0]!}
+            workspaces={identity.workspaces}
+            accountLabel={identity.displayName ?? identity.email ?? 'Your account'}
+          />
+        }
+      >
+        {unavailable}
+        {content}
+      </TopNavFrame>
+    );
+  }
+
   return (
     <WorkspaceShell topBar={topBar} sidebar={sidebar}>
-      {!identity.databaseAvailable ? (
-        <div className="mb-4">
-          <Alert tone="warning" title="Workspace data unavailable">
-            The development database is not reachable from this environment, so roles and workspace
-            access cannot be resolved. Interface shown for layout review only.
-          </Alert>
-        </div>
-      ) : null}
-      {hasAccess ? (
-        children
-      ) : (
-        <RestrictedState
-          title={`You do not have access to the ${currentLabel} workspace`}
-          description={
-            !identity.databaseAvailable
-              ? 'Workspace access could not be verified while the database is unavailable. Try again shortly.'
-              : identity.roleAssignments.length === 0 && identity.pendingRoleCodes.length > 0
-                ? 'Your tutor application is registered but not yet approved. Tutor tools unlock after approval.'
-                : identity.roleAssignments.length === 0
-                  ? 'Your account has no active roles yet.'
-                  : `Your roles: ${identity.roleAssignments
-                      .map((assignment) => ROLE_DISPLAY_NAMES[assignment.roleCode])
-                      .join(', ')}.`
-          }
-        />
-      )}
+      {unavailable}
+      {content}
     </WorkspaceShell>
+  );
+}
+
+/** The top-navigation frame: one bar, then the page. No sidebar. */
+function TopNavFrame({ bar, children }: { bar: ReactNode; children: ReactNode }): ReactNode {
+  return (
+    <div className="flex min-h-screen flex-col bg-surface-page text-text-primary">
+      <header className="sticky top-0 z-[1020] border-b border-surface-border bg-surface-card">
+        {bar}
+      </header>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 md:py-6">{children}</main>
+    </div>
   );
 }

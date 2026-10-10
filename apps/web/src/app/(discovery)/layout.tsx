@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { Button, PublicShell } from '@studdy/design-system';
 import type { ReactNode } from 'react';
 import { PublicFooter, PublicHeader } from '@/components/layout/public-nav';
+import { TopNavBar } from '@/components/layout/top-nav-bar';
 import { WorkspaceTopBar, workspaceHomeHref } from '@/components/layout/workspace-top-bar';
 import { resolveIdentity } from '@/lib/identity/resolve';
+import { PARENT_NAV } from '@/lib/parent/nav';
 
 /**
  * Tutor discovery is ONE route for everyone (`/tutors`), presented according
@@ -26,6 +28,25 @@ export default async function DiscoveryLayout({ children }: { children: ReactNod
       <PublicShell header={<PublicHeader />} footer={<PublicFooter />}>
         {children}
       </PublicShell>
+    );
+  }
+
+  // A parent keeps the Parent workspace's own navigation here, so finding a
+  // tutor or following a request never feels like leaving it.
+  if (identity.workspaces.includes('parent')) {
+    return (
+      <div className="flex min-h-screen flex-col bg-surface-page text-text-primary">
+        <header className="sticky top-0 z-[1020] border-b border-surface-border bg-surface-card">
+          <TopNavBar
+            homeHref="/parent"
+            items={PARENT_NAV}
+            currentWorkspace="parent"
+            workspaces={identity.workspaces}
+            accountLabel={identity.displayName ?? identity.email ?? 'Your account'}
+          />
+        </header>
+        <main className="flex-1">{children}</main>
+      </div>
     );
   }
 

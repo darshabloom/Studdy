@@ -91,6 +91,9 @@ export interface FamilyRequestView {
   readonly notesForTutors: string | null;
   readonly decisionDeadlineAt: Date;
   readonly closeReasonCode: string | null;
+  readonly createdAt: Date;
+  readonly closedAt: Date | null;
+  readonly studentProfileId: string;
   readonly studentPreferredName: string;
   readonly subjectDisplayName: string;
   readonly tutorRequests: readonly FamilyTutorRequestView[];
@@ -114,6 +117,9 @@ export async function listRequestsForStudents(
         notesForTutors: intendedLessonRequests.notesForTutors,
         decisionDeadlineAt: intendedLessonRequests.decisionDeadlineAt,
         closeReasonCode: intendedLessonRequests.closeReasonCode,
+        createdAt: intendedLessonRequests.createdAt,
+        closedAt: intendedLessonRequests.closedAt,
+        studentProfileId: studentProfiles.id,
         studentPreferredName: studentProfiles.preferredName,
         subjectDisplayName: subjects.displayName,
       })
@@ -211,6 +217,9 @@ export async function listRequestsForStudents(
       notesForTutors: row.notesForTutors,
       decisionDeadlineAt: row.decisionDeadlineAt,
       closeReasonCode: row.closeReasonCode,
+      createdAt: row.createdAt,
+      closedAt: row.closedAt,
+      studentProfileId: row.studentProfileId,
       studentPreferredName: row.studentPreferredName,
       subjectDisplayName: row.subjectDisplayName,
       tutorRequests: children
