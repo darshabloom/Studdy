@@ -31,10 +31,11 @@ defined in `packages/database/src/seed/synthetic-users.ts`).
 | student.requests@local.studdy.test    | Independent student — same       |
 | parent.booking@local.studdy.test      | Parent — booking-journey spec    |
 | parent.applicant@local.studdy.test    | Parent — tutor-application spec  |
+| parent.workspace@local.studdy.test    | Parent — parent-workspace spec   |
 
 ### Accounts owned by one end-to-end spec
 
-`parent.requests@`, `student.requests@`, `parent.booking@` and `parent.applicant@` belong to a single
+`parent.requests@`, `student.requests@`, `parent.booking@`, `parent.applicant@` and `parent.workspace@` belong to a single
 spec each and must not be borrowed. Playwright runs spec FILES in parallel, so a
 spec that signs one of these in and out drops the owning journey's session
 mid-flight, and the failure looks like a broken feature rather than a shared

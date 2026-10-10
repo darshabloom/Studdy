@@ -12,15 +12,22 @@ export interface StudentFormProps {
   /** Copy differs between "add my child" and "set up my own profile". */
   variant: 'dependent' | 'self';
   submitLabel: string;
+  /** Present when correcting an existing student rather than adding one. */
+  initial?: {
+    preferredName: string;
+    familyName: string | null;
+    schoolYearCode: string | null;
+    schoolOrProviderName: string | null;
+  };
 }
 
 /** Shared by the guardian's add-student flow and the independent student's setup. */
-export function StudentForm({ action, variant, submitLabel }: StudentFormProps) {
+export function StudentForm({ action, variant, submitLabel, initial }: StudentFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
-  const [preferredName, setPreferredName] = useState('');
-  const [familyName, setFamilyName] = useState('');
-  const [schoolYearCode, setSchoolYearCode] = useState('');
-  const [school, setSchool] = useState('');
+  const [preferredName, setPreferredName] = useState(initial?.preferredName ?? '');
+  const [familyName, setFamilyName] = useState(initial?.familyName ?? '');
+  const [schoolYearCode, setSchoolYearCode] = useState(initial?.schoolYearCode ?? '');
+  const [school, setSchool] = useState(initial?.schoolOrProviderName ?? '');
 
   const isSelf = variant === 'self';
 
