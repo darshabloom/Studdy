@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, ne, or } from 'drizzle-orm';
 import { createDatabaseClient } from '../client';
 import {
   bookings,
@@ -216,6 +216,44 @@ export async function listPaymentsForStudents(
         .filter((refund) => refund.paymentId === id)
         .map(({ paymentId: _paymentId, ...refund }) => refund),
     }));
+  } finally {
+    await sql.end();
+  }
+}
+
+export interface ArchivedStudentView {
+  readonly reference: string;
+  readonly preferredName: string;
+  readonly schoolYearCode: string | null;
+}
+
+/**
+ * Dependent students of this family who are no longer active.
+ *
+ * Names only, for the collapsed list at the foot of Students. Nothing can be
+ * done to them from there: there is no archive or restore action yet, so this
+ * is a read of whatever an operator has set.
+ */
+export async function listArchivedStudentsForFamily(
+  familyAccountId: string,
+): Promise<readonly ArchivedStudentView[]> {
+  const { sql, db } = createDatabaseClient();
+  try {
+    return await db
+      .select({
+        reference: studentProfiles.reference,
+        preferredName: studentProfiles.preferredName,
+        schoolYearCode: studentProfiles.schoolYearCode,
+      })
+      .from(studentProfiles)
+      .where(
+        and(
+          eq(studentProfiles.defaultFamilyAccountId, familyAccountId),
+          eq(studentProfiles.independenceStatusCode, 'dependent'),
+          or(isNotNull(studentProfiles.archivedAt), ne(studentProfiles.statusCode, 'active')),
+        ),
+      )
+      .orderBy(studentProfiles.preferredName);
   } finally {
     await sql.end();
   }

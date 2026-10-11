@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Button } from '@studdy/design-system';
-import { PageHeader, Panel, Section, TextLink } from '@/components/parent/kit';
+import { COMPACT, PageHeader, Panel, Section, TextLink } from '@/components/parent/kit';
 import { loadFamilyOverview } from '@/lib/parent/load';
 import { tutorRelationships } from '@/lib/parent/overview';
 
@@ -52,7 +52,7 @@ export default async function BookALessonPage() {
                         .join(', ')}
                     </p>
                   </div>
-                  <Button size="sm" asChild>
+                  <Button className={COMPACT} asChild>
                     <Link href={`/book?tutor=${tutor.tutorReference}`}>
                       Request a lesson with {tutor.tutorFirstName}
                     </Link>
@@ -71,7 +71,7 @@ export default async function BookALessonPage() {
             once.
           </p>
           <Button variant="secondary" asChild>
-            <Link href="/parent/tutors?view=find">Find a tutor</Link>
+            <Link href="/parent/tutors">Find a tutor</Link>
           </Button>
         </Panel>
       </Section>

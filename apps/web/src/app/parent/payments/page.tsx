@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { Button, StatusBadge } from '@studdy/design-system';
 import type { FamilyPaymentView } from '@studdy/database';
 import {
+  COMPACT,
   PageHeader,
   Panel,
   Quiet,
@@ -87,7 +88,7 @@ export default async function PaymentsPage({
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Payments" description="What you owe, what you have paid, and refunds." />
+      <PageHeader title="Payments" />
 
       <ViewTabs
         label="Payment views"
@@ -106,6 +107,36 @@ export default async function PaymentsPage({
 
       {view === 'overview' ? (
         <>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[var(--radius-medium)] bg-parent-gold-pale px-4 py-3">
+              <p className="text-xs font-medium text-text-secondary">Due now</p>
+              <p className="text-xl font-semibold text-text-primary tabular-nums">
+                {due.length === 0
+                  ? formatMoney(0n, 'NZD')
+                  : formatMoney(
+                      due.reduce((sum, item) => sum + item.amountMinor, 0n),
+                      due[0]!.currencyCode,
+                    )}
+              </p>
+            </div>
+            <div className="rounded-[var(--radius-medium)] bg-parent-sky px-4 py-3">
+              <p className="text-xs font-medium text-text-secondary">Paid for lessons</p>
+              <p className="text-xl font-semibold text-text-primary tabular-nums">
+                {paid.length === 0
+                  ? formatMoney(0n, 'NZD')
+                  : paid
+                      .map((total) => formatMoney(total.amountMinor, total.currencyCode))
+                      .join(' + ')}
+              </p>
+            </div>
+            <div className="rounded-[var(--radius-medium)] bg-parent-cream px-4 py-3">
+              <p className="text-xs font-medium text-text-secondary">Refunds</p>
+              <p className="text-xl font-semibold text-text-primary tabular-nums">
+                {refunds.length}
+              </p>
+            </div>
+          </div>
+
           <Section title="Due now">
             {due.length === 0 ? (
               <Quiet>
@@ -133,7 +164,7 @@ export default async function PaymentsPage({
                         <span className="font-semibold text-text-primary tabular-nums">
                           {formatMoney(item.amountMinor, item.currencyCode)}
                         </span>
-                        <Button size="sm" asChild>
+                        <Button className={COMPACT} asChild>
                           <Link href={`/requests/${item.requestReference}/pay`}>Pay now</Link>
                         </Button>
                       </div>
@@ -144,30 +175,22 @@ export default async function PaymentsPage({
             )}
           </Section>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Panel className="flex flex-col gap-1 p-5">
-              <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">
-                Paid for lessons
-              </p>
-              <p className="text-2xl font-semibold text-text-primary tabular-nums">
-                {paid.length === 0
-                  ? formatMoney(0n, 'NZD')
-                  : paid
-                      .map((total) => formatMoney(total.amountMinor, total.currencyCode))
-                      .join(' + ')}
-              </p>
-              <TextLink href="/parent/payments?view=history">See payment history</TextLink>
-            </Panel>
-            <Panel className="flex flex-col gap-1 p-5">
-              <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">
-                Refunds
-              </p>
-              <p className="text-2xl font-semibold text-text-primary tabular-nums">
-                {refunds.length}
-              </p>
-              <TextLink href="/parent/payments?view=refunds">See refunds</TextLink>
-            </Panel>
-          </div>
+          <Section
+            title="Recent payments"
+            action={<TextLink href="/parent/payments?view=history">All history</TextLink>}
+          >
+            {history.length === 0 ? (
+              <Quiet>No payments yet.</Quiet>
+            ) : (
+              <Panel>
+                <ul className="divide-y divide-surface-border">
+                  {history.slice(0, 3).map((payment) => (
+                    <PaymentRow key={payment.reference} payment={payment} />
+                  ))}
+                </ul>
+              </Panel>
+            )}
+          </Section>
         </>
       ) : null}
 

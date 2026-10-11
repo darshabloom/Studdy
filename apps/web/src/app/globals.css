@@ -22,3 +22,48 @@ body {
   color: var(--color-text-primary);
   font-family: var(--font-sans);
 }
+
+/*
+ * THE PARENT WORKSPACE'S OWN LOOK, scoped to it.
+ *
+ * Mostly white, deep navy for text and controls, golden yellow used sparingly
+ * as the one accent, with pale blue and cream as gentle section tints. These
+ * are the colours of the Studdy logo.
+ *
+ * It is a SCOPE, not a second design system: `.parent-theme` re-points the
+ * existing colour tokens, so every shared component inside it (buttons,
+ * badges, fields, alerts) takes the Parent colours without a variant or a
+ * copy. Outside the scope nothing changes, which is what lets the other
+ * workspaces be moved over one at a time rather than all at once.
+ */
+@theme {
+  --color-parent-navy: #0b2545;
+  --color-parent-gold: #f5a524;
+  --color-parent-gold-pale: #fff4dc;
+  --color-parent-sky: #eaf2fb;
+  --color-parent-cream: #fbf6ec;
+}
+
+.parent-theme {
+  --color-brand-purple-deep: #0b2545;
+  --color-brand-purple: #14365f;
+  --color-brand-purple-mid: #1d4a80;
+  --color-brand-lavender: #eaf2fb;
+
+  --color-surface-page: #ffffff;
+  --color-surface-card: #ffffff;
+  --color-surface-card-secondary: #f6f9fc;
+  --color-surface-border: #e1e7ef;
+
+  --color-text-primary: #0b2545;
+  --color-text-secondary: #42526a;
+  --color-text-muted: #5f6f86;
+
+  --color-action-primary: #0b2545;
+  --color-action-primary-hover: #14365f;
+  --color-action-primary-active: #071a33;
+  --color-focus-ring: #14365f;
+
+  background-color: var(--color-surface-page);
+  color: var(--color-text-primary);
+}

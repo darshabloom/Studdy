@@ -5,6 +5,7 @@ import { ROLE_DISPLAY_NAMES, type WorkspaceCode } from '@studdy/permissions';
 import type { ReactNode } from 'react';
 import { resolveIdentity } from '@/lib/identity/resolve';
 import { TopNavBar } from '@/components/layout/top-nav-bar';
+import { TopNavFrame } from '@/components/layout/top-nav-frame';
 import { WORKSPACE_LABELS, WorkspaceTopBar } from '@/components/layout/workspace-top-bar';
 import type { TopNavItem } from '@/lib/parent/nav';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -152,17 +153,5 @@ export async function WorkspaceChrome({
       {unavailable}
       {content}
     </WorkspaceShell>
-  );
-}
-
-/** The top-navigation frame: one bar, then the page. No sidebar. */
-function TopNavFrame({ bar, children }: { bar: ReactNode; children: ReactNode }): ReactNode {
-  return (
-    <div className="flex min-h-screen flex-col bg-surface-page text-text-primary">
-      <header className="sticky top-0 z-[1020] border-b border-surface-border bg-surface-card">
-        {bar}
-      </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 md:py-6">{children}</main>
-    </div>
   );
 }

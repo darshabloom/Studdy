@@ -132,7 +132,22 @@ describe.skipIf(!available)('family overview (integration)', () => {
     expect(payment!.refundRequired).toBe(false);
     expect(payment!.bookingReference).toBe(booking!.reference);
     expect(payment!.totalChargedMinor).toBe(5500n);
-    expect(payment!.lessonStartAt?.getTime()).toBe(booking!.scheduledStartAt.getTime());
+    // Compared with the option the tutor claimed, which is the row this field is
+    // read from. NOT with the booking's start: the fixture writes the option and
+    // the reservation in separate statements, each with its own `now()`, so the
+    // two sit a couple of milliseconds apart here. The product writes both from
+    // the one instant the family chose, and nothing is rounded on the way in or out.
+    const { sql } = createDatabaseClient();
+    try {
+      const [option] = await sql`
+        select o.starts_at
+        from bookings.tutor_requests tr
+        join bookings.tutor_request_time_options o on o.id = tr.accepted_time_option_id
+        where tr.id = ${fixture.tutorRequestId}::uuid`;
+      expect(payment!.lessonStartAt?.getTime()).toBe((option!['starts_at'] as Date).getTime());
+    } finally {
+      await sql.end();
+    }
     expect(payment!.refunds).toEqual([]);
 
     // The request that became this booking is `fulfilled`, and carries the

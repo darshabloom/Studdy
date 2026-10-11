@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import type { WorkspaceCode } from '@studdy/permissions';
 import type { ReactNode } from 'react';
@@ -37,11 +38,15 @@ export function TopNavBar({
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 px-4">
-      <Link
-        href={homeHref}
-        className="order-1 py-2 font-display text-xl font-semibold text-brand-purple-deep"
-      >
-        Studdy
+      <Link href={homeHref} className="order-1 flex items-center py-1">
+        <Image
+          src="/brand/studdy-logo.png"
+          alt="Studdy"
+          width={377}
+          height={182}
+          priority
+          className="h-[34px] w-auto"
+        />
       </Link>
       <div className="order-3 w-full min-w-0 md:order-2 md:w-auto md:flex-1">
         <TopNavLinks items={items} />

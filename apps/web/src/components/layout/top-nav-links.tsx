@@ -28,7 +28,7 @@ export function TopNavLinks({ items }: { items: readonly TopNavItem[] }): ReactN
             aria-current={active ? 'page' : undefined}
             className={
               active
-                ? 'shrink-0 border-b-2 border-brand-purple px-3 py-3 text-sm font-semibold text-brand-purple-deep'
+                ? 'shrink-0 border-b-2 border-parent-gold px-3 py-3 text-sm font-semibold text-brand-purple-deep'
                 : 'shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-medium text-text-secondary hover:border-surface-border hover:text-text-primary'
             }
           >

@@ -31,28 +31,28 @@ visibly usable product by the end of October.
 The Parent workspace is one top navigation, **Home · Students · Bookings · Payments · Tutors**, with
 no sidebar, at every width. The same bar stays in place on tutor discovery and on the request screens.
 
-| Journey                                                                                                  | Status                                |
-| -------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| **Home:** next lesson and payments due on one row, students as tiles, recent updates                     | Works                                 |
-| **Students:** list, add, open a student, correct their details                                           | Works                                 |
-| **Student page:** next lesson, their tutors, subjects and goals, their lessons                           | Works                                 |
-| Student page: latest lesson note, homework, progress                                                     | Honest empty state (needs Lessons)    |
-| Add a subject need, shortlist tutors (cap of three)                                                      | Works                                 |
-| **Tutors:** Find a Tutor (by student and subject), My Tutors (tutors with a booked lesson)               | Works                                 |
-| **Book a lesson:** with a tutor you already have, or a new one; student, subject, length, format, times  | Works                                 |
-| Ask one tutor, or several tutors at once, for a lesson at chosen times                                   | Works                                 |
-| Agree to policies before sending a request                                                               | Not built: wording is an owner call   |
-| **Bookings:** Upcoming, Requests (kept apart from bookings), Calendar (month), Past, one booking's page  | Works                                 |
-| Bookings: Recurring                                                                                      | Deferred, said so on the tab          |
-| Choose the tutor and time once a tutor accepts                                                           | Works                                 |
-| Pay inside the payment window (Stripe Payment Element, retry on decline)                                 | Works in Stripe test mode             |
-| Booking confirmed automatically when payment succeeds                                                    | Works in Stripe test mode             |
-| **Payments:** what is due, what has been paid, history, refunds, in parent-facing words only             | Works                                 |
-| Payments: saved cards (Payment Methods), account credit                                                  | Honest empty state (neither exists)   |
-| Emails: payment required, booking confirmed, request expired, payment refunded                           | Built, **not sending** (see Blocked)  |
-| Get the money back when a paid lesson could not be booked (an operator starts it; the family is emailed) | Works in Stripe test mode             |
-| Cancel or reschedule a booking, get a refund on request                                                  | Not started; the booking page says so |
-| Lessons, summaries, homework, progress                                                                   | Not started                           |
+| Journey                                                                                                  | Status                                                                              |
+| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **Home:** next lesson and payments due on one row, students as tiles, recent updates                     | Works                                                                               |
+| **Students:** list, add, open a student, correct their details                                           | Works                                                                               |
+| **Student page:** next lesson, their tutors, subjects and goals, their lessons                           | Works                                                                               |
+| Student page tabs: Overview, Progress, Homework, Lessons, Goals, Resources, Tutors                       | Works; Progress, Homework, Resources and the lesson summary are honest empty states |
+| Add a subject need, shortlist tutors (cap of three)                                                      | Works                                                                               |
+| **Tutors:** Find a Tutor (by student and subject), My Tutors (tutors with a booked lesson)               | Works                                                                               |
+| **Book a lesson:** with a tutor you already have, or a new one; student, subject, length, format, times  | Works                                                                               |
+| Ask one tutor, or several tutors at once, for a lesson at chosen times                                   | Works                                                                               |
+| Agree to policies before sending a request                                                               | **Still required for launch**; waits on the cancellation policy                     |
+| **Bookings:** Upcoming, Requests (kept apart from bookings), Calendar (month), Past, one booking's page  | Works                                                                               |
+| Bookings: Recurring                                                                                      | Deferred, said so on the tab                                                        |
+| Choose the tutor and time once a tutor accepts                                                           | Works                                                                               |
+| Pay inside the payment window (Stripe Payment Element, retry on decline)                                 | Works in Stripe test mode                                                           |
+| Booking confirmed automatically when payment succeeds                                                    | Works in Stripe test mode                                                           |
+| **Payments:** what is due, what has been paid, history, refunds, in parent-facing words only             | Works                                                                               |
+| Payments: saved cards (Payment Methods), account credit                                                  | Honest empty state (neither exists)                                                 |
+| Emails: payment required, booking confirmed, request expired, payment refunded                           | Built, **not sending** (see Blocked)                                                |
+| Get the money back when a paid lesson could not be booked (an operator starts it; the family is emailed) | Works in Stripe test mode                                                           |
+| Cancel or reschedule a booking, get a refund on request                                                  | Not started; the booking page says so                                               |
+| Lessons, summaries, homework, progress                                                                   | Not started                                                                         |
 
 **Start to finish:** sign up, choose Parent, add a child, add a subject, find a tutor, send a request,
 choose a tutor who accepted, pay, see the booking on Home, Bookings, the student's page and the
@@ -181,12 +181,21 @@ dependent student sees when they do have a login is open and is a product decisi
   that tutor.** This is the same action as the item above and unblocks both. The rule can be
   switched off (`services.publication_requires_payout_readiness` set to `false`), which lets tutors
   be found before they can be paid; a family choosing one would then be refused at payment.
-- **The Parent slice left three things for the owner.** (1) The approved Parent screen designs are not
-  in the repository, so the screens were built from the written specification and the existing
-  design system and need a visual review against the approved designs. (2) "Policies agreement" on
-  the request review step is not built: there is no cancellation or refund-on-request policy to
-  agree to yet, and its wording is a legal and product decision. (3) Saved cards are not built
-  (PD-014's card-on-file rule is still switched off), so Payment Methods is an honest empty state.
+- **Parent launch is not complete until these are done.** (1) **Policy agreement on the request
+  review step is still required** and is not built. It is to be settled together with the
+  cancellation, reschedule and refund-on-request policy, not written ahead of it; until then the
+  request flow says only what is true (nothing is booked or charged when a request is sent).
+  (2) Cancel and reschedule. (3) Saved cards (PD-014's card-on-file rule is still switched off), so
+  Payment Methods is an honest empty state.
+- **The Parent look is scoped to the Parent workspace.** The locked direction (white, deep navy,
+  golden yellow used sparingly, pale blue and cream tints, the Studdy logo, soft corner shapes) is
+  a colour scope, `.parent-theme`, applied to the Parent workspace and to tutor discovery and the
+  request screens when a parent is signed in. The step-by-step request journeys (`/book`,
+  `/shortlist`) are shared with independent students and still use the earlier purple look, as do
+  the public site and every other workspace. Moving those is its own piece of work.
+- **Parent screens show a stand-in where the data does not exist yet:** tutor and student photos
+  (an initial on a tint; there is no photo upload), archiving a student (the collapsed Archived
+  list is read-only), important dates, and the Progress, Homework and Resources tabs.
 - **Three onboarding policies are waiting on the owner** (`docs/decisions/tutor-onboarding-decisions.md`):
   whether a service can be rejected outright (TO-009), the payout rule above (TO-011), and whether
   profile text edits should be reviewed (TO-012, they are not today). Alongside the earlier open

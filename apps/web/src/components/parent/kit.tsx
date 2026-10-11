@@ -10,6 +10,45 @@ import { bookingStatus, formatLabel } from '@/lib/parent/overview';
  * surfaces, hairline borders, one accent — so the content is what reads.
  */
 
+/**
+ * A compact control height for buttons inside rows and cards.
+ *
+ * The design system's `sm` button resolves to 64px here, because the spacing
+ * scale re-points `h-8`. A fixed height is stated outright instead, and marked
+ * important so it wins over the size class it replaces.
+ */
+export const COMPACT = 'h-[34px]! px-[12px]!';
+
+/** A small round stand-in for a person's picture: their initial, on a tint. */
+export function Initial({
+  name,
+  tone = 'sky',
+}: {
+  name: string;
+  tone?: 'sky' | 'gold';
+}): ReactNode {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full text-base font-semibold text-parent-navy ${
+        tone === 'gold' ? 'bg-parent-gold-pale' : 'bg-parent-sky'
+      }`}
+    >
+      {name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+/** A label and its value, stacked, for the facts on a card. */
+export function Fact({ label, children }: { label: string; children: ReactNode }): ReactNode {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-text-muted">{label}</p>
+      <div className="text-sm text-text-primary">{children}</div>
+    </div>
+  );
+}
+
 export function PageHeader({
   title,
   description,
@@ -22,9 +61,7 @@ export function PageHeader({
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="font-display text-2xl font-semibold text-brand-purple-deep md:text-3xl">
-          {title}
-        </h1>
+        <h1 className="text-2xl font-semibold text-brand-purple-deep">{title}</h1>
         {description !== undefined ? (
           <p className="mt-1 max-w-2xl text-sm text-text-secondary">{description}</p>
         ) : null}
@@ -65,7 +102,7 @@ export function ViewTabs({
             aria-current={active ? 'page' : undefined}
             className={
               active
-                ? '-mb-px shrink-0 border-b-2 border-brand-purple px-3 py-2 text-sm font-semibold text-brand-purple-deep'
+                ? '-mb-px shrink-0 border-b-2 border-parent-gold px-3 py-2 text-sm font-semibold text-brand-purple-deep'
                 : '-mb-px shrink-0 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary'
             }
           >
@@ -94,7 +131,7 @@ export function Section({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
+        <h2 className="text-base font-semibold text-text-primary">{title}</h2>
         {action}
       </div>
       {children}

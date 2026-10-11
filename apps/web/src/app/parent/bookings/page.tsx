@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Button } from '@studdy/design-system';
+import { Button, StatusBadge } from '@studdy/design-system';
 import type { FamilyBookingView, FamilyRequestView } from '@studdy/database';
 import {
+  COMPACT,
   BookingRow,
   PageHeader,
   Panel,
@@ -12,10 +13,13 @@ import {
   ViewTabs,
   lessonDay,
   lessonTime,
+  lessonTimeRange,
 } from '@/components/parent/kit';
 import { FamilyRequestStatus, formatLessonDateTime } from '@/components/requests/request-status';
 import { loadFamilyOverview } from '@/lib/parent/load';
 import {
+  bookingStatus,
+  formatLabel,
   isOpenRequest,
   localDateKey,
   monthKey,
@@ -60,11 +64,11 @@ function RequestRow({ request }: { request: FamilyRequestView }) {
           closeReasonCode={request.closeReasonCode}
         />
         {request.statusCode === 'ready_for_selection' ? (
-          <Button size="sm" asChild>
+          <Button className={COMPACT} asChild>
             <Link href={`/requests/${request.reference}/select`}>Choose a tutor</Link>
           </Button>
         ) : request.statusCode === 'awaiting_payment' ? (
-          <Button size="sm" asChild>
+          <Button className={COMPACT} asChild>
             <Link href={`/requests/${request.reference}/pay`}>Pay now</Link>
           </Button>
         ) : (
@@ -155,7 +159,7 @@ function MonthCalendar({
                     <p
                       className={
                         day.dateKey === todayKey
-                          ? 'text-sm font-semibold text-brand-purple'
+                          ? 'flex h-[24px] w-[24px] items-center justify-center rounded-full bg-parent-gold text-sm font-semibold text-parent-navy'
                           : 'text-sm text-text-secondary'
                       }
                     >
@@ -183,6 +187,21 @@ function MonthCalendar({
           </div>
         ))}
       </Panel>
+
+      <ul className="flex flex-wrap items-center gap-4 text-xs text-text-secondary">
+        <li className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="h-[12px] w-[12px] rounded-[3px] border border-brand-purple/30 bg-brand-lavender"
+          />
+          Confirmed lesson
+        </li>
+        <li className="flex items-center gap-2">
+          <span aria-hidden="true" className="h-[12px] w-[12px] rounded-full bg-parent-gold" />
+          Today
+        </li>
+        <li>Requests are not shown until they are booked.</li>
+      </ul>
 
       {/* Phones: the same lessons as a dated list. A seven-column grid at 375px
           leaves no room for a lesson's name. */}
@@ -244,7 +263,6 @@ export default async function BookingsPage({
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Bookings"
-        description="Confirmed lessons, and the requests that are not bookings yet."
         action={
           <Button asChild>
             <Link href="/parent/book">Book a lesson</Link>
@@ -283,12 +301,56 @@ export default async function BookingsPage({
             )}
           </Quiet>
         ) : (
-          <Panel>
-            <ul className="divide-y divide-surface-border">
-              {upcoming.map((booking) => (
-                <BookingRow key={booking.reference} booking={booking} now={now} />
-              ))}
-            </ul>
+          <Panel className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b border-surface-border bg-surface-card-secondary text-xs font-semibold text-text-muted">
+                <tr>
+                  <th scope="col" className="px-4 py-2">
+                    When
+                  </th>
+                  <th scope="col" className="px-4 py-2">
+                    Student
+                  </th>
+                  <th scope="col" className="px-4 py-2">
+                    Subject
+                  </th>
+                  <th scope="col" className="px-4 py-2">
+                    Tutor
+                  </th>
+                  <th scope="col" className="px-4 py-2">
+                    Format
+                  </th>
+                  <th scope="col" className="px-4 py-2">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-border">
+                {upcoming.map((booking) => {
+                  const status = bookingStatus(booking, now);
+                  return (
+                    <tr key={booking.reference}>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/parent/bookings/${booking.reference}`}
+                          className="font-medium text-text-primary hover:underline"
+                        >
+                          {lessonDay(booking.scheduledStartAt, booking.timeZone)}
+                        </Link>
+                        <p className="text-text-secondary">{lessonTimeRange(booking)}</p>
+                      </td>
+                      <td className="px-4 py-3">{booking.studentPreferredName}</td>
+                      <td className="px-4 py-3">{booking.subjectDisplayName}</td>
+                      <td className="px-4 py-3">{booking.tutorFirstName}</td>
+                      <td className="px-4 py-3">{formatLabel(booking.lessonFormatCode)}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge family={status.family}>{status.label}</StatusBadge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </Panel>
         )
       ) : null}
@@ -339,7 +401,7 @@ export default async function BookingsPage({
         <Quiet>
           Recurring lessons are not available yet. For now each lesson is requested on its own — to
           keep a regular time with a tutor, request the next lesson from{' '}
-          <TextLink href="/parent/tutors">your tutors</TextLink>.
+          <TextLink href="/parent/tutors?view=mine">your tutors</TextLink>.
         </Quiet>
       ) : null}
 

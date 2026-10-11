@@ -1,12 +1,21 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { searchPublicTutors, type PublicTutorRow } from '@studdy/database';
 import { Button } from '@studdy/design-system';
-import { schoolYearLabel } from '@studdy/domain/students';
 import {
+  availabilityLabel,
+  formatLabel,
+  priceLabel,
+  ratingLabel,
+  verificationLabel,
+  yearLevelRangeLabel,
+} from '@studdy/domain/discovery';
+import {
+  COMPACT,
+  Fact,
+  Initial,
   PageHeader,
-  Panel,
   Quiet,
-  Section,
   TextLink,
   ViewTabs,
   lessonDay,
@@ -17,8 +26,42 @@ import { tutorRelationships } from '@/lib/parent/overview';
 
 export const metadata = { title: 'Tutors' };
 
-const VIEWS = ['mine', 'find'] as const;
+const VIEWS = ['find', 'mine'] as const;
 type View = (typeof VIEWS)[number];
+
+interface TutorCardModel {
+  readonly tutor: PublicTutorRow;
+  readonly subjects: readonly string[];
+  readonly lowest: PublicTutorRow;
+}
+
+/**
+ * The public search returns one row per tutor and subject. A card is one
+ * tutor, so the rows are folded: every subject they teach, and the lowest
+ * price among them, which is the only "typical rate" the data can honestly
+ * support — it is labelled "from", with the lesson length it buys.
+ */
+function foldTutors(rows: readonly PublicTutorRow[]): readonly TutorCardModel[] {
+  const byTutor = new Map<string, PublicTutorRow[]>();
+  for (const row of rows) {
+    byTutor.set(row.tutorReference, [...(byTutor.get(row.tutorReference) ?? []), row]);
+  }
+  return [...byTutor.values()].map((list) => ({
+    tutor: list[0]!,
+    subjects: [...new Set(list.map((row) => row.subjectDisplayName))],
+    lowest: list.reduce((least, row) =>
+      row.startingPriceAmountMinor < least.startingPriceAmountMinor ? row : least,
+    ),
+  }));
+}
+
+function Badge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-[var(--radius-pill)] bg-parent-sky px-2 py-px text-xs font-medium text-parent-navy">
+      {children}
+    </span>
+  );
+}
 
 export default async function TutorsPage({
   searchParams,
@@ -29,165 +72,179 @@ export default async function TutorsPage({
   const overview = await loadFamilyOverview();
   if (overview === null) redirect('/sign-in?next=%2Fparent%2Ftutors');
 
-  const now = new Date();
-  const tutors = tutorRelationships(overview.bookings, now);
-  const { students, subjectSections } = overview.context;
-  // With no tutors yet, finding one is the useful place to land.
-  const fallback: View = tutors.length === 0 ? 'find' : 'mine';
   const view: View = (VIEWS as readonly string[]).includes(params.view ?? '')
     ? (params.view as View)
-    : fallback;
+    : 'find';
+  const now = new Date();
+  const relationships = tutorRelationships(overview.bookings, now);
+  const { students, subjectSections } = overview.context;
+  const cards = view === 'find' ? foldTutors(await searchPublicTutors()) : [];
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Tutors"
-        description="The tutors you have booked, and the way to find a new one."
-      />
+      <PageHeader title="Tutors" />
 
       <ViewTabs
         label="Tutor views"
         current={view}
         tabs={[
+          { key: 'find', label: 'Find a tutor', href: '/parent/tutors' },
           {
             key: 'mine',
-            label: 'My Tutors',
+            label: 'My tutors',
             href: '/parent/tutors?view=mine',
-            count: tutors.length,
+            count: relationships.length,
           },
-          { key: 'find', label: 'Find a Tutor', href: '/parent/tutors?view=find' },
         ]}
       />
 
-      {view === 'mine' ? (
-        tutors.length === 0 ? (
-          <Quiet>
-            No tutors yet. A tutor is listed here once you have a booked lesson with them.{' '}
-            <TextLink href="/parent/tutors?view=find">Find a tutor</TextLink>
-          </Quiet>
-        ) : (
-          <Panel>
-            <ul className="divide-y divide-surface-border">
-              {tutors.map((tutor) => (
-                <li
-                  key={tutor.tutorReference}
-                  className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] md:items-center"
-                >
-                  <div className="min-w-0">
-                    <Link
-                      href={`/tutors/${tutor.tutorReference}`}
-                      className="text-base font-semibold text-text-primary hover:underline"
-                    >
-                      {tutor.tutorFirstName}
-                    </Link>
-                    <p className="text-sm text-text-secondary">
-                      {tutor.teaching
-                        .map(
-                          (entry) =>
-                            `${entry.subjectDisplayName} for ${entry.studentPreferredName}`,
-                        )
-                        .join(', ')}
-                    </p>
-                  </div>
-                  <div className="min-w-0 text-sm">
-                    <p className="text-text-muted">Next lesson</p>
-                    <p className="text-text-primary">
-                      {tutor.nextLesson === null
-                        ? 'Nothing booked'
-                        : `${lessonDay(tutor.nextLesson.scheduledStartAt, tutor.nextLesson.timeZone)}, ${lessonTime(
-                            tutor.nextLesson.scheduledStartAt,
-                            tutor.nextLesson.timeZone,
-                          )}`}
-                    </p>
-                    <p className="text-text-secondary">
-                      {tutor.lessonCount === 1
-                        ? '1 lesson booked in total'
-                        : `${String(tutor.lessonCount)} lessons booked in total`}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" asChild>
-                      <Link href={`/book?tutor=${tutor.tutorReference}`}>Book a lesson</Link>
-                    </Button>
-                    <Button variant="secondary" size="sm" asChild>
-                      <Link href={`/tutors/${tutor.tutorReference}`}>View profile</Link>
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        )
-      ) : null}
-
       {view === 'find' ? (
         <>
-          {students.length === 0 ? (
-            <Quiet>
-              Add a student first, so tutors can be matched to their year level.{' '}
-              <TextLink href="/parent/students/new">Add a student</TextLink>
-            </Quiet>
+          {subjectSections.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-medium)] bg-parent-cream px-4 py-3 text-sm">
+              <span className="text-text-secondary">Match tutors to:</span>
+              {subjectSections.map((section) => {
+                const student = students.find(
+                  (entry) => entry.studentProfileId === section.studentProfileId,
+                );
+                return (
+                  <Link
+                    key={section.subjectSectionId}
+                    href={`/tutors?section=${section.subjectSectionId}`}
+                    className="rounded-[var(--radius-pill)] border border-surface-border bg-surface-card px-3 py-1 font-medium text-brand-purple hover:border-brand-purple"
+                  >
+                    {section.subjectDisplayName} for {student?.preferredName ?? 'student'}
+                  </Link>
+                );
+              })}
+              <span className="ml-auto">
+                <TextLink href="/tutors">Search with filters</TextLink>
+              </span>
+            </div>
           ) : (
-            <Section
-              title="Find tutors for a subject"
-              action={<TextLink href="/parent/subjects/new">Add a subject</TextLink>}
-            >
-              {subjectSections.length === 0 ? (
-                <Quiet>
-                  Tell us what a student needs help with and we will show tutors who teach it at
-                  their level.
-                </Quiet>
-              ) : (
-                <Panel>
-                  <ul className="divide-y divide-surface-border">
-                    {subjectSections.map((section) => {
-                      const student = students.find(
-                        (entry) => entry.studentProfileId === section.studentProfileId,
-                      );
-                      return (
-                        <li
-                          key={section.subjectSectionId}
-                          className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-medium text-text-primary">
-                              {section.subjectDisplayName} for {student?.preferredName ?? 'student'}
-                            </p>
-                            <p className="text-sm text-text-secondary">
-                              {section.schoolYearCode === null
-                                ? 'Year level not set'
-                                : schoolYearLabel(section.schoolYearCode)}
-                              {section.shortlistCount > 0
-                                ? ` · ${String(section.shortlistCount)} shortlisted`
-                                : ''}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {section.shortlistCount > 0 ? (
-                              <Button variant="secondary" size="sm" asChild>
-                                <Link href={`/shortlist/${section.subjectSectionId}`}>
-                                  Review shortlist
-                                </Link>
-                              </Button>
-                            ) : null}
-                            <Button size="sm" asChild>
-                              <Link href={`/tutors?section=${section.subjectSectionId}`}>
-                                Find tutors
-                              </Link>
-                            </Button>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </Panel>
-              )}
-            </Section>
+            <div className="rounded-[var(--radius-medium)] bg-parent-cream px-4 py-3 text-sm text-text-secondary">
+              Add a subject for a student and tutors can be matched to their year level.{' '}
+              <TextLink
+                href={students.length === 0 ? '/parent/students/new' : '/parent/subjects/new'}
+              >
+                {students.length === 0 ? 'Add a student' : 'Add a subject'}
+              </TextLink>
+            </div>
           )}
-          <div>
-            <TextLink href="/tutors">Browse all tutors</TextLink>
-          </div>
+
+          {cards.length === 0 ? (
+            <Quiet>No tutors are listed at the moment.</Quiet>
+          ) : (
+            <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {cards.map(({ tutor, subjects, lowest }) => {
+                const rating = ratingLabel(tutor.ratingHundredths);
+                return (
+                  <li
+                    key={tutor.tutorReference}
+                    className="flex flex-col gap-3 rounded-[var(--radius-medium)] border border-surface-border bg-surface-card p-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Initial name={tutor.firstName} tone="gold" />
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-semibold text-text-primary">
+                          {tutor.firstName}
+                        </p>
+                        <p className="text-sm text-text-secondary">
+                          From{' '}
+                          <span className="font-semibold text-text-primary tabular-nums">
+                            {priceLabel(lowest.startingPriceAmountMinor, lowest.currencyCode)}
+                          </span>{' '}
+                          for {lowest.startingPriceDurationMinutes} minutes
+                        </p>
+                      </div>
+                    </div>
+                    {tutor.headline !== null ? (
+                      <p className="text-sm text-text-secondary">{tutor.headline}</p>
+                    ) : null}
+                    <p className="text-sm text-text-primary">
+                      {subjects.join(', ')} ·{' '}
+                      {yearLevelRangeLabel(tutor.yearLevelFrom, tutor.yearLevelTo)}
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge>{formatLabel(tutor.offersOnline, tutor.offersInPerson)}</Badge>
+                      <Badge>{availabilityLabel(tutor.availabilityLabelCode)}</Badge>
+                      {rating !== null ? <Badge>{rating} rating</Badge> : null}
+                      {tutor.isNewToStuddy ? <Badge>New to Studdy</Badge> : null}
+                      {tutor.verificationLabels.map((code) => (
+                        <Badge key={code}>{verificationLabel(code)}</Badge>
+                      ))}
+                      {tutor.isExampleProfile ? <Badge>Example profile</Badge> : null}
+                    </div>
+                    <div className="mt-auto flex flex-wrap gap-2 pt-1">
+                      <Button className={COMPACT} asChild>
+                        <Link href={`/book?tutor=${tutor.tutorReference}`}>Request a lesson</Link>
+                      </Button>
+                      <Button variant="secondary" className={COMPACT} asChild>
+                        <Link href={`/tutors/${tutor.tutorReference}`}>View profile</Link>
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </>
+      ) : null}
+
+      {view === 'mine' ? (
+        relationships.length === 0 ? (
+          <Quiet>
+            No tutors yet. A tutor is listed here once you have a booked lesson with them.{' '}
+            <TextLink href="/parent/tutors">Find a tutor</TextLink>
+          </Quiet>
+        ) : (
+          <ul className="grid gap-4 md:grid-cols-2">
+            {relationships.map((tutor) => (
+              <li
+                key={tutor.tutorReference}
+                className="flex flex-col gap-4 rounded-[var(--radius-medium)] border border-surface-border bg-surface-card p-5"
+              >
+                <div className="flex items-center gap-3">
+                  <Initial name={tutor.tutorFirstName} tone="gold" />
+                  <p className="text-base font-semibold text-text-primary">
+                    {tutor.tutorFirstName}
+                  </p>
+                </div>
+                <div className="grid gap-3 border-t border-surface-border pt-4 sm:grid-cols-3">
+                  <Fact label={tutor.teaching.length === 1 ? 'Student' : 'Students'}>
+                    {[...new Set(tutor.teaching.map((entry) => entry.studentPreferredName))].join(
+                      ', ',
+                    )}
+                  </Fact>
+                  <Fact label="Subjects">
+                    {[...new Set(tutor.teaching.map((entry) => entry.subjectDisplayName))].join(
+                      ', ',
+                    )}
+                  </Fact>
+                  <Fact label="Next lesson">
+                    {tutor.nextLesson === null
+                      ? 'Nothing booked'
+                      : `${lessonDay(
+                          tutor.nextLesson.scheduledStartAt,
+                          tutor.nextLesson.timeZone,
+                        )}, ${lessonTime(
+                          tutor.nextLesson.scheduledStartAt,
+                          tutor.nextLesson.timeZone,
+                        )}`}
+                  </Fact>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button className={COMPACT} asChild>
+                    <Link href={`/book?tutor=${tutor.tutorReference}`}>Book lesson</Link>
+                  </Button>
+                  <Button variant="secondary" className={COMPACT} asChild>
+                    <Link href={`/tutors/${tutor.tutorReference}`}>View profile</Link>
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )
       ) : null}
     </div>
   );

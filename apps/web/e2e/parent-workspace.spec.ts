@@ -131,12 +131,31 @@ test.describe('parent workspace', () => {
     await expect(page).toHaveURL(/\/parent\/students\/STUDENT-\d+$/, { timeout: 15_000 });
     await expect(page.getByRole('heading', { level: 1, name: /Wren/ })).toBeVisible();
 
+    // The locked sections, in order, with Overview open.
+    const sections = page.getByRole('navigation', { name: 'Student sections' });
+    await expect(sections.getByRole('link')).toHaveText([
+      'Overview',
+      'Progress',
+      'Homework',
+      'Lessons',
+      'Goals',
+      'Resources',
+      'Tutors',
+    ]);
+    await expect(page.getByText('Next lesson', { exact: true })).toBeVisible();
+    await expect(page.getByText('Current tutors', { exact: true })).toBeVisible();
+    await expect(page.getByText('Important dates', { exact: true })).toBeVisible();
+
     // What Studdy cannot show yet is said in a sentence, not drawn as if it existed.
-    await expect(
-      page.getByRole('heading', { name: 'Lesson notes, homework and progress' }),
-    ).toBeVisible();
+    await expect(page.getByText('Latest lesson summary', { exact: true })).toBeVisible();
     await expect(page.getByText(/Not available yet/)).toBeVisible();
     await snap(page, 'parent-student');
+
+    await sections.getByRole('link', { name: 'Homework' }).click();
+    await expect(page).toHaveURL(/tab=homework/, { timeout: 15_000 });
+    await expect(page.getByText(/Homework cannot be shown yet/)).toBeVisible();
+    await sections.getByRole('link', { name: 'Overview' }).click();
+    await expect(page).toHaveURL(/\/parent\/students\/STUDENT-\d+$/, { timeout: 15_000 });
 
     await clickUntilNavigated(page, page.getByRole('link', { name: 'Edit details' }));
     await expect(page).toHaveURL(/\/edit$/, { timeout: 15_000 });
@@ -177,6 +196,25 @@ test.describe('parent workspace', () => {
     await expect(page).toHaveURL(/view=calendar/, { timeout: 15_000 });
     await expect(page.getByRole('link', { name: 'Next →' })).toBeVisible();
     await snap(page, 'parent-bookings-calendar');
+  });
+
+  test('tutors opens on finding one, with my tutors beside it', async ({ page }) => {
+    await signIn(page, PARENT);
+    await page.goto('/parent/tutors');
+
+    const views = page.getByRole('navigation', { name: 'Tutor views' });
+    await expect(views.getByRole('link')).toHaveText(['Find a tutor', /^My tutors/]);
+    // Real listed tutors, each with a way to ask them and a way to read more.
+    await expect(page.getByRole('link', { name: 'Request a lesson' }).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByRole('link', { name: 'View profile' }).first()).toBeVisible();
+    await snap(page, 'parent-tutors-find');
+
+    await views.getByRole('link', { name: /^My tutors/ }).click();
+    await expect(page).toHaveURL(/view=mine/, { timeout: 15_000 });
+    // No booked lesson yet, so no relationship is claimed.
+    await expect(page.getByText(/No tutors yet/)).toBeVisible();
   });
 
   test('payments speaks only in the family’s terms', async ({ page }) => {

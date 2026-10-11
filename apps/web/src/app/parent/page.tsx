@@ -4,6 +4,7 @@ import { Button, EmptyState } from '@studdy/design-system';
 import { schoolYearLabel } from '@studdy/domain/students';
 import { formatDeadline, formatMoney } from '@/components/requests/request-status';
 import {
+  COMPACT,
   Panel,
   Quiet,
   Section,
@@ -50,7 +51,7 @@ export default async function ParentHomePage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <Panel className="flex flex-col gap-3 p-5">
+        <Panel className="flex flex-col gap-3 border-l-4 border-l-parent-gold p-5">
           <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">
             Next lesson
           </p>
@@ -70,7 +71,7 @@ export default async function ParentHomePage() {
           ) : (
             <>
               <div>
-                <p className="font-display text-2xl font-semibold text-brand-purple-deep">
+                <p className="text-xl font-semibold text-brand-purple-deep">
                   {lessonDay(nextLesson.scheduledStartAt, nextLesson.timeZone)}
                 </p>
                 <p className="text-lg text-text-primary">{lessonTimeRange(nextLesson)}</p>
@@ -80,10 +81,10 @@ export default async function ParentHomePage() {
                 {nextLesson.studentPreferredName} · {formatLabel(nextLesson.lessonFormatCode)}
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" size="sm" asChild>
+                <Button variant="secondary" className={COMPACT} asChild>
                   <Link href={`/parent/bookings/${nextLesson.reference}`}>View booking</Link>
                 </Button>
-                <Button variant="quiet" size="sm" asChild>
+                <Button variant="quiet" className={COMPACT} asChild>
                   <Link href="/parent/bookings">All bookings</Link>
                 </Button>
               </div>
@@ -91,7 +92,7 @@ export default async function ParentHomePage() {
           )}
         </Panel>
 
-        <Panel className="flex flex-col gap-3 p-5">
+        <Panel className="flex flex-col gap-3 bg-surface-card-secondary p-5">
           <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">
             Payments due
           </p>
@@ -120,7 +121,7 @@ export default async function ParentHomePage() {
                     Pay by {formatDeadline(item.dueAt, item.timeZone)}
                   </p>
                   <div>
-                    <Button size="sm" asChild>
+                    <Button className={COMPACT} asChild>
                       <Link href={`/requests/${item.requestReference}/pay`}>Pay now</Link>
                     </Button>
                   </div>

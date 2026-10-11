@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { Button } from '@studdy/design-system';
 import type { ReactNode } from 'react';
 import { TopNavBar } from '@/components/layout/top-nav-bar';
+import { TopNavFrame } from '@/components/layout/top-nav-frame';
 import { WorkspaceTopBar, workspaceHomeHref } from '@/components/layout/workspace-top-bar';
 import { resolveIdentity } from '@/lib/identity/resolve';
 import { PARENT_NAV } from '@/lib/parent/nav';
@@ -25,8 +26,9 @@ export default async function RequestsLayout({ children }: { children: ReactNode
   // tutor or following a request never feels like leaving it.
   if (identity.workspaces.includes('parent')) {
     return (
-      <div className="flex min-h-screen flex-col bg-surface-page text-text-primary">
-        <header className="sticky top-0 z-[1020] border-b border-surface-border bg-surface-card">
+      <TopNavFrame
+        mainClassName="mx-auto w-full max-w-4xl flex-1 px-4 py-8"
+        bar={
           <TopNavBar
             homeHref="/parent"
             items={PARENT_NAV}
@@ -34,9 +36,10 @@ export default async function RequestsLayout({ children }: { children: ReactNode
             workspaces={identity.workspaces}
             accountLabel={identity.displayName ?? identity.email ?? 'Your account'}
           />
-        </header>
-        <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">{children}</main>
-      </div>
+        }
+      >
+        {children}
+      </TopNavFrame>
     );
   }
 
