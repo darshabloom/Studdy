@@ -140,11 +140,13 @@ describe.skipIf(!available)('family overview (integration)', () => {
     const { sql } = createDatabaseClient();
     try {
       const [option] = await sql`
-        select o.starts_at
+        select floor(extract(epoch from o.starts_at) * 1000)::text as starts_at_ms
         from bookings.tutor_requests tr
         join bookings.tutor_request_time_options o on o.id = tr.accepted_time_option_id
         where tr.id = ${fixture.tutorRequestId}::uuid`;
-      expect(payment!.lessonStartAt?.getTime()).toBe((option!['starts_at'] as Date).getTime());
+      // Hand-written SQL returns a timestamp as text, so the instant is asked for
+      // as whole milliseconds, which is what a JS Date holds.
+      expect(payment!.lessonStartAt?.getTime()).toBe(Number(option!['starts_at_ms']));
     } finally {
       await sql.end();
     }

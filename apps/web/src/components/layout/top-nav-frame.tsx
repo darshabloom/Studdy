@@ -20,8 +20,8 @@ export function TopNavFrame({
   return (
     <div className="parent-theme relative isolate flex min-h-screen flex-col">
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-[120px] -right-[140px] h-[360px] w-[420px] rounded-[58%_42%_47%_53%/52%_45%_55%_48%] bg-parent-sky opacity-70" />
-        <div className="absolute -bottom-[150px] -left-[160px] h-[380px] w-[440px] rounded-[45%_55%_60%_40%/48%_58%_42%_52%] bg-parent-cream" />
+        <div className="absolute -top-[90px] -right-[110px] h-[220px] w-[260px] rounded-[58%_42%_47%_53%/52%_45%_55%_48%] bg-parent-sky opacity-50 md:-top-[120px] md:-right-[140px] md:h-[340px] md:w-[400px]" />
+        <div className="absolute -bottom-[110px] -left-[120px] h-[220px] w-[260px] rounded-[45%_55%_60%_40%/48%_58%_42%_52%] bg-parent-cream opacity-80 md:-bottom-[170px] md:-left-[180px] md:h-[360px] md:w-[420px]" />
       </div>
       <header className="sticky top-0 z-[1020] border-b border-surface-border bg-surface-card">
         {bar}

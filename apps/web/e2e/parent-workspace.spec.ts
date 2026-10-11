@@ -151,10 +151,10 @@ test.describe('parent workspace', () => {
     await expect(page.getByText(/Not available yet/)).toBeVisible();
     await snap(page, 'parent-student');
 
-    await sections.getByRole('link', { name: 'Homework' }).click();
+    await clickUntilNavigated(page, sections.getByRole('link', { name: 'Homework' }));
     await expect(page).toHaveURL(/tab=homework/, { timeout: 15_000 });
     await expect(page.getByText(/Homework cannot be shown yet/)).toBeVisible();
-    await sections.getByRole('link', { name: 'Overview' }).click();
+    await clickUntilNavigated(page, sections.getByRole('link', { name: 'Overview' }));
     await expect(page).toHaveURL(/\/parent\/students\/STUDENT-\d+$/, { timeout: 15_000 });
 
     await clickUntilNavigated(page, page.getByRole('link', { name: 'Edit details' }));
@@ -164,7 +164,10 @@ test.describe('parent workspace', () => {
     await page.getByLabel('School (optional)').fill('Kōwhai College');
     await page.getByRole('button', { name: 'Save changes' }).click();
 
-    await expect(page).toHaveURL(/\/parent\/students\/STUDENT-\d+$/, { timeout: 15_000 });
+    // Saving re-renders the whole workspace and then the student's page, which
+    // is the heaviest read in this spec; on a busy runner that has taken longer
+    // than fifteen seconds while the button still honestly read "Saving…".
+    await expect(page).toHaveURL(/\/parent\/students\/STUDENT-\d+$/, { timeout: 45_000 });
     await expect(page.getByText(/Kōwhai College/)).toBeVisible();
   });
 
@@ -184,15 +187,15 @@ test.describe('parent workspace', () => {
     ]);
     await expect(page.getByText(/No upcoming lessons/)).toBeVisible();
 
-    await views.getByRole('link', { name: /^Requests/ }).click();
+    await clickUntilNavigated(page, views.getByRole('link', { name: /^Requests/ }));
     await expect(page).toHaveURL(/view=requests/, { timeout: 15_000 });
     await expect(page.getByText(/A request is a question to a tutor, not a booking/)).toBeVisible();
 
-    await views.getByRole('link', { name: 'Recurring' }).click();
+    await clickUntilNavigated(page, views.getByRole('link', { name: 'Recurring' }));
     await expect(page).toHaveURL(/view=recurring/, { timeout: 15_000 });
     await expect(page.getByText(/Recurring lessons are not available yet/)).toBeVisible();
 
-    await views.getByRole('link', { name: 'Calendar' }).click();
+    await clickUntilNavigated(page, views.getByRole('link', { name: 'Calendar' }));
     await expect(page).toHaveURL(/view=calendar/, { timeout: 15_000 });
     await expect(page.getByRole('link', { name: 'Next →' })).toBeVisible();
     await snap(page, 'parent-bookings-calendar');
@@ -211,7 +214,7 @@ test.describe('parent workspace', () => {
     await expect(page.getByRole('link', { name: 'View profile' }).first()).toBeVisible();
     await snap(page, 'parent-tutors-find');
 
-    await views.getByRole('link', { name: /^My tutors/ }).click();
+    await clickUntilNavigated(page, views.getByRole('link', { name: /^My tutors/ }));
     await expect(page).toHaveURL(/view=mine/, { timeout: 15_000 });
     // No booked lesson yet, so no relationship is claimed.
     await expect(page.getByText(/No tutors yet/)).toBeVisible();
