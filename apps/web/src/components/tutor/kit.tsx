@@ -68,7 +68,11 @@ export function LessonRow({
     <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0">
         <p className="font-medium text-text-primary">
-          <Link href={`/tutor/lessons/${booking.reference}`} className="hover:underline">
+          <Link
+            prefetch={false}
+            href={`/tutor/lessons/${booking.reference}`}
+            className="hover:underline"
+          >
             {lessonDay(booking.scheduledStartAt, booking.timeZone)}, {timeRange(booking)}
           </Link>
         </p>

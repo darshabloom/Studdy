@@ -56,7 +56,9 @@ export default async function TutorStudentsPage() {
                   </div>
                 </div>
                 <Button variant="secondary" className={COMPACT} asChild>
-                  <Link href={`/tutor/students/${student.studentReference}`}>View student</Link>
+                  <Link prefetch={false} href={`/tutor/students/${student.studentReference}`}>
+                    View student
+                  </Link>
                 </Button>
               </div>
               <div className="grid gap-3 border-t border-surface-border pt-4 sm:grid-cols-3">

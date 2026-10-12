@@ -98,7 +98,9 @@ export default async function TutorHomePage() {
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" className={COMPACT} asChild>
-                  <Link href={`/tutor/lessons/${nextLesson.reference}`}>View lesson</Link>
+                  <Link prefetch={false} href={`/tutor/lessons/${nextLesson.reference}`}>
+                    View lesson
+                  </Link>
                 </Button>
               </div>
             </>
@@ -125,7 +127,9 @@ export default async function TutorHomePage() {
                     ) : null}
                   </div>
                   <Button className={COMPACT} asChild>
-                    <Link href={item.href}>{item.actionLabel}</Link>
+                    <Link prefetch={false} href={item.href}>
+                      {item.actionLabel}
+                    </Link>
                   </Button>
                 </li>
               ))}
@@ -182,6 +186,7 @@ export default async function TutorHomePage() {
             {week.map((day, index) => (
               <li key={day.date} className="flex min-h-[112px] flex-col gap-1 p-2">
                 <Link
+                  prefetch={false}
                   href={`/tutor/calendar?week=${days[0]!.date}`}
                   className="flex items-center gap-1 text-xs font-semibold text-text-secondary hover:text-text-primary"
                 >
@@ -198,6 +203,7 @@ export default async function TutorHomePage() {
                 </Link>
                 {day.lessons.map((booking) => (
                   <Link
+                    prefetch={false}
                     key={booking.reference}
                     href={`/tutor/lessons/${booking.reference}`}
                     className="truncate rounded-[4px] border border-status-success-border bg-status-success-bg px-1 py-px text-[11px] text-status-success"
@@ -208,6 +214,7 @@ export default async function TutorHomePage() {
                 ))}
                 {day.requestCount > 0 ? (
                   <Link
+                    prefetch={false}
                     href="/tutor/requests"
                     className="truncate rounded-[4px] border border-dashed border-brand-purple/50 bg-surface-card px-1 py-px text-[11px] text-text-secondary"
                   >

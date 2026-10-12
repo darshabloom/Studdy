@@ -111,6 +111,7 @@ function ModeSwitch({
 }) {
   const item = (label: string, href: string, active: boolean) => (
     <Link
+      prefetch={false}
       href={href}
       aria-current={active ? 'true' : undefined}
       className={
@@ -145,13 +146,17 @@ function StepNav({
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="inline-flex overflow-hidden rounded-[var(--radius-gentle)] border border-surface-border">
-        <Link href={previousHref} aria-label="Previous" className={arrow}>
+        <Link prefetch={false} href={previousHref} aria-label="Previous" className={arrow}>
           ←
         </Link>
-        <Link href={todayHref} className={`border-x border-surface-border ${arrow}`}>
+        <Link
+          prefetch={false}
+          href={todayHref}
+          className={`border-x border-surface-border ${arrow}`}
+        >
           Today
         </Link>
-        <Link href={nextHref} aria-label="Next" className={arrow}>
+        <Link prefetch={false} href={nextHref} aria-label="Next" className={arrow}>
           →
         </Link>
       </div>
@@ -165,7 +170,11 @@ function RequestRow({ request }: { request: TutorRequestView }) {
     <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0">
         <p className="font-medium text-text-primary">
-          <Link href={`/tutor/requests/${request.reference}`} className="hover:underline">
+          <Link
+            prefetch={false}
+            href={`/tutor/requests/${request.reference}`}
+            className="hover:underline"
+          >
             Request: {request.subjectDisplayName} with {request.studentPreferredName}
           </Link>
         </p>
@@ -239,6 +248,7 @@ function MonthGrid({
                 {day.dateKey === null ? null : (
                   <>
                     <Link
+                      prefetch={false}
                       href={`/tutor/calendar?week=${mondayOf(new Date(`${day.dateKey}T12:00:00Z`), 'UTC')}`}
                       className={
                         day.dateKey === todayKey
@@ -252,6 +262,7 @@ function MonthGrid({
                       {(lessonsByDay.get(day.dateKey) ?? []).map((booking) => (
                         <li key={booking.reference}>
                           <Link
+                            prefetch={false}
                             href={`/tutor/lessons/${booking.reference}`}
                             className="block truncate rounded-[4px] border border-status-success-border bg-status-success-bg px-1 py-px text-[11px] text-status-success"
                           >
@@ -263,6 +274,7 @@ function MonthGrid({
                       {(requestsByDay.get(day.dateKey) ?? 0) > 0 ? (
                         <li>
                           <Link
+                            prefetch={false}
                             href="/tutor/requests"
                             className="block truncate rounded-[4px] border border-dashed border-brand-purple/50 bg-surface-card px-1 py-px text-[11px] text-text-secondary"
                           >
@@ -336,6 +348,7 @@ export default async function TutorCalendarPage({
             : `/tutor/calendar?week=${weekStart}`;
         return (
           <Link
+            prefetch={false}
             key={key}
             href={key === 'all' ? base : `${base}&show=${key}`}
             aria-current={filter === key ? 'true' : undefined}

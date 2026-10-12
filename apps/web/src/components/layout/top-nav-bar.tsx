@@ -42,7 +42,7 @@ export function TopNavBar({
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 px-4">
-      <Link href={homeHref} className="order-1 flex items-center py-1">
+      <Link prefetch={false} href={homeHref} className="order-1 flex items-center py-1">
         {/*
          * A STATIC IMPORT, SERVED AS IT IS. The file is small and already the
          * right size, so it skips the image optimiser: routed through it, the
@@ -76,6 +76,7 @@ export function TopNavBar({
         ) : null}
         {secondary.map((item) => (
           <Link
+            prefetch={false}
             key={item.href}
             href={item.href}
             className="text-sm font-medium text-text-secondary hover:text-text-primary"

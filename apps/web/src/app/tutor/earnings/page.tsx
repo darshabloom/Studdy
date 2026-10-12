@@ -91,7 +91,7 @@ export default async function TutorEarningsPage() {
           </p>
         </div>
         <Button variant="secondary" className={COMPACT} asChild>
-          <Link href="/tutor/payments">
+          <Link prefetch={false} href="/tutor/payments">
             {payout.canReceivePayments ? 'Payout details' : 'Finish payout setup'}
           </Link>
         </Button>
@@ -129,6 +129,7 @@ export default async function TutorEarningsPage() {
                     <tr key={booking.reference}>
                       <td className="px-4 py-3">
                         <Link
+                          prefetch={false}
                           href={`/tutor/lessons/${booking.reference}`}
                           className="font-medium text-text-primary hover:underline"
                         >

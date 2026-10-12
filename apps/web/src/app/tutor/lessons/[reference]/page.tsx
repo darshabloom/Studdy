@@ -51,6 +51,7 @@ export default async function TutorLessonPage({
         <dl className="divide-y divide-surface-border">
           <Row label="Student">
             <Link
+              prefetch={false}
               href={`/tutor/students/${booking.studentReference}`}
               className="font-medium text-brand-purple hover:underline"
             >

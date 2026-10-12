@@ -25,6 +25,7 @@ export function TopNavLinks({ items }: { items: readonly TopNavItem[] }): ReactN
         const active = isActiveNavItem(item, pathname);
         return (
           <Link
+            prefetch={false}
             key={item.href}
             href={item.href}
             aria-current={active ? 'page' : undefined}

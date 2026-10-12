@@ -49,6 +49,18 @@ export function Fact({ label, children }: { label: string; children: ReactNode }
   );
 }
 
+/*
+ * EVERY LINK IN THE WORKSPACES OPTS OUT OF PREFETCH.
+ *
+ * These screens are dense with links — a navigation bar, tabs, filters, a row
+ * per lesson — and Next prefetches each one as it scrolls into view. Every
+ * prefetch of a workspace route runs the layout, which checks the session with
+ * the auth service and opens a database connection to resolve roles. One page
+ * view was therefore setting off twenty or more of those at once, which is the
+ * likeliest reason some renders stalled under load in CI. A page is a click away
+ * either way; it does not need to be fetched before it is asked for.
+ */
+
 export function PageHeader({
   title,
   description,
@@ -97,6 +109,7 @@ export function ViewTabs({
         const active = tab.key === current;
         return (
           <Link
+            prefetch={false}
             key={tab.key}
             href={tab.href}
             aria-current={active ? 'page' : undefined}
@@ -163,7 +176,11 @@ export function Quiet({ children }: { children: ReactNode }): ReactNode {
 
 export function TextLink({ href, children }: { href: string; children: ReactNode }): ReactNode {
   return (
-    <Link href={href} className="text-sm font-medium text-brand-purple hover:underline">
+    <Link
+      prefetch={false}
+      href={href}
+      className="text-sm font-medium text-brand-purple hover:underline"
+    >
       {children}
     </Link>
   );
@@ -218,7 +235,11 @@ export function BookingRow({
     <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0">
         <p className="font-medium text-text-primary">
-          <Link href={`/parent/bookings/${booking.reference}`} className="hover:underline">
+          <Link
+            prefetch={false}
+            href={`/parent/bookings/${booking.reference}`}
+            className="hover:underline"
+          >
             {lessonDay(booking.scheduledStartAt, booking.timeZone)}, {lessonTimeRange(booking)}
           </Link>
         </p>

@@ -53,7 +53,7 @@ export default async function BookALessonPage() {
                     </p>
                   </div>
                   <Button className={COMPACT} asChild>
-                    <Link href={`/book?tutor=${tutor.tutorReference}`}>
+                    <Link prefetch={false} href={`/book?tutor=${tutor.tutorReference}`}>
                       Request a lesson with {tutor.tutorFirstName}
                     </Link>
                   </Button>
@@ -71,7 +71,9 @@ export default async function BookALessonPage() {
             once.
           </p>
           <Button variant="secondary" asChild>
-            <Link href="/parent/tutors">Find a tutor</Link>
+            <Link prefetch={false} href="/parent/tutors">
+              Find a tutor
+            </Link>
           </Button>
         </Panel>
       </Section>
