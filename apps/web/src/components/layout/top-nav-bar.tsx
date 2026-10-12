@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { WorkspaceCode } from '@studdy/permissions';
 import type { ReactNode } from 'react';
+import logo from '@/assets/brand/studdy-logo.png';
 import { chooseWorkspaceAction, signOutAction } from '@/lib/auth/actions';
 import type { TopNavItem } from '@/lib/parent/nav';
 import { TopNavLinks } from './top-nav-links';
@@ -39,14 +40,14 @@ export function TopNavBar({
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 px-4">
       <Link href={homeHref} className="order-1 flex items-center py-1">
-        <Image
-          src="/brand/studdy-logo.png"
-          alt="Studdy"
-          width={377}
-          height={182}
-          priority
-          className="h-[34px] w-auto"
-        />
+        {/*
+         * A STATIC IMPORT, SERVED AS IT IS. The file is small and already the
+         * right size, so it skips the image optimiser: routed through it, the
+         * phone-density variant never finished loading in CI, which held the
+         * page's `load` event open on every Parent screen. As a static asset it
+         * is also outside the session middleware's matcher.
+         */}
+        <Image src={logo} alt="Studdy" unoptimized priority className="h-[34px] w-auto" />
       </Link>
       <div className="order-3 w-full min-w-0 md:order-2 md:w-auto md:flex-1">
         <TopNavLinks items={items} />

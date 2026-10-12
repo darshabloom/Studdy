@@ -124,6 +124,9 @@ test.describe('parent workspace', () => {
   });
 
   test('a student can be opened and their details corrected', async ({ page }) => {
+    // A long journey with several full-page pictures; the default thirty seconds
+    // is spent before the last step is reached.
+    test.setTimeout(90_000);
     await signIn(page, PARENT);
     await ensureStudent(page);
 
