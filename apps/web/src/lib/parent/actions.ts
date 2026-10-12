@@ -56,5 +56,12 @@ export async function updateStudentAction(
   }
 
   revalidatePath('/parent');
-  redirect(`/parent/students/${student.reference}`);
+  /*
+   * REPORTS SUCCESS; THE FORM NAVIGATES. This used to `redirect()` here. In CI
+   * the server answered the save every time (a 303), yet on the first save in
+   * a session the browser stayed on the form reading "Saving" and never
+   * followed it. Why the redirect was dropped is not established. Returning
+   * where to go and letting the form push there does not depend on it.
+   */
+  return { ...INITIAL, savedHref: `/parent/students/${student.reference}` };
 }
