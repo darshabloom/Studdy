@@ -40,6 +40,33 @@ const workspaceNav = (page: Page) =>
 test.describe('tutor workspace', () => {
   test.skip(!supabaseConfigured, 'Requires local Supabase (pnpm supabase:start)');
 
+  /*
+   * What the browser was still waiting on, and anything it complained about.
+   * A navigation that silently does not happen leaves the page text unchanged,
+   * so the text alone cannot say whether a request never came back or the page
+   * had everything and did not move.
+   */
+  const pending = new Set<string>();
+  const notes: string[] = [];
+  test.beforeEach(({ page }) => {
+    pending.clear();
+    notes.length = 0;
+    const key = (request: { method(): string; url(): string }) =>
+      `${request.method()} ${request.url()}`;
+    page.on('request', (request) => pending.add(key(request)));
+    page.on('requestfinished', (request) => pending.delete(key(request)));
+    page.on('requestfailed', (request) => {
+      pending.delete(key(request));
+      notes.push(`failed: ${request.url()} ${request.failure()?.errorText ?? ''}`);
+    });
+    page.on('console', (message) => {
+      if (message.type() === 'error' || message.type() === 'warning') {
+        notes.push(`${message.type()}: ${message.text().slice(0, 300)}`);
+      }
+    });
+    page.on('pageerror', (error) => notes.push(`pageerror: ${error.message.slice(0, 300)}`));
+  });
+
   test.afterEach(async ({ page }, testInfo) => {
     if (testInfo.status === testInfo.expectedStatus) return;
     const text = await page
@@ -47,6 +74,8 @@ test.describe('tutor workspace', () => {
       .innerText()
       .catch(() => '(page text unavailable)');
     console.log(`FAILED AT ${page.url()}\n${text.slice(0, 2000)}`);
+    console.log(`STILL PENDING (${String(pending.size)})\n${[...pending].join('\n')}`);
+    console.log(`BROWSER NOTES (${String(notes.length)})\n${notes.join('\n')}`);
   });
 
   test('top navigation reaches all six destinations, with no sidebar', async ({ page }) => {
@@ -117,7 +146,7 @@ test.describe('tutor workspace', () => {
     await expect(page.getByRole('link', { name: 'Month' })).toBeVisible();
 
     await clickUntilNavigated(page, page.getByRole('link', { name: 'Month' }));
-    await expect(page).toHaveURL(/\/tutor\/calendar\/month$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/tutor\/calendar\/month/, { timeout: 15_000 });
     await snap(page, 'tutor-calendar-month');
 
     // The existing request screen, now inside the Calendar.
