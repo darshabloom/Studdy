@@ -36,7 +36,9 @@ export default async function ParentHomePage() {
         description="Tell us who the tutoring is for. You can add more students at any time."
         action={
           <Button asChild>
-            <Link href="/parent/students/new">Add a student</Link>
+            <Link prefetch={false} href="/parent/students/new">
+              Add a student
+            </Link>
           </Button>
         }
       />
@@ -64,7 +66,9 @@ export default async function ParentHomePage() {
               </p>
               <div>
                 <Button asChild>
-                  <Link href="/parent/book">Book a lesson</Link>
+                  <Link prefetch={false} href="/parent/book">
+                    Book a lesson
+                  </Link>
                 </Button>
               </div>
             </>
@@ -82,10 +86,14 @@ export default async function ParentHomePage() {
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" className={COMPACT} asChild>
-                  <Link href={`/parent/bookings/${nextLesson.reference}`}>View booking</Link>
+                  <Link prefetch={false} href={`/parent/bookings/${nextLesson.reference}`}>
+                    View booking
+                  </Link>
                 </Button>
                 <Button variant="quiet" className={COMPACT} asChild>
-                  <Link href="/parent/bookings">All bookings</Link>
+                  <Link prefetch={false} href="/parent/bookings">
+                    All bookings
+                  </Link>
                 </Button>
               </div>
             </>
@@ -122,7 +130,9 @@ export default async function ParentHomePage() {
                   </p>
                   <div>
                     <Button className={COMPACT} asChild>
-                      <Link href={`/requests/${item.requestReference}/pay`}>Pay now</Link>
+                      <Link prefetch={false} href={`/requests/${item.requestReference}/pay`}>
+                        Pay now
+                      </Link>
                     </Button>
                   </div>
                 </li>
@@ -148,6 +158,7 @@ export default async function ParentHomePage() {
               >
                 <div>
                   <Link
+                    prefetch={false}
                     href={`/parent/students/${student.reference}`}
                     className="text-base font-semibold text-text-primary hover:underline"
                   >
@@ -204,6 +215,7 @@ export default async function ParentHomePage() {
                 >
                   <div className="min-w-0">
                     <Link
+                      prefetch={false}
                       href={update.href}
                       className="font-medium text-text-primary hover:underline"
                     >

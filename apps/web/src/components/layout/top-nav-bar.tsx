@@ -15,6 +15,8 @@ export interface TopNavBarProps {
   /** Every workspace the user holds; the others are offered as a switch. */
   readonly workspaces: readonly WorkspaceCode[];
   readonly accountLabel: string;
+  /** Setup destinations that sit beside the account rather than in the main row. */
+  readonly secondary?: readonly { label: string; href: string }[];
 }
 
 /**
@@ -34,12 +36,13 @@ export function TopNavBar({
   currentWorkspace,
   workspaces,
   accountLabel,
+  secondary = [],
 }: TopNavBarProps): ReactNode {
   const others = workspaces.filter((workspace) => workspace !== currentWorkspace);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 px-4">
-      <Link href={homeHref} className="order-1 flex items-center py-1">
+      <Link prefetch={false} href={homeHref} className="order-1 flex items-center py-1">
         {/*
          * A STATIC IMPORT, SERVED AS IT IS. The file is small and already the
          * right size, so it skips the image optimiser: routed through it, the
@@ -71,7 +74,17 @@ export function TopNavBar({
             ))}
           </nav>
         ) : null}
-        <span className="hidden max-w-[14rem] truncate text-sm text-text-secondary lg:inline">
+        {secondary.map((item) => (
+          <Link
+            prefetch={false}
+            key={item.href}
+            href={item.href}
+            className="text-sm font-medium text-text-secondary hover:text-text-primary"
+          >
+            {item.label}
+          </Link>
+        ))}
+        <span className="hidden max-w-[14rem] truncate text-sm text-text-secondary xl:inline">
           {accountLabel}
         </span>
         <form action={signOutAction}>

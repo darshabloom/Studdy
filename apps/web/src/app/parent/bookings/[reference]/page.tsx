@@ -52,6 +52,7 @@ export default async function BookingPage({ params }: { params: Promise<{ refere
         <dl className="divide-y divide-surface-border">
           <Row label="Student">
             <Link
+              prefetch={false}
               href={`/parent/students/${booking.studentReference}`}
               className="font-medium text-brand-purple hover:underline"
             >
@@ -60,6 +61,7 @@ export default async function BookingPage({ params }: { params: Promise<{ refere
           </Row>
           <Row label="Tutor">
             <Link
+              prefetch={false}
               href={`/tutors/${booking.tutorReference}`}
               className="font-medium text-brand-purple hover:underline"
             >
@@ -96,7 +98,10 @@ export default async function BookingPage({ params }: { params: Promise<{ refere
 
       <div>
         <Button variant="secondary" asChild>
-          <Link href={`/book?child=${booking.studentProfileId}&tutor=${booking.tutorReference}`}>
+          <Link
+            prefetch={false}
+            href={`/book?child=${booking.studentProfileId}&tutor=${booking.tutorReference}`}
+          >
             Book another lesson with {booking.tutorFirstName}
           </Link>
         </Button>

@@ -18,7 +18,9 @@ export default async function AddSubjectNeedPage() {
         description="Subject needs belong to a student, so start by adding one."
         action={
           <Button asChild>
-            <Link href="/parent/students/new">Add a student</Link>
+            <Link prefetch={false} href="/parent/students/new">
+              Add a student
+            </Link>
           </Button>
         }
       />
@@ -48,7 +50,9 @@ export default async function AddSubjectNeedPage() {
       </Card>
       <div className="mt-4">
         <Button variant="quiet" asChild>
-          <Link href="/parent">Back to your students</Link>
+          <Link prefetch={false} href="/parent">
+            Back to your students
+          </Link>
         </Button>
       </div>
     </div>
