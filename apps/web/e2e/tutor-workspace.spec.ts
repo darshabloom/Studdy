@@ -117,7 +117,7 @@ test.describe('tutor workspace', () => {
     await expect(page.getByRole('link', { name: 'Month' })).toBeVisible();
 
     await clickUntilNavigated(page, page.getByRole('link', { name: 'Month' }));
-    await expect(page).toHaveURL(/mode=month/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/tutor\/calendar\/month$/, { timeout: 15_000 });
     await snap(page, 'tutor-calendar-month');
 
     // The existing request screen, now inside the Calendar.
@@ -146,7 +146,7 @@ test.describe('tutor workspace', () => {
         name: 'Recurring',
       }),
     );
-    await expect(page).toHaveURL(/view=recurring/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/tutor\/calendar\/recurring$/, { timeout: 15_000 });
     await expect(page.getByText(/Recurring lessons are not available yet/)).toBeVisible();
   });
 

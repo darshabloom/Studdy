@@ -40,7 +40,7 @@ export function CalendarTabs({
           ...(openRequests === undefined ? {} : { count: openRequests }),
         },
         { key: 'availability', label: 'Availability', href: '/tutor/availability' },
-        { key: 'recurring', label: 'Recurring', href: '/tutor/calendar?view=recurring' },
+        { key: 'recurring', label: 'Recurring', href: '/tutor/calendar/recurring' },
       ]}
     />
   );
