@@ -32,6 +32,10 @@ async function signIn(page: Page, email: string): Promise<void> {
   await page.getByLabel('Password').fill(SEEDED_PASSWORD);
   await page.getByRole('button', { name: 'Log in' }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 15_000 });
+  // Let the workspace the login lands on finish arriving before going anywhere
+  // else. Leaving mid-arrival is not something a person does, and the one test
+  // here that then navigates inside the app has stalled when this was skipped.
+  await page.waitForLoadState('networkidle').catch(() => {});
 }
 
 const workspaceNav = (page: Page) =>
