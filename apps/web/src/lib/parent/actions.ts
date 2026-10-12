@@ -1,6 +1,5 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { listAccessibleStudents, updateDependentStudent } from '@studdy/database';
 import { validateStudentProfile } from '@studdy/domain/students';
@@ -55,13 +54,17 @@ export async function updateStudentAction(
     return { ...INITIAL, error: 'Those details could not be saved. Please try again.' };
   }
 
-  revalidatePath('/parent');
   /*
-   * REPORTS SUCCESS; THE FORM NAVIGATES. This used to `redirect()` here. In CI
-   * the server answered the save every time (a 303), yet on the first save in
-   * a session the browser stayed on the form reading "Saving" and never
-   * followed it. Why the redirect was dropped is not established. Returning
-   * where to go and letting the form push there does not depend on it.
+   * REPORTS SUCCESS AND NOTHING ELSE; THE FORM REFRESHES AND NAVIGATES.
+   *
+   * This used to `revalidatePath()` and `redirect()`. In CI the save was written
+   * and the server began its reply every time, but on the first save in a
+   * session the reply never finished: with a redirect the browser never
+   * followed it, and without one the response body stayed open, in both cases
+   * leaving the form reading "Saving". What both had in common was the server
+   * re-rendering a page inside the action's own response. Why that render
+   * stalls is not established. Returning only the destination keeps the reply
+   * to a few bytes, and the form asks for fresh pages itself.
    */
   return { ...INITIAL, savedHref: `/parent/students/${student.reference}` };
 }

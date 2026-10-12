@@ -36,7 +36,10 @@ export function StudentForm({ action, variant, submitLabel, initial }: StudentFo
   const router = useRouter();
   const savedHref = state.savedHref;
   useEffect(() => {
-    if (savedHref !== undefined) router.push(savedHref);
+    if (savedHref === undefined) return;
+    // Drop anything cached from before the save, then go.
+    router.refresh();
+    router.push(savedHref);
   }, [savedHref, router]);
 
   return (

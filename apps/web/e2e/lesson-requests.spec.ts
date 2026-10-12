@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { deliveriesForLatest, latestOutboxStatus } from './helpers/notifications';
+import { clickUntilNavigated } from './helpers/navigation';
 import { snap } from './helpers/screens';
 
 /**
@@ -210,14 +211,15 @@ async function expectParentRequestsReachable(page: Page): Promise<void> {
     const bookings = page
       .getByRole('navigation', { name: 'Workspace', exact: true })
       .getByRole('link', { name: 'Bookings' });
-    await expect(bookings).toBeVisible({ timeout: 15_000 });
-    await bookings.click();
+    await clickUntilNavigated(page, bookings);
     await expect(page).toHaveURL(/\/parent\/bookings$/, { timeout: 15_000 });
 
-    await page
-      .getByRole('navigation', { name: 'Booking views' })
-      .getByRole('link', { name: /^Requests/ })
-      .click();
+    await clickUntilNavigated(
+      page,
+      page
+        .getByRole('navigation', { name: 'Booking views' })
+        .getByRole('link', { name: /^Requests/ }),
+    );
     await expect(page).toHaveURL(/view=requests/, { timeout: 15_000 });
     await expect(page.getByRole('heading', { name: 'Open requests' })).toBeVisible();
   }
