@@ -4,7 +4,7 @@
 slice. If this and another document disagree about what works, this one is right and the other
 needs fixing; if this one disagrees with the code, the code is right and this needs fixing.
 
-Last updated: **10 October 2026**, with the Parent workspace built (after tutor onboarding, applications, settlement, refunds and the Booking entity).
+Last updated: **10 October 2026**, with the Tutor workspace built (after the Parent workspace, tutor onboarding, applications, settlement, refunds and the Booking entity).
 
 How to read it: **Works** means built, tested and reachable by that role. **Partial** means a
 real piece exists but the journey does not finish. **Not started** means nothing a user can
@@ -66,26 +66,38 @@ confirmed, refund completed); there is no notification feed behind them yet.
 
 ### Tutor
 
-| Journey                                                                                        | Status                                         |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| Apply to become a tutor (draft, submit, resubmit, withdraw)                                    | Works                                          |
-| Be approved into a real tutor profile and workspace                                            | Works (a reviewer decides; see Admin)          |
-| Enter the workspace as soon as approved, and see a setup checklist of what is left             | Works                                          |
-| Edit their public profile (headline, approach, year levels, formats, room for new students)    | Works                                          |
-| Create a service: subject, description, year levels, format, lesson lengths and prices         | Works                                          |
-| Send a service to Studdy for review, take it back, and act on requested changes                | Works                                          |
-| Publish an approved service, unpublish it, and publish it again                                | Works; publishing needs payouts (see Blocked)  |
-| Change a live service without going off sale (drafted, reviewed, swapped in on publish)        | Works                                          |
-| Pause and resume their own listing                                                             | Works                                          |
-| Appear in discovery and on a public profile with their real service, price and description     | Works                                          |
-| Set weekly availability and exceptions                                                         | Works                                          |
-| See lesson requests, accept with a time or decline                                             | Works                                          |
-| Held time and release when a request closes                                                    | Works                                          |
-| Start Stripe Connect onboarding and see payout status                                          | Works in Stripe test mode                      |
-| Emails: application received, changes requested, declined, approved; service approved, changes | Built, **not sending**                         |
-| Notified by email when asked, and when a request closes                                        | Built, **not sending**                         |
-| The locked Tutor dashboard, calendar, earnings                                                 | Not started                                    |
-| Paid out (operator-run settlement, weekly, after the lesson)                                   | Built; **not proven end to end** (see Blocked) |
+The Tutor workspace is one top navigation, **Home · Calendar · Students · Lessons · Earnings ·
+Resources**, with no sidebar. Profile and Services sit beside the account. Requests and Availability
+are views of the Calendar: the same screens as before, now inside it.
+
+| Journey                                                                                                                                        | Status                                                                        |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Apply to become a tutor (draft, submit, resubmit, withdraw)                                                                                    | Works                                                                         |
+| Be approved into a real tutor profile and workspace                                                                                            | Works (a reviewer decides; see Admin)                                         |
+| Enter the workspace as soon as approved, and see a setup checklist of what is left                                                             | Works                                                                         |
+| Edit their public profile (headline, approach, year levels, formats, room for new students)                                                    | Works                                                                         |
+| Create a service: subject, description, year levels, format, lesson lengths and prices                                                         | Works                                                                         |
+| Send a service to Studdy for review, take it back, and act on requested changes                                                                | Works                                                                         |
+| Publish an approved service, unpublish it, and publish it again                                                                                | Works; publishing needs payouts (see Blocked)                                 |
+| Change a live service without going off sale (drafted, reviewed, swapped in on publish)                                                        | Works                                                                         |
+| Pause and resume their own listing                                                                                                             | Works                                                                         |
+| Appear in discovery and on a public profile with their real service, price and description                                                     | Works                                                                         |
+| Set weekly availability and exceptions                                                                                                         | Works                                                                         |
+| See lesson requests, accept with a time or decline                                                                                             | Works                                                                         |
+| Held time and release when a request closes                                                                                                    | Works                                                                         |
+| Start Stripe Connect onboarding and see payout status                                                                                          | Works in Stripe test mode                                                     |
+| Emails: application received, changes requested, declined, approved; service approved, changes                                                 | Built, **not sending**                                                        |
+| Notified by email when asked, and when a request closes                                                                                        | Built, **not sending**                                                        |
+| **Home:** next lesson, needs action, upcoming lessons, earnings, and the week as a mini-calendar                                               | Works                                                                         |
+| **Calendar:** week (availability, blocked time, held time, confirmed lessons, unanswered requests) and month, previous / next / Today, filters | Works; items are opened from the list under the week, not by clicking a block |
+| Calendar: Requests and Availability tabs (the existing screens)                                                                                | Works                                                                         |
+| Calendar: Recurring                                                                                                                            | Deferred, said so on the tab                                                  |
+| **Students:** the students they have a booked lesson with, and each one's page                                                                 | Works; first name, year and subject only, no family contact details           |
+| **Lessons:** upcoming and past bookings, and a page per lesson with price, Studdy fee and what they earn                                       | Works                                                                         |
+| Lessons: notes, attendance, homework, summaries                                                                                                | Honest empty state (**needs a Lesson entity**: `lessons` is an empty schema)  |
+| **Earnings:** earned, pending, paid out, expected, payout status, and each lesson's payout                                                     | Works                                                                         |
+| Resources                                                                                                                                      | Honest empty state                                                            |
+| Paid out (operator-run settlement, weekly, after the lesson)                                                                                   | Built; **not proven end to end** (see Blocked)                                |
 
 **Start to finish, with no database work:** apply, be approved by a reviewer, open the workspace,
 create and price a service, send it for review, have a reviewer approve it, complete Stripe
@@ -193,6 +205,12 @@ dependent student sees when they do have a login is open and is a product decisi
   request screens when a parent is signed in. The step-by-step request journeys (`/book`,
   `/shortlist`) are shared with independent students and still use the earlier purple look, as do
   the public site and every other workspace. Moving those is its own piece of work.
+- **The approved Tutor screen designs are not in the repository.** The Tutor workspace follows the
+  written specification and uses the same look as the Parent workspace (white, navy, gold accent),
+  on the assumption that the locked direction is one Studdy look. It needs a visual review against
+  the approved Tutor designs. A tutor sees a student's first name, school year and subject and
+  whether a guardian books for them, and nothing else about the family: that is the existing
+  tutor-privacy boundary (SP-006), kept as it was.
 - **Parent screens show a stand-in where the data does not exist yet:** tutor and student photos
   (an initial on a tint; there is no photo upload), archiving a student (the collapsed Archived
   list is read-only), important dates, and the Progress, Homework and Resources tabs.
@@ -217,6 +235,8 @@ new person can apply, be approved, set up, be reviewed, publish and be found, wi
 each step built. What B leaves for later slices is staff-side control of a live service or tutor
 (restrict, suspend, unlist), which belongs to **F**. **C is built:** the Parent workspace covers
 Home, Students, Bookings, Payments and Tutors against the real backend, with honest empty states
-where the backend has nothing yet (lessons, recurring, saved cards, cancellation). Next is **D**,
-the approved Tutor workspace. Out of scope for launch: chat, advanced analytics, external calendar sync, a large
+where the backend has nothing yet (lessons, recurring, saved cards, cancellation). **D is built:** the Tutor workspace covers Home, Calendar, Students, Lessons and Earnings
+against the real backend, with Requests and Availability wired into the Calendar and honest empty
+states for lesson records, recurring lessons and resources. Next is **E**, student experiences and
+the lesson lifecycle, which is what gives Lessons, Homework and Progress something to show. Out of scope for launch: chat, advanced analytics, external calendar sync, a large
 Resources system.

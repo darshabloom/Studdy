@@ -76,6 +76,12 @@ export {
   type FamilyTutorRequestView,
   type TutorRequestView,
 } from './repositories/request-projections';
+// What a tutor reads about their own lessons and payouts (feat/tutor-workspace)
+export {
+  listBookingsForTutor,
+  type TutorBookingView,
+  type TutorPayoutCode,
+} from './repositories/tutor-workspace';
 // What a family reads about its own bookings and money (feat/parent-experience)
 export {
   listBookingsForStudents,

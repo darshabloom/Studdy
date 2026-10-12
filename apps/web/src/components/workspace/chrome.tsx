@@ -23,6 +23,8 @@ export interface WorkspaceChromeProps {
    * both frames — only the furniture around them differs.
    */
   topNav?: readonly TopNavItem[];
+  /** With `topNav`: setup links shown beside the account. */
+  topNavSecondary?: readonly { label: string; href: string }[];
   /** TOTP MFA required to enter (Platform Manager / Owner — approved 6 Aug 2026). */
   requireMfa?: boolean;
   children: ReactNode;
@@ -38,6 +40,7 @@ export async function WorkspaceChrome({
   navLinks = [],
   homeHref,
   topNav,
+  topNavSecondary,
   requireMfa = false,
   children,
 }: WorkspaceChromeProps) {
@@ -139,6 +142,7 @@ export async function WorkspaceChrome({
             currentWorkspace={enteredWorkspace ?? accepts[0]!}
             workspaces={identity.workspaces}
             accountLabel={identity.displayName ?? identity.email ?? 'Your account'}
+            {...(topNavSecondary === undefined ? {} : { secondary: topNavSecondary })}
           />
         }
       >

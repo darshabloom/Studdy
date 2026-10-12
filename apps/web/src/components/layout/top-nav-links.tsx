@@ -30,8 +30,8 @@ export function TopNavLinks({ items }: { items: readonly TopNavItem[] }): ReactN
             aria-current={active ? 'page' : undefined}
             className={
               active
-                ? 'shrink-0 border-b-2 border-parent-gold px-1 py-3 text-sm font-semibold text-brand-purple-deep md:px-3'
-                : 'shrink-0 border-b-2 border-transparent px-1 py-3 text-sm font-medium text-text-secondary hover:border-surface-border hover:text-text-primary md:px-3'
+                ? 'shrink-0 border-b-2 border-parent-gold px-1 py-3 text-[13px] font-semibold text-brand-purple-deep md:px-3 md:text-sm'
+                : 'shrink-0 border-b-2 border-transparent px-1 py-3 text-[13px] font-medium text-text-secondary hover:border-surface-border hover:text-text-primary md:px-3 md:text-sm'
             }
           >
             {item.label}

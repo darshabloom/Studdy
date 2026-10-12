@@ -15,6 +15,8 @@ export interface TopNavBarProps {
   /** Every workspace the user holds; the others are offered as a switch. */
   readonly workspaces: readonly WorkspaceCode[];
   readonly accountLabel: string;
+  /** Setup destinations that sit beside the account rather than in the main row. */
+  readonly secondary?: readonly { label: string; href: string }[];
 }
 
 /**
@@ -34,6 +36,7 @@ export function TopNavBar({
   currentWorkspace,
   workspaces,
   accountLabel,
+  secondary = [],
 }: TopNavBarProps): ReactNode {
   const others = workspaces.filter((workspace) => workspace !== currentWorkspace);
 
@@ -71,7 +74,16 @@ export function TopNavBar({
             ))}
           </nav>
         ) : null}
-        <span className="hidden max-w-[14rem] truncate text-sm text-text-secondary lg:inline">
+        {secondary.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="text-sm font-medium text-text-secondary hover:text-text-primary"
+          >
+            {item.label}
+          </Link>
+        ))}
+        <span className="hidden max-w-[14rem] truncate text-sm text-text-secondary xl:inline">
           {accountLabel}
         </span>
         <form action={signOutAction}>
