@@ -57,6 +57,8 @@ async function ensureStudent(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/parent$/, { timeout: 15_000 });
 }
 
+let saveTraffic: string[] = [];
+
 test.describe.configure({ mode: 'serial' });
 
 test.describe('parent workspace', () => {
@@ -69,6 +71,7 @@ test.describe('parent workspace', () => {
       .innerText()
       .catch(() => '(page text unavailable)');
     console.log(`FAILED AT ${page.url()}\n${text.slice(0, 2000)}`);
+    if (saveTraffic.length > 0) console.log(`SAVE TRAFFIC\n${saveTraffic.join('\n')}`);
   });
 
   test('top navigation reaches all five destinations, with no sidebar', async ({ page }) => {
@@ -165,6 +168,27 @@ test.describe('parent workspace', () => {
     await expect(page.getByLabel("Student's first name")).toHaveValue(STUDENT);
     await snap(page, 'parent-student-edit');
     await page.getByLabel('School (optional)').fill('Kōwhai College');
+
+    // If the save does not land, say what the browser was waiting on: the
+    // page text alone ("Saving…") cannot tell a slow server from a lost reply.
+    const traffic: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST') traffic.push(`> POST ${request.url()}`);
+    });
+    page.on('response', (response) => {
+      if (response.request().method() === 'POST') {
+        traffic.push(`< ${String(response.status())} ${response.url()}`);
+      }
+    });
+    page.on('requestfailed', (request) => {
+      traffic.push(`x ${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`);
+    });
+    page.on('console', (message) => {
+      if (message.type() === 'error') traffic.push(`console: ${message.text()}`);
+    });
+    page.on('pageerror', (error) => traffic.push(`pageerror: ${error.message}`));
+    saveTraffic = traffic;
+
     await page.getByRole('button', { name: 'Save changes' }).click();
 
     // Saving re-renders the whole workspace and then the student's page, which

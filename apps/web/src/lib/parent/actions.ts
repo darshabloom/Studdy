@@ -55,6 +55,6 @@ export async function updateStudentAction(
     return { ...INITIAL, error: 'Those details could not be saved. Please try again.' };
   }
 
-  revalidatePath('/parent', 'layout');
+  revalidatePath('/parent');
   redirect(`/parent/students/${student.reference}`);
 }
