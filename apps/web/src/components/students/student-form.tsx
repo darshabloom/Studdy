@@ -1,6 +1,7 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useActionState, useEffect, useState } from 'react';
 import { Alert, Button, Field, Label } from '@studdy/design-system';
 import { SCHOOL_YEAR_CODES, schoolYearLabel } from '@studdy/domain/students';
 import type { FormState } from '@/lib/discovery/actions';
@@ -12,17 +13,34 @@ export interface StudentFormProps {
   /** Copy differs between "add my child" and "set up my own profile". */
   variant: 'dependent' | 'self';
   submitLabel: string;
+  /** Present when correcting an existing student rather than adding one. */
+  initial?: {
+    preferredName: string;
+    familyName: string | null;
+    schoolYearCode: string | null;
+    schoolOrProviderName: string | null;
+  };
 }
 
 /** Shared by the guardian's add-student flow and the independent student's setup. */
-export function StudentForm({ action, variant, submitLabel }: StudentFormProps) {
+export function StudentForm({ action, variant, submitLabel, initial }: StudentFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
-  const [preferredName, setPreferredName] = useState('');
-  const [familyName, setFamilyName] = useState('');
-  const [schoolYearCode, setSchoolYearCode] = useState('');
-  const [school, setSchool] = useState('');
+  const [preferredName, setPreferredName] = useState(initial?.preferredName ?? '');
+  const [familyName, setFamilyName] = useState(initial?.familyName ?? '');
+  const [schoolYearCode, setSchoolYearCode] = useState(initial?.schoolYearCode ?? '');
+  const [school, setSchool] = useState(initial?.schoolOrProviderName ?? '');
 
   const isSelf = variant === 'self';
+
+  // An action that saved and named a destination is followed from here.
+  const router = useRouter();
+  const savedHref = state.savedHref;
+  useEffect(() => {
+    if (savedHref === undefined) return;
+    // Drop anything cached from before the save, then go.
+    router.refresh();
+    router.push(savedHref);
+  }, [savedHref, router]);
 
   return (
     <form action={formAction} className="flex flex-col gap-4" noValidate>
@@ -77,8 +95,8 @@ export function StudentForm({ action, variant, submitLabel }: StudentFormProps) 
         onChange={(event) => setSchool(event.target.value)}
       />
 
-      <Button type="submit" disabled={pending}>
-        {pending ? 'Saving…' : submitLabel}
+      <Button type="submit" disabled={pending || savedHref !== undefined}>
+        {pending || savedHref !== undefined ? 'Saving…' : submitLabel}
       </Button>
     </form>
   );

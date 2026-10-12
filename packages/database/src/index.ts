@@ -76,6 +76,19 @@ export {
   type FamilyTutorRequestView,
   type TutorRequestView,
 } from './repositories/request-projections';
+// What a family reads about its own bookings and money (feat/parent-experience)
+export {
+  listBookingsForStudents,
+  findBookingForStudents,
+  listPaymentsForStudents,
+  listArchivedStudentsForFamily,
+  updateDependentStudent,
+  type ArchivedStudentView,
+  type FamilyBookingView,
+  type FamilyPaymentView,
+  type FamilyRefundView,
+  type UpdateDependentStudentInput,
+} from './repositories/family-overview';
 export {
   loadPaymentWindowRules,
   loadPricingRules,

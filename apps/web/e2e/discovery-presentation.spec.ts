@@ -45,11 +45,15 @@ test.describe('tutor discovery presentation', () => {
       await signIn(page, 'parent.one@local.studdy.test');
       await page.goto('/tutors');
 
-      // Authenticated chrome: workspace switcher, account menu, way back.
-      await expect(page.getByRole('navigation', { name: 'Workspaces' })).toBeVisible();
-      await expect(page.getByText('Parent').first()).toBeVisible();
+      // Authenticated chrome: the Parent workspace's own navigation and the
+      // account menu, so finding a tutor never feels like leaving it.
+      const workspaceNav = page.getByRole('navigation', { name: 'Workspace', exact: true });
+      await expect(workspaceNav).toBeVisible();
+      await expect(workspaceNav.getByRole('link', { name: 'Tutors' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
       await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
-      await expect(page.getByRole('link', { name: '← Back to dashboard' })).toBeVisible();
 
       // No competing public sign-in emphasis.
       await expect(page.getByRole('link', { name: 'Log in' })).toHaveCount(0);
@@ -58,9 +62,9 @@ test.describe('tutor discovery presentation', () => {
       // The same tutor results are still rendered.
       await expect(page.getByRole('link', { name: 'View availability' }).first()).toBeVisible();
 
-      // Back to dashboard actually returns to the parent workspace.
-      await page.getByRole('link', { name: '← Back to dashboard' }).click();
-      await expect(page).toHaveURL(/\/parent/);
+      // Home actually returns to the parent workspace.
+      await workspaceNav.getByRole('link', { name: 'Home' }).click();
+      await expect(page).toHaveURL(/\/parent$/);
     });
 
     test('the tutor profile page carries the same authenticated chrome', async ({ page }) => {
@@ -68,7 +72,7 @@ test.describe('tutor discovery presentation', () => {
       await page.goto('/tutors');
       await page.getByRole('link', { name: 'View availability' }).first().click();
       await expect(page).toHaveURL(/\/tutors\/TUTOR-/);
-      await expect(page.getByRole('navigation', { name: 'Workspaces' })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: 'Workspace', exact: true })).toBeVisible();
       await expect(page.getByRole('link', { name: 'Log in' })).toHaveCount(0);
     });
 

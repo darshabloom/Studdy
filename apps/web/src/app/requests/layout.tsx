@@ -2,8 +2,11 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Button } from '@studdy/design-system';
 import type { ReactNode } from 'react';
+import { TopNavBar } from '@/components/layout/top-nav-bar';
+import { TopNavFrame } from '@/components/layout/top-nav-frame';
 import { WorkspaceTopBar, workspaceHomeHref } from '@/components/layout/workspace-top-bar';
 import { resolveIdentity } from '@/lib/identity/resolve';
+import { PARENT_NAV } from '@/lib/parent/nav';
 
 export const metadata = { title: 'Lesson requests' };
 
@@ -17,6 +20,27 @@ export default async function RequestsLayout({ children }: { children: ReactNode
   const identity = await resolveIdentity();
   if (identity === null) {
     redirect('/sign-in?next=%2Frequests');
+  }
+
+  // A parent keeps the Parent workspace's own navigation here, so finding a
+  // tutor or following a request never feels like leaving it.
+  if (identity.workspaces.includes('parent')) {
+    return (
+      <TopNavFrame
+        mainClassName="mx-auto w-full max-w-4xl flex-1 px-4 py-8"
+        bar={
+          <TopNavBar
+            homeHref="/parent"
+            items={PARENT_NAV}
+            currentWorkspace="parent"
+            workspaces={identity.workspaces}
+            accountLabel={identity.displayName ?? identity.email ?? 'Your account'}
+          />
+        }
+      >
+        {children}
+      </TopNavFrame>
+    );
   }
 
   const [currentWorkspace] = identity.workspaces;

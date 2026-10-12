@@ -19,6 +19,8 @@ export interface FormState {
   error: string | null;
   message: string | null;
   issues?: Record<string, string>;
+  /** Set on success by an action that leaves the navigating to the form. */
+  savedHref?: string;
 }
 
 const INITIAL: FormState = { error: null, message: null };

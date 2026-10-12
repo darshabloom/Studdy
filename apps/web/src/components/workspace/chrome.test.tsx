@@ -185,6 +185,44 @@ describe('WorkspaceChrome', () => {
     expect(rendersChildren(result, secret)).toBe(true);
   });
 
+  it('makes the same access decision in the top-navigation frame', async () => {
+    const topNav = [{ label: 'Home', href: '/parent', exact: true }];
+    const secret = <div>SECRET</div>;
+
+    resolveIdentity.mockResolvedValue(baseIdentity({ workspaces: ['parent'] }));
+    const allowed = await WorkspaceChrome({
+      accepts: PARENT,
+      navItems: [],
+      topNav,
+      homeHref: '/parent',
+      children: secret,
+    });
+    expect(rendersChildren(allowed, secret)).toBe(true);
+    expect(rendersRestricted(allowed)).toBe(false);
+
+    resolveIdentity.mockResolvedValue(baseIdentity({ workspaces: ['tutor'] }));
+    const wrongRole = await WorkspaceChrome({
+      accepts: PARENT,
+      navItems: [],
+      topNav,
+      homeHref: '/parent',
+      children: secret,
+    });
+    expect(rendersChildren(wrongRole, secret)).toBe(false);
+    expect(rendersRestricted(wrongRole)).toBe(true);
+
+    resolveIdentity.mockResolvedValue(baseIdentity({ databaseAvailable: false, workspaces: [] }));
+    const blip = await WorkspaceChrome({
+      accepts: PARENT,
+      navItems: [],
+      topNav,
+      homeHref: '/parent',
+      children: secret,
+    });
+    expect(rendersChildren(blip, secret)).toBe(false);
+    expect(rendersRestricted(blip)).toBe(true);
+  });
+
   it('sends a signed-in user without a matching role to MFA before ever showing the access decision (deliberate: MFA is fully independent of hasAccess)', async () => {
     resolveIdentity.mockResolvedValue(baseIdentity({ databaseAvailable: true, workspaces: [] }));
     createSupabaseServerClient.mockResolvedValue(supabaseWithAal('aal1', 'aal1'));
