@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { safeAuthNext } from '@/lib/auth/safe-next';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 /**
  * PKCE code exchange endpoint. Route handlers CAN set cookies (Server
@@ -26,6 +26,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   }
   return NextResponse.redirect(
-    new URL(googleFlow ? '/sign-in?error=google_unavailable' : '/verify?error=invalid_link', url.origin),
+    new URL(
+      googleFlow ? '/sign-in?error=google_unavailable' : '/verify?error=invalid_link',
+      url.origin,
+    ),
   );
 }
