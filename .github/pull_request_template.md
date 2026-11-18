@@ -2,7 +2,7 @@
 
 <!-- Link the Story. Use [sc-123] in the PR title or body to enable Shortcut tracking. -->
 
-Story: 
+Story: <!-- Paste Shortcut Story URL here -->
 
 ## What and why
 
