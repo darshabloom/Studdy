@@ -44,7 +44,7 @@ jobs:
           cache: pnpm
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.111.0
       - run: pnpm install --frozen-lockfile
       - name: Start local Supabase
         run: supabase start --workdir infrastructure
@@ -87,7 +87,7 @@ jobs:
           cache: pnpm
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.111.0
       - run: pnpm install --frozen-lockfile
       - name: Start local Supabase (identity e2e uses real auth + Mailpit)
         run: supabase start --workdir infrastructure
