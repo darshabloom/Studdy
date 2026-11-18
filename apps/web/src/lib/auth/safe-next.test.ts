@@ -18,9 +18,7 @@ describe('safeAuthNext', () => {
   });
 
   it('retains same-origin workspace destinations and their query strings', () => {
-    expect(safeAuthNext('/tutor/calendar?show=lessons')).toBe(
-      '/tutor/calendar?show=lessons',
-    );
+    expect(safeAuthNext('/tutor/calendar?show=lessons')).toBe('/tutor/calendar?show=lessons');
     expect(safeAuthNext('/parent')).toBe('/parent');
   });
 });
