@@ -64,7 +64,7 @@ or family records and production credentials out of prompts and fixtures.
 See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml). It runs
 typecheck, lint, Prettier, unit tests, RLS classification, build, a fresh
 local Supabase migration/seed/integration suite, Playwright E2E and
-Gitleaks. This document does not duplicate or replace those checks.
+Gitleaks. CI pins the Supabase CLI to a repository-compatible version. This document does not duplicate or replace those checks.
 
 ## Shortcut statuses
 
