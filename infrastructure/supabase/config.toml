@@ -21,7 +21,7 @@ enabled = true
 port = 14323
 
 # Local email testing inbox — auth emails land here, nothing is sent for real.
-[inbucket]
+[local_smtp]
 enabled = true
 port = 14324
 
