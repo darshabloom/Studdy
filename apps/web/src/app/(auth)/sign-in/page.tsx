@@ -16,7 +16,9 @@ export default async function SignInPage({
       <h1 className="text-2xl font-semibold">Log in to Studdy</h1>
       {error === 'google_unavailable' ? (
         <div className="mt-4">
-          <Alert tone="critical">Google sign-in is unavailable. You can still sign in with email and password.</Alert>
+          <Alert tone="critical">
+            Google sign-in is unavailable. You can still sign in with email and password.
+          </Alert>
         </div>
       ) : null}
       <div className="mt-6">
