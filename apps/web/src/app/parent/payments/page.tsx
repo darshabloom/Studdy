@@ -165,7 +165,9 @@ export default async function PaymentsPage({
                           {formatMoney(item.amountMinor, item.currencyCode)}
                         </span>
                         <Button className={COMPACT} asChild>
-                          <Link href={`/requests/${item.requestReference}/pay`}>Pay now</Link>
+                          <Link prefetch={false} href={`/requests/${item.requestReference}/pay`}>
+                            Pay now
+                          </Link>
                         </Button>
                       </div>
                     </li>

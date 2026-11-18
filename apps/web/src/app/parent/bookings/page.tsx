@@ -44,7 +44,11 @@ function RequestRow({ request }: { request: FamilyRequestView }) {
     <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0">
         <p className="font-medium text-text-primary">
-          <Link href={`/requests/${request.reference}`} className="hover:underline">
+          <Link
+            prefetch={false}
+            href={`/requests/${request.reference}`}
+            className="hover:underline"
+          >
             {request.subjectDisplayName} for {request.studentPreferredName}
           </Link>
         </p>
@@ -65,11 +69,15 @@ function RequestRow({ request }: { request: FamilyRequestView }) {
         />
         {request.statusCode === 'ready_for_selection' ? (
           <Button className={COMPACT} asChild>
-            <Link href={`/requests/${request.reference}/select`}>Choose a tutor</Link>
+            <Link prefetch={false} href={`/requests/${request.reference}/select`}>
+              Choose a tutor
+            </Link>
           </Button>
         ) : request.statusCode === 'awaiting_payment' ? (
           <Button className={COMPACT} asChild>
-            <Link href={`/requests/${request.reference}/pay`}>Pay now</Link>
+            <Link prefetch={false} href={`/requests/${request.reference}/pay`}>
+              Pay now
+            </Link>
           </Button>
         ) : (
           <TextLink href={`/requests/${request.reference}`}>View request</TextLink>
@@ -169,6 +177,7 @@ function MonthCalendar({
                       {(byDay.get(day.dateKey) ?? []).map((booking) => (
                         <li key={booking.reference}>
                           <Link
+                            prefetch={false}
                             href={`/parent/bookings/${booking.reference}`}
                             className="block rounded-[var(--radius-gentle)] border border-brand-purple/20 bg-brand-lavender px-2 py-1 text-xs text-brand-purple-deep hover:border-brand-purple"
                           >
@@ -214,6 +223,7 @@ function MonthCalendar({
               {inMonth.map((booking) => (
                 <li key={booking.reference} className="px-4 py-3">
                   <Link
+                    prefetch={false}
                     href={`/parent/bookings/${booking.reference}`}
                     className="font-medium text-text-primary hover:underline"
                   >
@@ -265,7 +275,9 @@ export default async function BookingsPage({
         title="Bookings"
         action={
           <Button asChild>
-            <Link href="/parent/book">Book a lesson</Link>
+            <Link prefetch={false} href="/parent/book">
+              Book a lesson
+            </Link>
           </Button>
         }
       />
@@ -332,6 +344,7 @@ export default async function BookingsPage({
                     <tr key={booking.reference}>
                       <td className="px-4 py-3">
                         <Link
+                          prefetch={false}
                           href={`/parent/bookings/${booking.reference}`}
                           className="font-medium text-text-primary hover:underline"
                         >

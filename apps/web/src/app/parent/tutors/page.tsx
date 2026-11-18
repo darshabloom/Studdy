@@ -109,6 +109,7 @@ export default async function TutorsPage({
                 );
                 return (
                   <Link
+                    prefetch={false}
                     key={section.subjectSectionId}
                     href={`/tutors?section=${section.subjectSectionId}`}
                     className="rounded-[var(--radius-pill)] border border-surface-border bg-surface-card px-3 py-1 font-medium text-brand-purple hover:border-brand-purple"
@@ -177,10 +178,14 @@ export default async function TutorsPage({
                     </div>
                     <div className="mt-auto flex flex-wrap gap-2 pt-1">
                       <Button className={COMPACT} asChild>
-                        <Link href={`/book?tutor=${tutor.tutorReference}`}>Request a lesson</Link>
+                        <Link prefetch={false} href={`/book?tutor=${tutor.tutorReference}`}>
+                          Request a lesson
+                        </Link>
                       </Button>
                       <Button variant="secondary" className={COMPACT} asChild>
-                        <Link href={`/tutors/${tutor.tutorReference}`}>View profile</Link>
+                        <Link prefetch={false} href={`/tutors/${tutor.tutorReference}`}>
+                          View profile
+                        </Link>
                       </Button>
                     </div>
                   </li>
@@ -235,10 +240,14 @@ export default async function TutorsPage({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button className={COMPACT} asChild>
-                    <Link href={`/book?tutor=${tutor.tutorReference}`}>Book lesson</Link>
+                    <Link prefetch={false} href={`/book?tutor=${tutor.tutorReference}`}>
+                      Book lesson
+                    </Link>
                   </Button>
                   <Button variant="secondary" className={COMPACT} asChild>
-                    <Link href={`/tutors/${tutor.tutorReference}`}>View profile</Link>
+                    <Link prefetch={false} href={`/tutors/${tutor.tutorReference}`}>
+                      View profile
+                    </Link>
                   </Button>
                 </div>
               </li>

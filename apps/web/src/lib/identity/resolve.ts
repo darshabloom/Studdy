@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { ensureIdentityForAuthUser } from '@studdy/database';
 import type { ActiveRoleAssignment } from '@studdy/domain';
 import { availableWorkspaces } from '@studdy/domain/identity';
@@ -27,7 +28,20 @@ export interface ResolvedIdentity {
  * identity repository (created + linked on first authenticated visit), load
  * active role assignments, derive workspaces.
  */
-export async function resolveIdentity(): Promise<ResolvedIdentity | null> {
+/**
+ * ONE RESOLUTION PER REQUEST.
+ *
+ * A layout and the page beneath it render side by side, and each asks who is
+ * signed in; so do the loaders a page calls. Uncached, one page view made that
+ * many separate round trips to the auth service and that many concurrent
+ * `ensureIdentityForAuthUser` calls for the same person. React's `cache` shares
+ * the first call's promise with every later caller in the same request, and
+ * nothing beyond it: the next request resolves afresh, so a role revoked a
+ * moment ago is still seen as revoked.
+ */
+export const resolveIdentity = cache(resolveIdentityUncached);
+
+async function resolveIdentityUncached(): Promise<ResolvedIdentity | null> {
   const supabase = await createSupabaseServerClient();
   if (supabase === null) return null;
   const {

@@ -19,7 +19,9 @@ export default function AddStudentPage() {
       </Card>
       <div className="mt-4">
         <Button variant="quiet" asChild>
-          <Link href="/parent">Back to your students</Link>
+          <Link prefetch={false} href="/parent">
+            Back to your students
+          </Link>
         </Button>
       </div>
     </div>

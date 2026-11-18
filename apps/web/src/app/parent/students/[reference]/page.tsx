@@ -89,6 +89,7 @@ export default async function StudentPage({
               <Initial name={tutor.tutorFirstName} tone="gold" />
               <div className="min-w-0">
                 <Link
+                  prefetch={false}
                   href={`/tutors/${tutor.tutorReference}`}
                   className="font-medium text-text-primary hover:underline"
                 >
@@ -135,11 +136,15 @@ export default async function StudentPage({
         <div className="flex flex-wrap gap-2">
           {student.independenceStatusCode === 'dependent' ? (
             <Button variant="secondary" className={COMPACT} asChild>
-              <Link href={`${base}/edit`}>Edit details</Link>
+              <Link prefetch={false} href={`${base}/edit`}>
+                Edit details
+              </Link>
             </Button>
           ) : null}
           <Button className={COMPACT} asChild>
-            <Link href={`/book?child=${student.studentProfileId}`}>Book a lesson</Link>
+            <Link prefetch={false} href={`/book?child=${student.studentProfileId}`}>
+              Book a lesson
+            </Link>
           </Button>
         </div>
       </div>
