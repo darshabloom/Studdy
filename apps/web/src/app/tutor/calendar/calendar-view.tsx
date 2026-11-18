@@ -108,8 +108,7 @@ function ModeSwitch({
   monthHref: string;
 }) {
   const item = (label: string, href: string, active: boolean) => (
-    <Link
-      prefetch={false}
+    <a
       href={href}
       aria-current={active ? 'true' : undefined}
       className={
@@ -119,7 +118,7 @@ function ModeSwitch({
       }
     >
       {label}
-    </Link>
+    </a>
   );
   return (
     <div className="inline-flex overflow-hidden rounded-[var(--radius-gentle)] border border-surface-border">
