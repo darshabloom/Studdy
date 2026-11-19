@@ -10,8 +10,7 @@ export default function SignUpPage() {
     <Card>
       <h1 className="text-2xl font-semibold">Join Studdy</h1>
       <p className="mt-1 text-sm text-text-secondary">
-        Create your account with Google or email and password. Then choose whether you are a
-        parent, guardian or independent student.
+        Join with Google or email and password. Then choose your account type.
       </p>
       <div className="mt-6">
         <GoogleSignIn />
