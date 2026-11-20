@@ -3,10 +3,7 @@ import { notFound } from 'next/navigation';
 import { Alert, Button, Card, StatusBadge, TextareaField } from '@studdy/design-system';
 import { ReviewCheckControls } from '@/components/tutors/review-check-controls';
 import { applicationForReview } from '@studdy/database';
-import {
-  DECIDABLE_APPLICATION_STATUSES,
-  TUTOR_YEAR_LEVELS,
-} from '@studdy/domain/tutors';
+import { DECIDABLE_APPLICATION_STATUSES, TUTOR_YEAR_LEVELS } from '@studdy/domain/tutors';
 import { requireStaff } from '@/lib/auth/staff';
 import {
   APPLICATION_STATUS_FAMILY,
