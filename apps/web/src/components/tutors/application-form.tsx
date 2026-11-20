@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useState, type FormEvent } from 'react';
 import { Alert, Button, Field, Label, TextareaField } from '@studdy/design-system';
-import type { TutorApplicationInput } from '@studdy/domain/tutors';
+import { TUTOR_YEAR_LEVELS, type TutorApplicationInput } from '@studdy/domain/tutors';
 import { INITIAL_TUTOR_FORM_STATE, type TutorFormState } from '@/lib/tutors/form-state';
 
 export interface ApplicationFormProps {
@@ -14,7 +14,6 @@ export interface ApplicationFormProps {
   readonly resubmitting: boolean;
 }
 
-const YEARS = Array.from({ length: 13 }, (_, index) => index + 1);
 const REFERENCE_SLOTS = 3;
 
 /**
@@ -168,9 +167,9 @@ export function ApplicationForm({
               className="h-10 w-full rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card px-3 text-base text-text-primary hover:border-text-muted"
             >
               <option value="">Choose</option>
-              {YEARS.map((year) => (
-                <option key={year} value={String(year)}>
-                  Year {year}
+              {TUTOR_YEAR_LEVELS.map((level) => (
+                <option key={level.value} value={level.value}>
+                  {level.label}
                 </option>
               ))}
             </select>
@@ -190,9 +189,9 @@ export function ApplicationForm({
               className="h-10 w-full rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card px-3 text-base text-text-primary hover:border-text-muted"
             >
               <option value="">Choose</option>
-              {YEARS.map((year) => (
-                <option key={year} value={String(year)}>
-                  Year {year}
+              {TUTOR_YEAR_LEVELS.map((level) => (
+                <option key={level.value} value={level.value}>
+                  {level.label}
                 </option>
               ))}
             </select>
@@ -243,7 +242,7 @@ export function ApplicationForm({
           value={values.headline}
           onChange={(event) => set('headline', event.target.value)}
           error={issues['headline']}
-          helper="One line families will see on your profile, for example “Patient maths tutor for years 7 to 10”."
+          helper={`Up to 140 characters (${String(values.headline.trim().length)}/140). Families see this on your profile.`}
         />
         <TextareaField
           label="How you teach"
@@ -252,7 +251,7 @@ export function ApplicationForm({
           value={values.teachingApproach}
           onChange={(event) => set('teachingApproach', event.target.value)}
           error={issues['teachingApproach']}
-          helper="Families see this on your profile."
+          helper={`At least 40 characters (${String(values.teachingApproach.trim().length)}/40 minimum). Families see this on your profile.`}
         />
         <TextareaField
           label="Your experience"
@@ -261,7 +260,7 @@ export function ApplicationForm({
           value={values.experienceSummary}
           onChange={(event) => set('experienceSummary', event.target.value)}
           error={issues['experienceSummary']}
-          helper="Teaching, tutoring and anything else relevant. Only Studdy sees this."
+          helper={`At least 40 characters (${String(values.experienceSummary.trim().length)}/40 minimum). Teaching experience and relevant work; only Studdy sees this.`}
         />
         <TextareaField
           label="Qualifications (optional)"
@@ -337,7 +336,7 @@ export function ApplicationForm({
           <span>
             I confirm that I am 18 or over, that what I have written is accurate, that I agree to
             Studdy&rsquo;s terms for tutors, and that I accept Studdy&rsquo;s safeguarding
-            requirements for working with children, including any checks Studdy asks me to complete.
+            requirements for working with children, including any checks Studdy asks me to complete. If I am under 18, I understand that Studdy may require parent or guardian involvement before I can tutor.
           </span>
         </label>
         {issues['declarationsAccepted'] !== undefined ? (
