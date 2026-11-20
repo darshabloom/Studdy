@@ -26,7 +26,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Review a tutor application' };
 
 const REFERENCE = /^APP-\d{8}$/;
-const educationLabel = (value: number) =>
+const educationLabel = (value: string | number) =>
   TUTOR_YEAR_LEVELS.find((level) => level.value === String(value))?.label ?? `Level ${String(value)}`;
 
 const CHECK_STATUS_FAMILY = {
