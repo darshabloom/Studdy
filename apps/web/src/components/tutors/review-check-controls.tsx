@@ -42,9 +42,10 @@ export function ReviewCheckControls({
     recordCheckInlineAction,
     INITIAL_REVIEW_CHECK_STATE,
   );
-  const status = state.outcome === 'saved' && state.recordedStatus !== null
-    ? state.recordedStatus
-    : initialStatus;
+  const status =
+    state.outcome === 'saved' && state.recordedStatus !== null
+      ? state.recordedStatus
+      : initialStatus;
 
   // Re-fetch the updated checks and approval readiness without navigation or
   // resetting the reviewer's scroll position.
@@ -57,7 +58,8 @@ export function ReviewCheckControls({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="font-medium">
-            {CHECK_LABEL[checkCode]}{required ? '' : ' (optional)'}
+            {CHECK_LABEL[checkCode]}
+            {required ? '' : ' (optional)'}
           </p>
           <p className="text-sm text-text-secondary">{CHECK_HELP[checkCode]}</p>
         </div>
@@ -80,10 +82,24 @@ export function ReviewCheckControls({
             <Button type="submit" name="status" value="verified" size="sm" disabled={pending}>
               {pending ? 'Saving check…' : 'Mark verified'}
             </Button>
-            <Button type="submit" name="status" value="failed" variant="secondary" size="sm" disabled={pending}>
+            <Button
+              type="submit"
+              name="status"
+              value="failed"
+              variant="secondary"
+              size="sm"
+              disabled={pending}
+            >
               Mark failed
             </Button>
-            <Button type="submit" name="status" value="pending" variant="quiet" size="sm" disabled={pending}>
+            <Button
+              type="submit"
+              name="status"
+              value="pending"
+              variant="quiet"
+              size="sm"
+              disabled={pending}
+            >
               Reset
             </Button>
           </div>
