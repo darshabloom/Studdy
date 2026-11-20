@@ -27,7 +27,8 @@ export const metadata = { title: 'Review a tutor application' };
 
 const REFERENCE = /^APP-\d{8}$/;
 const educationLabel = (value: string | number) =>
-  TUTOR_YEAR_LEVELS.find((level) => level.value === String(value))?.label ?? `Level ${String(value)}`;
+  TUTOR_YEAR_LEVELS.find((level) => level.value === String(value))?.label ??
+  `Level ${String(value)}`;
 
 const CHECK_STATUS_FAMILY = {
   pending: 'pending',
