@@ -81,7 +81,6 @@ export async function recordCheckAction(formData: FormData): Promise<void> {
   back(reference, result.status === 'done' ? REVIEW_NOTICE.checkSaved : REVIEW_NOTICE.notDecidable);
 }
 
-
 /**
  * Record an individual check without a redirect. Each call still checks fresh
  * staff permissions and MFA, then records the normal audited database event.
