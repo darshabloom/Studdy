@@ -334,10 +334,9 @@ export function ApplicationForm({
             onChange={(event) => set('declarationsAccepted', event.target.checked)}
           />
           <span>
-            I confirm that I am 16 or over, that what I have written is accurate, and that I
-            agree to Studdy&rsquo;s terms for tutors and safeguarding requirements.
-            If I am 16 or 17, I will disclose this during review and obtain parent or
-            guardian consent before approval.
+            I confirm that I am 16 or over, that what I have written is accurate, and that I agree
+            to Studdy&rsquo;s terms for tutors and safeguarding requirements. If I am 16 or 17, I
+            will disclose this during review and obtain parent or guardian consent before approval.
           </span>
         </label>
         {issues['declarationsAccepted'] !== undefined ? (
