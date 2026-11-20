@@ -161,6 +161,11 @@ export default async function ReviewApplicationPage({
           Done outside this form, recorded here as an outcome. Studdy keeps the result, not the
           documents. Approval needs every required check verified.
         </p>
+        <p className="mt-2 text-sm text-text-secondary">
+          Applicants may be 16 or 17. Confirm age during the identity check and verify
+          parent/guardian consent, safeguarding arrangements and payment arrangements before
+          approving any under-18 tutor.
+        </p>
         <ul className="mt-4 flex flex-col gap-5">
           {review.checks.map((check) => (
             <li
