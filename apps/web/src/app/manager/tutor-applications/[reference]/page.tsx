@@ -2,7 +2,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Alert, Button, Card, StatusBadge, TextareaField } from '@studdy/design-system';
 import { applicationForReview } from '@studdy/database';
-import { DECIDABLE_APPLICATION_STATUSES, type ApplicationCheckStatus } from '@studdy/domain/tutors';
+import {
+  DECIDABLE_APPLICATION_STATUSES,
+  TUTOR_YEAR_LEVELS,
+  type ApplicationCheckStatus,
+} from '@studdy/domain/tutors';
 import { requireStaff } from '@/lib/auth/staff';
 import {
   APPLICATION_STATUS_FAMILY,
@@ -118,7 +122,8 @@ export default async function ReviewApplicationPage({
         <dl className="mt-4 flex flex-col gap-4">
           <Detail label="Subjects">{review.subjectNames.join(', ')}</Detail>
           <Detail label="Year levels">
-            Year {form.yearLevelFrom} to Year {form.yearLevelTo}
+            {TUTOR_YEAR_LEVELS.find((level) => level.value === String(form.yearLevelFrom))?.label} to{' '}
+            {TUTOR_YEAR_LEVELS.find((level) => level.value === String(form.yearLevelTo))?.label}
           </Detail>
           <Detail label="Formats">
             {[form.offersOnline ? 'Online' : null, form.offersInPerson ? 'In person' : null]
