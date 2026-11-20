@@ -27,6 +27,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - name: Show formatting changes for inline review checks
+        run: |
+          pnpm exec prettier --write 'apps/web/src/app/manager/tutor-applications/[reference]/page.tsx' 'apps/web/src/components/tutors/review-check-controls.tsx' 'apps/web/src/lib/tutors/review-actions.ts'
+          git diff -- 'apps/web/src/app/manager/tutor-applications/[reference]/page.tsx' 'apps/web/src/components/tutors/review-check-controls.tsx' 'apps/web/src/lib/tutors/review-actions.ts'
       - run: pnpm format
       - run: pnpm test
       - run: pnpm check:rls
