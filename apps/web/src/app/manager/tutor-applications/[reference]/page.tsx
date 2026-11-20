@@ -26,6 +26,8 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Review a tutor application' };
 
 const REFERENCE = /^APP-\d{8}$/;
+const educationLabel = (value: number) =>
+  TUTOR_YEAR_LEVELS.find((level) => level.value === String(value))?.label ?? `Level ${String(value)}`;
 
 const CHECK_STATUS_FAMILY = {
   pending: 'pending',
@@ -122,8 +124,7 @@ export default async function ReviewApplicationPage({
         <dl className="mt-4 flex flex-col gap-4">
           <Detail label="Subjects">{review.subjectNames.join(', ')}</Detail>
           <Detail label="Year levels">
-            {TUTOR_YEAR_LEVELS.find((level) => level.value === String(form.yearLevelFrom))?.label} to{' '}
-            {TUTOR_YEAR_LEVELS.find((level) => level.value === String(form.yearLevelTo))?.label}
+            {educationLabel(form.yearLevelFrom)} to {educationLabel(form.yearLevelTo)}
           </Detail>
           <Detail label="Formats">
             {[form.offersOnline ? 'Online' : null, form.offersInPerson ? 'In person' : null]
