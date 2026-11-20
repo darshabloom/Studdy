@@ -345,7 +345,7 @@ export function ApplicationForm({
           <span>
             I confirm that I am 18 or over, that what I have written is accurate, that I agree to
             Studdy&rsquo;s terms for tutors, and that I accept Studdy&rsquo;s safeguarding
-            requirements for working with children, including any checks Studdy asks me to complete. If I am under 18, I understand that Studdy may require parent or guardian involvement before I can tutor.
+            requirements for working with children, including any checks Studdy asks me to complete. If I am 16 or 17, I will disclose this during review and obtain parent or guardian consent before approval.
           </span>
         </label>
         {issues['declarationsAccepted'] !== undefined ? (
