@@ -19,12 +19,28 @@ export default async function WelcomePage() {
 
   const tutorPending = identity.pendingRoleCodes.includes('tutor');
   const noActiveWorkspace =
-    !identity.needsSetup && identity.workspaces.length === 0 && !tutorPending;
+    identity.databaseAvailable &&
+    !identity.needsSetup &&
+    identity.workspaces.length === 0 &&
+    !tutorPending;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-page px-4 py-10">
       <div className="w-full max-w-lg">
-        {noActiveWorkspace ? (
+        {!identity.databaseAvailable ? (
+          <Card>
+            <h1 className="text-2xl font-semibold">Account setup temporarily unavailable</h1>
+            <div className="mt-4 flex flex-col gap-4">
+              <Alert tone="warning" title="Connection unavailable">
+                Studdy cannot load your workspace details right now. Your Google sign-in may have
+                succeeded. Please try again shortly or contact Studdy support if this continues.
+              </Alert>
+              <Button variant="secondary" asChild>
+                <Link href="/workspace">Retry loading my workspace</Link>
+              </Button>
+            </div>
+          </Card>
+        ) : noActiveWorkspace ? (
           <Card>
             <h1 className="text-2xl font-semibold">Your account has no active workspace</h1>
             <div className="mt-4 flex flex-col gap-4">

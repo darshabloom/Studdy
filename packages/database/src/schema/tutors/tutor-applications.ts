@@ -156,7 +156,7 @@ export const tutorApplicationRevisions = tutorsSchema.table(
     check('tutor_application_revision_number_check', sql`${table.revisionNumber} >= 1`),
     check(
       'tutor_application_revision_years_check',
-      sql`${table.yearLevelFrom} between 1 and 13 and ${table.yearLevelTo} between 1 and 13 and ${table.yearLevelFrom} <= ${table.yearLevelTo}`,
+      sql`${table.yearLevelFrom} between 0 and 18 and ${table.yearLevelTo} between 0 and 18 and ${table.yearLevelFrom} <= ${table.yearLevelTo}`,
     ),
     check(
       'tutor_application_revision_format_check',

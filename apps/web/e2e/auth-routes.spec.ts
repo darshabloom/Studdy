@@ -5,6 +5,10 @@ test.describe('authentication routes', () => {
     await page.goto('/sign-up');
     await expect(page.getByRole('heading', { name: 'Join Studdy' })).toBeVisible();
     // Visible labels above controls — placeholder-only forms are prohibited.
+    await expect(page.getByRole('link', { name: 'Continue with Google' })).toHaveAttribute(
+      'href',
+      '/auth/google?next=%2Fworkspace',
+    );
     await expect(page.getByLabel('Email address')).toBeVisible();
     await expect(page.getByLabel('Password')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible();
@@ -13,8 +17,18 @@ test.describe('authentication routes', () => {
   test('sign-in renders and links to sign-up and reset', async ({ page }) => {
     await page.goto('/sign-in');
     await expect(page.getByRole('heading', { name: 'Log in to Studdy' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Continue with Google' })).toBeVisible();
+    await expect(page.getByLabel('Email address')).toBeVisible();
+    await expect(page.getByLabel('Password')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Create an account' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Forgotten your password?' })).toBeVisible();
+  });
+
+  test('Google OAuth failure is explained without removing password login', async ({ page }) => {
+    await page.goto('/sign-in?error=google_unavailable');
+    await expect(page.getByText(/Google sign-in is unavailable/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible();
   });
 
   test('verify page explains the pending state', async ({ page }) => {

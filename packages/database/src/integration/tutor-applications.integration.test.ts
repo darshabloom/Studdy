@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ApplicationCheckCode, ValidatedTutorApplication } from '@studdy/domain/tutors';
+import {
+  APPLICATION_DECLARATIONS_VERSION,
+  type ApplicationCheckCode,
+  type ValidatedTutorApplication,
+} from '@studdy/domain/tutors';
 import { createDatabaseClient } from '../client';
 import {
   applicationForApplicant,
@@ -342,7 +346,7 @@ describe.skipIf(!available)('tutor applications (integration)', () => {
       expect(revision).toMatchObject({
         revision_number: 1,
         preferred_first_name: 'Aro',
-        declarations_version: 'v1',
+        declarations_version: APPLICATION_DECLARATIONS_VERSION,
         accepted: true,
       });
     });
