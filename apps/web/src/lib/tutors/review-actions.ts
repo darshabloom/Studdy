@@ -12,6 +12,7 @@ import {
 import { APPLICATION_CHECK_STATUSES, isApplicationCheckCode } from '@studdy/domain/tutors';
 import { requireStaff } from '../auth/staff';
 import { REVIEW_NOTICE, type ReviewNotice } from './review-notices';
+import type { ReviewCheckState } from './review-check-state';
 
 /**
  * The reviewer's actions — recording a check and deciding an application.
@@ -78,6 +79,52 @@ export async function recordCheckAction(formData: FormData): Promise<void> {
     correlationId: randomUUID(),
   });
   back(reference, result.status === 'done' ? REVIEW_NOTICE.checkSaved : REVIEW_NOTICE.notDecidable);
+}
+
+/**
+ * Record an individual check without a redirect. Each call still checks fresh
+ * staff permissions and MFA, then records the normal audited database event.
+ * A client component can display the result and refresh the RSC data in place.
+ */
+export async function recordCheckInlineAction(
+  previous: ReviewCheckState,
+  formData: FormData,
+): Promise<ReviewCheckState> {
+  const actor = await requireStaff('/manager/tutor-applications');
+  const reference = readReference(formData);
+  const checkCode = readText(formData, 'checkCode');
+  const status = readText(formData, 'status');
+  const note = readText(formData, 'note');
+
+  const sequence = previous.sequence + 1;
+  if (
+    !isApplicationCheckCode(checkCode) ||
+    !(APPLICATION_CHECK_STATUSES as readonly string[]).includes(status) ||
+    note.length > NOTE_MAX
+  ) {
+    return { sequence, outcome: 'invalid', recordedStatus: null };
+  }
+
+  const result = await recordApplicationCheck({
+    reference,
+    checkCode,
+    status: status as (typeof APPLICATION_CHECK_STATUSES)[number],
+    note: note === '' ? null : note,
+    actorUserId: actor.studdyUserId,
+    correlationId: randomUUID(),
+  });
+
+  if (result.status !== 'done') {
+    return { sequence, outcome: 'unavailable', recordedStatus: null };
+  }
+
+  revalidatePath('/manager/tutor-applications');
+  revalidatePath(detailPath(reference));
+  return {
+    sequence,
+    outcome: 'saved',
+    recordedStatus: status as (typeof APPLICATION_CHECK_STATUSES)[number],
+  };
 }
 
 export async function approveApplicationAction(formData: FormData): Promise<void> {
