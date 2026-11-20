@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { Alert, Button, Card, StatusBadge } from '@studdy/design-system';
 import { applicationForApplicant, listSubjects } from '@studdy/database';
 import { ApplicationForm } from '@/components/tutors/application-form';
+import { PendingSubmitButton } from '@/components/common/pending-submit-button';
 import { resolveIdentity } from '@/lib/identity/resolve';
 import {
   APPLICATION_STATUS_FAMILY,
@@ -17,10 +18,18 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-function SubmitButton({ action, label }: { action: () => Promise<void>; label: string }) {
+function SubmitButton({
+  action,
+  label,
+  pendingLabel,
+}: {
+  action: () => Promise<void>;
+  label: string;
+  pendingLabel: string;
+}) {
   return (
     <form action={action}>
-      <Button type="submit">{label}</Button>
+      <PendingSubmitButton label={label} pendingLabel={pendingLabel} />
     </form>
   );
 }
@@ -64,7 +73,11 @@ export default async function TutorApplicationPage() {
           <li>You are never asked to upload an identity document.</li>
         </ul>
         <div className="mt-6">
-          <SubmitButton action={startApplicationAction} label="Start my application" />
+          <SubmitButton
+            action={startApplicationAction}
+            label="Start my application"
+            pendingLabel="Starting your application…"
+          />
         </div>
       </Card>
     );
@@ -105,9 +118,12 @@ export default async function TutorApplicationPage() {
           />
         </Card>
         <form action={withdrawApplicationAction}>
-          <Button type="submit" variant="quiet" size="sm">
-            Withdraw my application
-          </Button>
+          <PendingSubmitButton
+            label="Withdraw my application"
+            pendingLabel="Withdrawing…"
+            variant="quiet"
+            size="sm"
+          />
         </form>
       </div>
     );
