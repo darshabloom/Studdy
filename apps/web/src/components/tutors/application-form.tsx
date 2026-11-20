@@ -60,15 +60,6 @@ export function ApplicationForm({
     );
 
   const busy = saving || submitting;
-  const headlineHelper =
-    `Up to 140 characters (${String(values.headline.trim().length)}/140). ` +
-    'Families see this on your profile.';
-  const teachingHelper =
-    `At least 40 characters (${String(values.teachingApproach.trim().length)}/40 minimum). ` +
-    'Families see this on your profile.';
-  const experienceHelper =
-    `At least 40 characters (${String(values.experienceSummary.trim().length)}/40 minimum). ` +
-    'Teaching experience and relevant work; only Studdy sees this.';
 
   /*
    * SUBMITTED BY HAND, NOT THROUGH `formAction`. React resets a form after its
@@ -251,7 +242,7 @@ export function ApplicationForm({
           value={values.headline}
           onChange={(event) => set('headline', event.target.value)}
           error={issues['headline']}
-          helper={headlineHelper}
+          helper={`Up to 140 characters (${values.headline.trim().length} entered).`}
         />
         <TextareaField
           label="How you teach"
@@ -260,7 +251,7 @@ export function ApplicationForm({
           value={values.teachingApproach}
           onChange={(event) => set('teachingApproach', event.target.value)}
           error={issues['teachingApproach']}
-          helper={teachingHelper}
+          helper={`Minimum 40 characters (${values.teachingApproach.trim().length} entered).`}
         />
         <TextareaField
           label="Your experience"
@@ -269,7 +260,7 @@ export function ApplicationForm({
           value={values.experienceSummary}
           onChange={(event) => set('experienceSummary', event.target.value)}
           error={issues['experienceSummary']}
-          helper={experienceHelper}
+          helper={`Minimum 40 characters (${values.experienceSummary.trim().length} entered).`}
         />
         <TextareaField
           label="Qualifications (optional)"
