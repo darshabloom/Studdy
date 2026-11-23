@@ -68,9 +68,7 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
       <details className="group mt-3 rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card">
         <summary className="cursor-pointer list-item rounded-[var(--radius-gentle)] px-4 py-3 font-semibold text-text-primary hover:bg-surface-card-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-purple">
           View all {checklist.steps.length} setup steps
-          <span className="ml-2 text-sm font-normal text-text-secondary">
-            ({done} complete)
-          </span>
+          <span className="ml-2 text-sm font-normal text-text-secondary">({done} complete)</span>
         </summary>
         <ol className="flex flex-col gap-3 px-3 pb-3 pt-1">
           {checklist.steps.map((step) => {
@@ -84,9 +82,7 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
               >
                 <div className="min-w-0 sm:flex-1">
                   <p className="font-semibold">{copy.title}</p>
-                  <p className="mt-0.5 text-sm text-text-secondary">
-                    {copy.detail[step.status]}
-                  </p>
+                  <p className="mt-0.5 text-sm text-text-secondary">{copy.detail[step.status]}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <StatusBadge family={STEP_FAMILY[step.status]}>
