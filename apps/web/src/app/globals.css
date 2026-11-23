@@ -38,34 +38,42 @@ body {
  * workspaces be moved over one at a time rather than all at once.
  */
 @theme {
-  --color-parent-navy: #0b2d5c;
-  --color-parent-gold: #f6b61c;
-  --color-parent-gold-pale: #fff5d5;
-  --color-parent-sky: #ddebff;
-  --color-parent-cream: #ffe9c7;
+  --color-parent-navy: #001c44;
+  --color-parent-gold: #fbb800;
+  --color-parent-gold-pale: #fff6df;
+  --color-parent-sky: #f4f7fc;
+  --color-parent-cream: #fff7e9;
+  --color-studdy-orange: #fb6204;
 }
 
 .parent-theme {
-  --color-brand-purple-deep: #0b2d5c;
-  --color-brand-purple: #0b2d5c;
-  --color-brand-purple-mid: #204a7c;
-  --color-brand-lavender: #ddebff;
+  --color-brand-purple-deep: #001c44;
+  --color-brand-purple: #001c44;
+  --color-brand-purple-mid: #173b68;
+  --color-brand-lavender: #f4f7fc;
 
   --color-surface-page: #ffffff;
   --color-surface-card: #ffffff;
   --color-surface-card-secondary: #f6f9fc;
   --color-surface-border: #e1e7ef;
 
-  --color-text-primary: #0b2d5c;
+  --color-text-primary: #001c44;
   --color-text-secondary: #435772;
   --color-text-muted: #596d87;
 
-  --color-action-primary: #0b2d5c;
-  --color-action-primary-hover: #174274;
-  --color-action-primary-active: #071f41;
-  --color-focus-ring: #f36f2b;
+  --color-action-primary: #001c44;
+  --color-action-primary-hover: #173b68;
+  --color-action-primary-active: #00112d;
+  --color-focus-ring: #fb6204;
 
-  --color-studdy-orange: #f36f2b;
   background-color: var(--color-surface-page);
   color: var(--color-text-primary);
+}
+
+/* Tutor interface: light surfaces with the four approved wordmark colours. */
+.parent-theme:has(a[href='/tutor'][aria-current='page']),
+.parent-theme:has(a[href='/tutor/requests'][aria-current='page']) {
+  --color-status-success: #001c44;
+  --color-status-success-bg: #fff6df;
+  --color-status-success-border: #fbb800;
 }
