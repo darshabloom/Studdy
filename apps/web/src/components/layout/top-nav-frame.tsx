@@ -23,7 +23,7 @@ export function TopNavFrame({
         <div className="absolute -top-[90px] -right-[110px] h-[220px] w-[260px] rounded-[58%_42%_47%_53%/52%_45%_55%_48%] bg-parent-sky opacity-50 md:-top-[120px] md:-right-[140px] md:h-[340px] md:w-[400px]" />
         <div className="absolute -bottom-[110px] -left-[120px] h-[220px] w-[260px] rounded-[45%_55%_60%_40%/48%_58%_42%_52%] bg-parent-cream opacity-80 md:-bottom-[170px] md:-left-[180px] md:h-[360px] md:w-[420px]" />
       </div>
-      <header className="sticky top-0 z-[1020] flex min-h-[84px] items-center border-b border-surface-border bg-surface-card">
+      <header className="sticky top-0 z-[1020] flex min-h-[64px] items-center border-b border-surface-border bg-surface-card">
         {bar}
       </header>
       <main className={mainClassName}>{children}</main>
