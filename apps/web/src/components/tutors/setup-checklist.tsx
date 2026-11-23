@@ -63,7 +63,11 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
           return (
             <li key={step.code} className="min-w-0">
               {actionable ? (
-                <Link href={copy.href} className={className} aria-label={`${copy.title}: ${STEP_LABEL[step.status]}. ${copy.actionLabel}`}>
+                <Link
+                  href={copy.href}
+                  className={className}
+                  aria-label={`${copy.title}: ${STEP_LABEL[step.status]}. ${copy.actionLabel}`}
+                >
                   {content}
                 </Link>
               ) : (
