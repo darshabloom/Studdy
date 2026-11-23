@@ -6,7 +6,7 @@ import {
   tutorProfileForUser,
   tutorSetupFacts,
 } from '@studdy/database';
-import { Alert, Button, Card, RestrictedState } from '@studdy/design-system';
+import { Alert, Button, RestrictedState } from '@studdy/design-system';
 import { tutorSetupChecklist } from '@studdy/domain/tutors';
 import { formatDeadline } from '@/components/requests/request-status';
 import { SetupChecklist } from '@/components/tutors/setup-checklist';
@@ -99,7 +99,7 @@ export default async function TutorDashboardPage() {
       : 'This week';
 
   return (
-    <div className="flex flex-col gap-4 text-text-primary md:gap-5">
+    <div className="flex flex-col gap-3 text-text-primary md:gap-4">
       <h1 className="sr-only">Tutor dashboard</h1>
 
       {setup !== null && !setup.bookable ? <SetupChecklist checklist={setup} /> : null}
@@ -114,8 +114,8 @@ export default async function TutorDashboardPage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <Card>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <section className="rounded-xl border border-surface-border bg-surface-card p-3 sm:p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-display text-lg font-semibold">Lessons</h2>
             <Link
@@ -125,7 +125,7 @@ export default async function TutorDashboardPage() {
               View requests →
             </Link>
           </div>
-          <div className="mt-3 rounded-xl bg-parent-cream px-4 py-3">
+          <div className="mt-2 rounded-lg bg-parent-cream px-3 py-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
               Next lesson
             </p>
@@ -134,7 +134,7 @@ export default async function TutorDashboardPage() {
               Confirmed lessons will appear when the lesson schedule is connected.
             </p>
           </div>
-          <div className="mt-4">
+          <div className="mt-3">
             <h3 className="text-sm font-semibold">Upcoming request holds</h3>
             {held.length === 0 ? (
               <p className="mt-1 text-sm text-text-secondary">No upcoming request holds.</p>
@@ -156,7 +156,7 @@ export default async function TutorDashboardPage() {
               </ul>
             )}
           </div>
-        </Card>
+        </section>
         <section aria-label="Tutor actions" className="flex flex-col gap-2">
           <Link
             href="/tutor/requests"
@@ -188,7 +188,7 @@ export default async function TutorDashboardPage() {
         </section>
       </div>
 
-      <Card>
+      <section className="rounded-xl border border-surface-border bg-surface-card p-3 sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-lg font-semibold">Earnings</h2>
@@ -200,9 +200,9 @@ export default async function TutorDashboardPage() {
             <Link href="/tutor/payments">Getting paid</Link>
           </Button>
         </div>
-      </Card>
+      </section>
 
-      <Card>
+      <section className="rounded-xl border border-surface-border bg-surface-card p-3 sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-lg font-semibold">Your calendar</h2>
@@ -218,7 +218,7 @@ export default async function TutorDashboardPage() {
           </Link>
         </div>
         <div
-          className="mt-3 grid grid-cols-7 overflow-hidden rounded-xl border border-surface-border"
+          className="mt-2 grid grid-cols-7 overflow-hidden rounded-lg border border-surface-border"
           aria-label="Monday to Sunday calendar showing bookable times"
         >
           {calendarDays.map((day) => (
@@ -233,7 +233,7 @@ export default async function TutorDashboardPage() {
                 <p className="text-xs font-semibold">{day.weekday}</p>
                 <p className="font-display text-lg font-semibold tabular-nums">{day.dayNumber}</p>
               </div>
-              <div className="flex min-h-28 flex-col gap-1 border-t border-surface-border p-1 sm:min-h-32 sm:p-2">
+              <div className="flex min-h-24 flex-col gap-1 border-t border-surface-border p-1 sm:min-h-28 sm:p-2">
                 {day.slots.length === 0 ? (
                   <span className="py-2 text-center text-xs text-text-muted">—</span>
                 ) : (
@@ -266,7 +266,7 @@ export default async function TutorDashboardPage() {
             Your available times will appear once regular hours are set.
           </p>
         ) : null}
-      </Card>
+      </section>
     </div>
   );
 }
