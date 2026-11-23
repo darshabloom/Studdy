@@ -42,7 +42,10 @@ export default async function TutorSetupPage() {
             Studdy reviews each service before you can publish it.
           </p>
         </div>
-        <Link href="/tutor" className="text-sm font-semibold text-parent-navy underline">
+        <Link
+          href="/tutor"
+          className="text-sm font-semibold text-parent-navy underline"
+        >
           Back to Tutor Home
         </Link>
       </div>
@@ -69,8 +72,8 @@ export default async function TutorSetupPage() {
         </Alert>
       ) : (
         <Alert tone="information" title="Setup in progress">
-          Complete the actions below. The status of each stage comes from your current
-          profile, services, availability and payment readiness.
+          Complete the actions below. The status of each stage comes from your current profile,
+          services, availability and payment readiness.
         </Alert>
       )}
 
@@ -97,11 +100,10 @@ export default async function TutorSetupPage() {
                   <div className="min-w-0">
                     <h2 className="font-semibold">{copy.title}</h2>
                     <p className="mt-0.5 text-xs font-semibold text-text-secondary">
-                      {STATUS[step.status]}{isNext ? ' · Next action' : ''}
+                      {STATUS[step.status]}
+                      {isNext ? ' · Next action' : ''}
                     </p>
-                    <p className="mt-2 text-sm text-text-secondary">
-                      {copy.detail[step.status]}
-                    </p>
+                    <p className="mt-2 text-sm text-text-secondary">{copy.detail[step.status]}</p>
                     {step.status === 'todo' ? (
                       <Link
                         href={copy.href}
@@ -110,7 +112,10 @@ export default async function TutorSetupPage() {
                         {copy.actionLabel} →
                       </Link>
                     ) : step.status === 'waiting' ? (
-                      <Link href={copy.href} className="mt-3 inline-block text-sm font-semibold text-parent-navy underline">
+                      <Link
+                        href={copy.href}
+                        className="mt-3 inline-block text-sm font-semibold text-parent-navy underline"
+                      >
                         Check review status
                       </Link>
                     ) : null}
