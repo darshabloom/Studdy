@@ -80,26 +80,31 @@ The application submission threshold of one referee does not automatically lower
 ## Implementation work packages (in dependency order)
 
 ### A. Model, migration and secure access
+
 - Inspect current application snapshot/revision persistence, access policies, age model and reviewer read projections.
 - Create versioned, reviewed migrations for DOB, contact/location, education/work status, per-subject levels and specialisations, curricula, experience, education/credentials claims, revised referees, evidence intent, declaration versioning and draft step progression.
 - Avoid copying personal data to test; test with synthetic records. Protect date of birth, contact and reference details against public reads and inappropriate cross-role access.
 - Plan compatibility and backfill for existing drafts; never silently discard old application answers.
 
 ### B. Domain model and validation
+
 - Update types, parsers, draft representation and submit-time validation; draft saving accepts incomplete steps.
 - Validate required responses, per-subject level mapping, exclusive 'None yet' answers, referee email-or-phone and permission/contact timing, DOB/age checks, required documents/declarations and immutable submitted snapshot.
 - Review/minor safeguarding and conditional approvals remain server-authoritative.
 
 ### C. Six-step application UI
+
 - Replace long page with a progressive six-step UI plus explicit final review screen; reusable branded inputs, progress indicator, responsive form and accessible controls.
 - Durable auto-save, visible status, resume, previous/next and editing previous steps; clear error recovery.
 - Preserve Google-first and email/password sign-in, multi-role identity and current branding.
 
 ### D. Human review and evidence
+
 - Reviewer can understand new structured answers, verify reference contact preferences, record independent checks and assess subject suggestions.
 - Support secure deferred evidence after submitting and later from profile; no qualification badge until verified. This is explicitly an evidence pathway, not an expansion into a credential marketplace.
 
 ### E. Regression and preview verification
+
 - Domain/unit tests, migration/idempotency, RLS and access isolation, application snapshot and resumption, responsive Playwright flows including 16–17-year-old applicants and incomplete referee data.
 - Four GitHub CI jobs green; protected Vercel Preview desktop/mobile verified; no production merge/deployment without defined release gates.
 
