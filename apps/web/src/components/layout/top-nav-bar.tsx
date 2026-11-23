@@ -47,7 +47,7 @@ export function TopNavBar({
       className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 px-2 sm:px-3"
     >
       <Link href={homeHref} className="order-1 flex shrink-0 items-center py-1">
-        <Image src={logo} alt="Studdy" unoptimized priority className="h-[46px] w-auto" />
+        <Image src={logo} alt="Studdy" unoptimized priority className="h-[40px] w-auto" />
       </Link>
       <div className="order-3 w-full min-w-0 md:order-2 md:w-auto md:flex-1">
         <TopNavLinks items={items} />
@@ -87,7 +87,7 @@ export function TopNavBar({
             className="flex cursor-pointer list-none items-center gap-2 rounded-full px-1 py-1 text-sm font-medium text-parent-navy outline-offset-2 hover:bg-parent-gold-pale focus-visible:outline focus-visible:outline-2 focus-visible:outline-studdy-orange [&::-webkit-details-marker]:hidden"
           >
             <span className="hidden max-w-32 truncate sm:inline">{firstName}</span>
-            <span className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-parent-gold bg-parent-navy text-xs font-bold text-white">
+            <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-parent-gold bg-parent-navy text-xs font-bold text-white"\n              style={{ width: 36, height: 36, minWidth: 36, minHeight: 36, maxWidth: 36, maxHeight: 36 }}>
               {accountAvatarUrl ? (
                 <Image
                   src={accountAvatarUrl}
