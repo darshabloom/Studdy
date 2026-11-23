@@ -39,7 +39,15 @@ export function NavigationFeedback() {
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
-      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey
+      )
+        return;
       const target = event.target;
       if (!(target instanceof Element)) return;
       const link = target.closest('a[href]');
@@ -47,7 +55,11 @@ export function NavigationFeedback() {
       if (link.target === '_blank' || link.hasAttribute('download')) return;
       const destination = new URL(link.href, window.location.href);
       if (destination.origin !== window.location.origin) return;
-      if (destination.pathname === window.location.pathname && destination.search === window.location.search) return;
+      if (
+        destination.pathname === window.location.pathname &&
+        destination.search === window.location.search
+      )
+        return;
       setSlow(false);
       setMessage('Opening page…');
     };
