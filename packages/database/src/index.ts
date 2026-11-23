@@ -230,6 +230,15 @@ export {
   type WithdrawResult,
 } from './repositories/tutor-applications';
 
+// Approved Tutor application v2 working copies (server-only, no v1 route cutover)
+export {
+  applicationV2DraftForApplicant,
+  initialiseApplicationV2Draft,
+  saveApplicationV2Draft,
+  type V2DraftRead,
+  type V2DraftSave,
+} from './repositories/tutor-application-v2-drafts';
+
 // Tutor-managed services and the tutor's own profile (feat/tutor-onboarding-setup)
 export {
   approveTutorService,
