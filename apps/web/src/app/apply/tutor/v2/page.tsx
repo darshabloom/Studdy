@@ -23,7 +23,7 @@ export default async function TutorApplicationV2Page() {
           The new application is being verified. You can explore every step using synthetic details
           without affecting your existing tutor application.
         </p>
-        <Link href="/apply/tutor/v2/preview" className="font-semibold text-brand-purple underline">
+        <Link href="/preview/tutor-application" className="font-semibold text-brand-purple underline">
           Open interactive preview
         </Link>
       </Card>
@@ -55,7 +55,7 @@ export default async function TutorApplicationV2Page() {
         </p>
         <Link
           className="mt-4 inline-block text-brand-purple underline"
-          href="/apply/tutor/v2/preview"
+          href="/preview/tutor-application"
         >
           Open interactive design preview
         </Link>
