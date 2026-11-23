@@ -177,23 +177,19 @@ export default async function TutorDashboardPage() {
         </section>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-1">
-        <Card>
-          <h2 className="font-display text-lg font-semibold">Earnings</h2>
-          <div className="mt-4 rounded-xl bg-parent-sky p-5">
-            <p className="font-semibold">Earnings summary</p>
-            <p className="mt-2 text-sm text-text-secondary">
-              Earnings totals will appear here once verified payment and lesson data is connected.
-              No estimated figures are displayed.
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Earnings</h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              Verified earnings will appear when payment reporting is connected.
             </p>
-            <div className="mt-4">
-              <Button asChild size="sm" variant="secondary">
-                <Link href="/tutor/payments">Getting paid</Link>
-              </Button>
-            </div>
           </div>
-        </Card>
-      </div>
+          <Button asChild size="sm" variant="secondary">
+            <Link href="/tutor/payments">Getting paid</Link>
+          </Button>
+        </div>
+      </Card>
 
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
