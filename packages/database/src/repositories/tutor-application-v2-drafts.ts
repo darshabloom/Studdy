@@ -89,7 +89,9 @@ export async function applicationV2DraftForApplicant(userId: string): Promise<V2
       })
       .from(tutorApplications)
       .where(eq(tutorApplications.applicantUserId, userId))
-      .orderBy(sql`case when ${tutorApplications.statusCode} in ('draft', 'changes_requested') then 0 else 1 end`)
+      .orderBy(
+        sql`case when ${tutorApplications.statusCode} in ('draft', 'changes_requested') then 0 else 1 end`,
+      )
       .limit(1);
     if (row === undefined) return { status: 'not_found' };
     if (!(EDITABLE_APPLICATION_STATUSES as readonly string[]).includes(row.statusCode)) {
@@ -118,7 +120,9 @@ export async function initialiseApplicationV2Draft(input: {
         .select()
         .from(tutorApplications)
         .where(eq(tutorApplications.applicantUserId, input.userId))
-        .orderBy(sql`case when ${tutorApplications.statusCode} in ('draft', 'changes_requested') then 0 else 1 end`)
+        .orderBy(
+          sql`case when ${tutorApplications.statusCode} in ('draft', 'changes_requested') then 0 else 1 end`,
+        )
         .limit(1)
         .for('update');
       if (row === undefined) return { status: 'not_found' };
