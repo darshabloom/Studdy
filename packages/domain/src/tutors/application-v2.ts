@@ -97,7 +97,11 @@ export interface TutorApplicationV2Draft {
     readonly expectedCompletionYear: string;
     readonly relevantQualifications: readonly ApplicationV2Qualification[];
     readonly noRelevantQualifications: boolean;
-    readonly evidenceIntention: 'will_provide_later' | 'available_for_verification' | 'none_to_provide' | '';
+    readonly evidenceIntention:
+      | 'will_provide_later'
+      | 'available_for_verification'
+      | 'none_to_provide'
+      | '';
     readonly academicResults: string;
     readonly professionalCredentials: string;
     readonly training: readonly string[];
@@ -240,10 +244,12 @@ export function validateApplicationV2(
       new Set(entry.levels).size !== entry.levels.length ||
       entry.levels.some((level) => !Number.isInteger(level) || level < 0 || level > 18)
     ) {
-      issues[`subjects.selections.${index}.levels`] = 'Choose valid education levels for this subject.';
+      issues[`subjects.selections.${index}.levels`] =
+        'Choose valid education levels for this subject.';
     }
     if (entry.specialisations.length > 2000) {
-      issues[`subjects.selections.${index}.specialisations`] = 'Keep specialisations under 2000 characters.';
+      issues[`subjects.selections.${index}.specialisations`] =
+        'Keep specialisations under 2000 characters.';
     }
   });
   if (!s.offersOnline && !s.offersInPerson) {
@@ -273,7 +279,9 @@ export function validateApplicationV2(
   if (t.approach.trim().length < 40 || t.approach.trim().length > 2000) {
     issues['teaching.approach'] = 'Describe your approach in 40–2000 characters.';
   }
-  if (t.example.length > 2000) issues['teaching.example'] = 'Keep your example under 2000 characters.';
+  if (t.example.length > 2000) {
+    issues['teaching.example'] = 'Keep your example under 2000 characters.';
+  }
 
   const q = input.qualifications;
   requireText('qualifications.highestEducation', q.highestEducation, 100);
@@ -301,7 +309,11 @@ export function validateApplicationV2(
       issues[`qualifications.relevantQualifications.${index}.awardedYear`] = 'Enter the award year.';
     }
   });
-  if (!['will_provide_later', 'available_for_verification', 'none_to_provide'].includes(q.evidenceIntention)) {
+  if (
+    !['will_provide_later', 'available_for_verification', 'none_to_provide'].includes(
+      q.evidenceIntention,
+    )
+  ) {
     issues['qualifications.evidenceIntention'] = 'Choose when you can provide evidence.';
   }
 
@@ -322,15 +334,21 @@ export function validateApplicationV2(
     requireText(`references.${index}.position`, ref.position, 200);
     const email = ref.email.trim();
     const phone = ref.phone.trim();
-    if ((email === '' && phone === '') || (email !== '' && !emailPattern.test(email)) ||
-      (phone !== '' && !phonePattern.test(phone))) {
-      issues[`references.${index}.contact`] = 'Provide a valid email address, telephone number or both.';
+    if (
+      (email === '' && phone === '') ||
+      (email !== '' && !emailPattern.test(email)) ||
+      (phone !== '' && !phonePattern.test(phone))
+    ) {
+      issues[`references.${index}.contact`] =
+        'Provide a valid email address, telephone number or both.';
     }
     if (!ref.permissionConfirmed) {
-      issues[`references.${index}.permissionConfirmed`] = 'Confirm permission to contact this referee.';
+      issues[`references.${index}.permissionConfirmed`] =
+        'Confirm permission to contact this referee.';
     }
     if (!['contact_now', 'contact_me_first'].includes(ref.contactPreference)) {
-      issues[`references.${index}.contactPreference`] = 'Choose when Studdy may contact this referee.';
+      issues[`references.${index}.contactPreference`] =
+        'Choose when Studdy may contact this referee.';
     }
   });
   for (const [key, accepted] of Object.entries(input.declarations)) {
