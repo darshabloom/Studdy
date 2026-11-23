@@ -80,37 +80,37 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
           </span>
         </summary>
         <ol className="flex flex-col gap-3 px-3 pb-3 pt-1">
-        {checklist.steps.map((step) => {
-          const copy = SETUP_STEP_COPY[step.code];
-          return (
-            <li
-              key={step.code}
-              // Stacked on a phone: side by side, the badge and link took the row and
-              // squeezed the words into a one-word column.
-              className="flex flex-col gap-3 rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card p-4 sm:flex-row sm:items-start sm:justify-between"
-            >
-              <div className="min-w-0 sm:flex-1">
-                <p className="font-semibold">{copy.title}</p>
-                <p className="mt-0.5 text-sm text-text-secondary">{copy.detail[step.status]}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <StatusBadge family={STEP_FAMILY[step.status]}>
-                  {STEP_LABEL[step.status]}
-                </StatusBadge>
-                {step.status === 'todo' ? (
-                  <Link
-                    href={copy.href}
-                    className="text-sm font-medium text-brand-purple hover:underline"
-                  >
-                    {copy.actionLabel}
-                  </Link>
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
- 
-      </details>   </Card>
+          {checklist.steps.map((step) => {
+            const copy = SETUP_STEP_COPY[step.code];
+            return (
+              <li
+                key={step.code}
+                // Stacked on a phone: side by side, the badge and link took the row and
+                // squeezed the words into a one-word column.
+                className="flex flex-col gap-3 rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card p-4 sm:flex-row sm:items-start sm:justify-between"
+              >
+                <div className="min-w-0 sm:flex-1">
+                  <p className="font-semibold">{copy.title}</p>
+                  <p className="mt-0.5 text-sm text-text-secondary">{copy.detail[step.status]}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <StatusBadge family={STEP_FAMILY[step.status]}>
+                    {STEP_LABEL[step.status]}
+                  </StatusBadge>
+                  {step.status === 'todo' ? (
+                    <Link
+                      href={copy.href}
+                      className="text-sm font-medium text-brand-purple hover:underline"
+                    >
+                      {copy.actionLabel}
+                    </Link>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </details>
+    </Card>
   );
 }
