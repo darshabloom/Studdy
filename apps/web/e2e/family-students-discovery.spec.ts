@@ -96,6 +96,7 @@ test.describe('family, students and tutor discovery', () => {
     // The selection survives signing out and back in.
     const shortlistUrl = page.url();
     await page.goto('/parent');
+    await page.locator('summary[aria-label^="Account menu for "]').click();
     await page.getByRole('button', { name: 'Sign out' }).click();
     await signIn(page, 'parent.one@local.studdy.test');
     await page.goto(shortlistUrl);
