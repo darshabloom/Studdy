@@ -42,7 +42,10 @@ export function TopNavBar({
   const profileHref = currentWorkspace === 'tutor' ? '/tutor/profile' : '/workspace';
 
   return (
-    <div data-tutor-workspace={currentWorkspace === 'tutor' ? 'true' : undefined} className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 px-2 sm:px-3">
+    <div
+      data-tutor-workspace={currentWorkspace === 'tutor' ? 'true' : undefined}
+      className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 px-2 sm:px-3"
+    >
       <Link href={homeHref} className="order-1 flex shrink-0 items-center py-1">
         <Image src={logo} alt="Studdy" unoptimized priority className="h-[46px] w-auto" />
       </Link>
@@ -53,17 +56,25 @@ export function TopNavBar({
         <details className="group relative">
           <summary className="flex cursor-pointer list-none items-center gap-1 rounded-full bg-parent-sky px-3 py-1.5 text-sm font-semibold text-parent-navy outline-offset-2 hover:bg-parent-gold-pale focus-visible:outline focus-visible:outline-2 focus-visible:outline-studdy-orange [&::-webkit-details-marker]:hidden">
             {WORKSPACE_LABELS[currentWorkspace]}
-            <span aria-hidden="true" className="text-xs text-studdy-orange">⌄</span>
+            <span aria-hidden="true" className="text-xs text-studdy-orange">
+              ⌄
+            </span>
           </summary>
           <div className="absolute right-0 z-50 mt-2 min-w-44 rounded-xl border border-surface-border bg-white p-1.5 shadow-lg">
             <p className="px-3 py-1.5 text-xs text-text-secondary">Switch workspace</p>
-            <p aria-current="true" className="rounded-md bg-parent-gold-pale px-3 py-2 text-sm font-semibold text-parent-navy">
+            <p
+              aria-current="true"
+              className="rounded-md bg-parent-gold-pale px-3 py-2 text-sm font-semibold text-parent-navy"
+            >
               {WORKSPACE_LABELS[currentWorkspace]} ✓
             </p>
             {otherWorkspaces.map((workspace) => (
               <form action={chooseWorkspaceAction} key={workspace}>
                 <input type="hidden" name="workspace" value={workspace} />
-                <button type="submit" className="w-full rounded-md px-3 py-2 text-left text-sm text-text-primary hover:bg-parent-gold-pale">
+                <button
+                  type="submit"
+                  className="w-full rounded-md px-3 py-2 text-left text-sm text-text-primary hover:bg-parent-gold-pale"
+                >
                   {WORKSPACE_LABELS[workspace]}
                 </button>
               </form>
@@ -90,7 +101,9 @@ export function TopNavBar({
                 <span aria-hidden="true">{initials || 'S'}</span>
               )}
             </span>
-            <span className="text-xs text-studdy-orange" aria-hidden="true">⌄</span>
+            <span className="text-xs text-studdy-orange" aria-hidden="true">
+              ⌄
+            </span>
           </summary>
           <div className="absolute right-0 z-50 mt-2 min-w-44 rounded-xl border border-surface-border bg-white p-1.5 shadow-lg">
             <p className="truncate px-3 py-2 text-xs text-text-secondary">{accountLabel}</p>
@@ -102,7 +115,10 @@ export function TopNavBar({
             </Link>
             <div className="my-1 border-t border-surface-border" />
             <form action={signOutAction}>
-              <button type="submit" className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-text-primary hover:bg-parent-gold-pale">
+              <button
+                type="submit"
+                className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-text-primary hover:bg-parent-gold-pale"
+              >
                 Sign out
               </button>
             </form>
