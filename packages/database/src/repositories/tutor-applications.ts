@@ -400,6 +400,8 @@ export async function saveApplicationDraft(input: {
         and(
           eq(tutorApplications.applicantUserId, input.userId),
           inArray(tutorApplications.statusCode, [...EDITABLE_APPLICATION_STATUSES]),
+          // A legacy form must never overwrite a v2 autosaved working copy.
+          raw`${tutorApplications.draft} ->> 'schemaVersion' is distinct from '2'`,
         ),
       )
       .returning({ id: tutorApplications.id });
@@ -457,6 +459,16 @@ export async function submitApplication(input: {
       if (locked === undefined) return { status: 'not_found' };
       const from = locked.statusCode as TutorApplicationStatus;
       if (!(EDITABLE_APPLICATION_STATUSES as readonly string[]).includes(from)) {
+        return { status: 'not_editable' };
+      }
+      // V2 drafts must be submitted through their own validated snapshot path.
+      // Prevent a stale v1 browser tab from finalising a different questionnaire.
+      if (
+        locked.draft !== null &&
+        typeof locked.draft === 'object' &&
+        !Array.isArray(locked.draft) &&
+        (locked.draft as Record<string, unknown>)['schemaVersion'] === 2
+      ) {
         return { status: 'not_editable' };
       }
 
