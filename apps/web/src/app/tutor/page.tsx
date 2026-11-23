@@ -206,7 +206,9 @@ export default async function TutorDashboardPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-lg font-semibold">Your calendar</h2>
-            <p className="text-xs text-text-secondary">{weekLabel} · {timeZone}</p>
+            <p className="text-xs text-text-secondary">
+              {weekLabel} · {timeZone}
+            </p>
           </div>
           <Link
             href="/tutor/availability"
@@ -220,10 +222,7 @@ export default async function TutorDashboardPage() {
           aria-label="Monday to Sunday calendar showing bookable times"
         >
           {calendarDays.map((day) => (
-            <div
-              key={day.date}
-              className="min-w-0 border-r border-surface-border last:border-r-0"
-            >
+            <div key={day.date} className="min-w-0 border-r border-surface-border last:border-r-0">
               <div
                 className={
                   day.isToday
@@ -232,9 +231,7 @@ export default async function TutorDashboardPage() {
                 }
               >
                 <p className="text-xs font-semibold">{day.weekday}</p>
-                <p className="font-display text-lg font-semibold tabular-nums">
-                  {day.dayNumber}
-                </p>
+                <p className="font-display text-lg font-semibold tabular-nums">{day.dayNumber}</p>
               </div>
               <div className="flex min-h-28 flex-col gap-1 border-t border-surface-border p-1 sm:min-h-32 sm:p-2">
                 {day.slots.length === 0 ? (
@@ -261,8 +258,8 @@ export default async function TutorDashboardPage() {
           ))}
         </div>
         <p className="mt-2 text-xs text-text-secondary">
-          Times shown are bookable one-hour openings, rather than confirmed lessons.
-          Manage your availability to see the complete timetable.
+          Times shown are bookable one-hour openings, rather than confirmed lessons. Manage your
+          availability to see the complete timetable.
         </p>
         {rules.length === 0 ? (
           <p className="mt-1 text-xs text-text-secondary">
