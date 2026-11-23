@@ -122,10 +122,12 @@ test.describe('an approved tutor getting on sale', () => {
       timeout: 15_000,
     });
     await expect(page.getByRole('link', { name: /Create a service/ }).last()).toBeVisible();
-    await expect(page.getByRole('list', { name: 'Tutor setup steps' }).getByRole('listitem')).toHaveCount(6);
+    await expect(
+      page.getByRole('list', { name: 'Tutor setup steps' }).getByRole('listitem'),
+    ).toHaveCount(6);
     await snap(page, '01-dashboard-checklist');
 
-    await clickUntilNavigated(page, page.getByRole('link', { name: 'Next: Create a service' }));
+    await clickUntilNavigated(page, page.getByRole('link', { name: /Create a service/ }).last());
     await expect(page.getByRole('heading', { level: 1, name: 'Create a service' })).toBeVisible({
       timeout: 15_000,
     });
