@@ -11,6 +11,7 @@ import { tutorSetupChecklist } from '@studdy/domain/tutors';
 import { formatDeadline } from '@/components/requests/request-status';
 import { SetupChecklist } from '@/components/tutors/setup-checklist';
 import { resolveIdentity } from '@/lib/identity/resolve';
+import { mondayOf, weekDays } from '@/lib/availability/calendar-time';
 
 export const metadata = { title: 'Tutor Home' };
 
@@ -66,40 +67,43 @@ export default async function TutorDashboardPage() {
         (a.offeredTimes[0]?.startAt.getTime() ?? 0) - (b.offeredTimes[0]?.startAt.getTime() ?? 0),
     );
 
-  const greeting = identity.displayName?.split(' ')[0] ?? 'tutor';
-  // Seven days from today, with real bookable slots. Slots are possible
-  // appointments, not scheduled lessons; never present them as bookings.
-  const localDateKey = (date: Date) =>
-    new Intl.DateTimeFormat('sv-SE', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(date);
-  const nextSevenDays = Array.from({ length: 7 }, (_, index) => {
-    const day = new Date(now.getTime() + index * 24 * 60 * 60 * 1000);
-    const key = localDateKey(day);
-    return {
-      key,
-      day: new Intl.DateTimeFormat('en-NZ', { timeZone, weekday: 'short' }).format(day),
-      date: new Intl.DateTimeFormat('en-NZ', { timeZone, day: 'numeric' }).format(day),
-      count: slots.filter((slot) => localDateKey(slot.startAt) === key).length,
-    };
+  // Monday–Sunday calendar in the tutor's local time zone. These are real
+  // bookable openings, never represented as confirmed lessons.
+  const todayKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  const weekStart = mondayOf(now, timeZone);
+  const days = weekDays(weekStart, timeZone);
+  const dateLabel = new Intl.DateTimeFormat('en-NZ', {
+    timeZone,
+    month: 'short',
+    day: 'numeric',
   });
+  const timeLabel = new Intl.DateTimeFormat('en-NZ', {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const calendarDays = days.map((day) => ({
+    ...day,
+    weekday: day.label.split(' ')[0],
+    dayNumber: Number(day.date.slice(-2)),
+    isToday: day.date === todayKey,
+    slots: slots
+      .filter((slot) => slot.startAt >= day.startAt && slot.startAt < day.endAt)
+      .sort((first, second) => first.startAt.getTime() - second.startAt.getTime()),
+  }));
+  const weekLabel = days.length === 7
+    ? `${dateLabel.format(days[0]!.startAt)} – ${dateLabel.format(days[6]!.startAt)}`
+    : 'This week';
 
   return (
-    <div className="relative flex flex-col gap-5 text-brand-purple-deep md:gap-6">
-      {/* The accent sits behind the greeting, away from interactive content. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-4 -top-4 -z-10 h-24 w-44 rounded-bl-[90%] bg-parent-sky opacity-45 md:h-32 md:w-72"
-      />
-      <header className="py-2">
-        <h1 className="font-display text-2xl font-bold md:text-3xl">Welcome back, {greeting}</h1>
-        <p className="mt-1 text-sm text-text-secondary md:text-base">
-          Here&rsquo;s what&rsquo;s happening with your tutoring.
-        </p>
-      </header>
+    <div className="flex flex-col gap-4 text-text-primary md:gap-5">
+      <h1 className="sr-only">Tutor dashboard</h1>
 
       {setup !== null && !setup.bookable ? <SetupChecklist checklist={setup} /> : null}
 
@@ -113,89 +117,71 @@ export default async function TutorDashboardPage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Card>
-          <h2 className="font-display text-lg font-semibold">Next lesson</h2>
-          <div className="mt-5 flex min-h-44 flex-col justify-between rounded-xl bg-parent-cream p-5">
-            <div>
-              <p className="text-lg font-semibold">Your next confirmed lesson</p>
-              <p className="mt-2 max-w-md text-sm text-text-secondary">
-                Your next lesson will appear here when confirmed lesson records are connected.
-                Until then, you can review your current booking requests.
-              </p>
-            </div>
-            <div className="mt-5">
-              <Button asChild size="sm">
-                <Link href="/tutor/requests">View booking requests</Link>
-              </Button>
-            </div>
-          </div>
-        </Card>
-
-        <section aria-label="Tutor actions" className="flex flex-col gap-3">
-          <Link
-            href="/tutor/requests"
-            className="flex min-h-24 items-center justify-between gap-4 rounded-xl border border-surface-border bg-surface-card px-5 py-4 transition-colors hover:bg-surface-card-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-purple"
-          >
-            <span>
-              <span className="block text-lg font-semibold">Booking requests</span>
-              <span className="mt-1 block text-sm text-text-secondary">
-                {awaiting.length} awaiting your response
-              </span>
-              {soonestDeadline !== undefined ? (
-                <span className="mt-1 block text-xs text-text-muted">
-                  Next reply due {formatDeadline(soonestDeadline, timeZone)}
-                </span>
-              ) : null}
-            </span>
-            <span className="text-2xl font-semibold tabular-nums" aria-label={`${awaiting.length} awaiting booking requests`}>
-              {awaiting.length} <span aria-hidden="true">→</span>
-            </span>
-          </Link>
-          <div className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-surface-border bg-surface-card px-5 py-4">
-            <span className="text-lg font-semibold">Lesson summaries</span>
-            <span className="text-sm text-text-secondary">Coming soon</span>
-          </div>
-          <div className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-surface-border bg-surface-card px-5 py-4">
-            <span className="text-lg font-semibold">Homework submissions</span>
-            <span className="text-sm text-text-secondary">Coming soon</span>
-          </div>
-        </section>
-
-        <Card>
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-display text-lg font-semibold">Upcoming lessons</h2>
-            <Link href="/tutor/requests" className="text-sm font-semibold text-brand-purple">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-semibold">Lessons</h2>
+            <Link href="/tutor/requests" className="text-sm font-semibold text-brand-purple hover:underline">
               View requests →
             </Link>
           </div>
-          {held.length === 0 ? (
-            <p className="mt-4 text-sm text-text-secondary">
-              No booking-request times are currently on hold. Confirmed lessons will appear here
-              when scheduling is connected.
+          <div className="mt-3 rounded-xl bg-parent-cream px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">Next lesson</p>
+            <p className="mt-1 font-semibold">No confirmed lesson to display yet</p>
+            <p className="mt-1 text-sm text-text-secondary">
+              Confirmed lessons will appear when the lesson schedule is connected.
             </p>
-          ) : (
-            <ul className="mt-4 divide-y divide-surface-border">
-              {held.slice(0, 3).map((request) => (
-                <li key={request.reference} className="py-3 first:pt-0">
-                  <p className="font-semibold">
-                    {request.subjectDisplayName} with {request.studentPreferredName}
-                  </p>
-                  <p className="text-sm text-text-secondary">
-                    Request on hold
-                    {request.holdExpiresAt !== null
-                      ? ` · Held until ${formatDeadline(request.holdExpiresAt, request.timeZone)}`
-                      : ''}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-3 text-xs text-text-muted">
-            Booking-request holds are shown separately from confirmed lessons.
-          </p>
+          </div>
+          <div className="mt-4">
+            <h3 className="text-sm font-semibold">Upcoming request holds</h3>
+            {held.length === 0 ? (
+              <p className="mt-1 text-sm text-text-secondary">No upcoming request holds.</p>
+            ) : (
+              <ul className="mt-1 divide-y divide-surface-border">
+                {held.slice(0, 2).map((request) => (
+                  <li key={request.reference} className="py-2 text-sm">
+                    <span className="font-semibold">{request.subjectDisplayName}</span>
+                    {' with '}{request.studentPreferredName}
+                    <span className="block text-xs text-text-secondary">
+                      Request on hold
+                      {request.holdExpiresAt !== null
+                        ? ` · Until ${formatDeadline(request.holdExpiresAt, request.timeZone)}`
+                        : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </Card>
+        <section aria-label="Tutor actions" className="flex flex-col gap-2">
+          <Link
+            href="/tutor/requests"
+            className="flex min-h-20 items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-card px-4 py-3 hover:bg-surface-card-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-purple"
+          >
+            <span>
+              <span className="block font-semibold">Booking requests</span>
+              <span className="text-xs text-text-secondary">{awaiting.length} awaiting your response</span>
+              {soonestDeadline !== undefined ? (
+                <span className="block text-xs text-text-muted">
+                  Due {formatDeadline(soonestDeadline, timeZone)}
+                </span>
+              ) : null}
+            </span>
+            <span className="text-xl font-semibold tabular-nums">{awaiting.length} <span aria-hidden="true">→</span></span>
+          </Link>
+          <div className="flex min-h-16 items-center justify-between rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+            <span className="font-semibold">Lesson summaries</span>
+            <span className="text-xs text-text-secondary">Coming soon</span>
+          </div>
+          <div className="flex min-h-16 items-center justify-between rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+            <span className="font-semibold">Homework submissions</span>
+            <span className="text-xs text-text-secondary">Coming soon</span>
+          </div>
+        </section>
+      </div>
 
+      <div className="grid gap-4 lg:grid-cols-1">
         <Card>
           <h2 className="font-display text-lg font-semibold">Earnings</h2>
           <div className="mt-4 rounded-xl bg-parent-sky p-5">
@@ -215,33 +201,51 @@ export default async function TutorDashboardPage() {
 
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-lg font-semibold">Your week</h2>
-          <Link href="/tutor/availability" className="text-sm font-semibold text-brand-purple">
-            Manage availability →
+          <div>
+            <h2 className="font-display text-lg font-semibold">Your calendar</h2>
+            <p className="text-xs text-text-secondary">{weekLabel} · {timeZone}</p>
+          </div>
+          <Link href="/tutor/availability" className="text-sm font-semibold text-brand-purple hover:underline">
+            Open full calendar →
           </Link>
         </div>
-        <div className="mt-5 grid grid-cols-7 gap-1.5 sm:gap-3" aria-label="Available one-hour slots for the next seven days">
-          {nextSevenDays.map((day) => (
-            <div
-              key={day.key}
-              className="min-w-0 rounded-xl border border-surface-border bg-surface-card-secondary px-1 py-3 text-center sm:p-4"
-            >
-              <p className="text-xs font-semibold text-text-secondary">{day.day}</p>
-              <p className="mt-1 font-display text-xl font-semibold tabular-nums">{day.date}</p>
-              <p className="mt-3 text-base font-semibold tabular-nums">{day.count}</p>
-              <p className="text-[10px] leading-tight text-text-secondary sm:text-xs">
-                {day.count === 1 ? 'slot' : 'slots'}
-              </p>
+        <div className="mt-3 grid grid-cols-7 overflow-hidden rounded-xl border border-surface-border" aria-label="Monday to Sunday calendar showing bookable times">
+          {calendarDays.map((day) => (
+            <div key={day.date} className="min-w-0 border-r border-surface-border last:border-r-0">
+              <div className={day.isToday
+                ? 'bg-parent-gold-pale px-1 py-2 text-center'
+                : 'bg-surface-card-secondary px-1 py-2 text-center'}>
+                <p className="text-xs font-semibold">{day.weekday}</p>
+                <p className="font-display text-lg font-semibold tabular-nums">{day.dayNumber}</p>
+              </div>
+              <div className="flex min-h-28 flex-col gap-1 border-t border-surface-border p-1 sm:min-h-32 sm:p-2">
+                {day.slots.length === 0 ? (
+                  <span className="py-2 text-center text-xs text-text-muted">—</span>
+                ) : (
+                  <>
+                    {day.slots.slice(0, 3).map((slot) => (
+                      <span key={slot.startAt.toISOString()} className="rounded-md bg-parent-sky px-1 py-1 text-center text-[10px] font-medium text-brand-purple-deep sm:text-xs">
+                        {timeLabel.format(slot.startAt)}
+                      </span>
+                    ))}
+                    {day.slots.length > 3 ? (
+                      <span className="text-center text-[10px] text-text-secondary sm:text-xs">
+                        +{day.slots.length - 3} more
+                      </span>
+                    ) : null}
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>
-        <p className="mt-4 text-sm text-text-secondary">
-          Bookable one-hour slots over the next seven days, in {timeZone}. These show available
-          times, not confirmed lessons. Confirmed lessons will appear once scheduling is connected.
+        <p className="mt-2 text-xs text-text-secondary">
+          Times shown are bookable one-hour openings, rather than confirmed lessons.
+          Manage your availability to see the complete timetable.
         </p>
         {rules.length === 0 ? (
-          <p className="mt-2 text-sm text-text-secondary">
-            Set your regular hours to make times available to families.
+          <p className="mt-1 text-xs text-text-secondary">
+            Your available times will appear once regular hours are set.
           </p>
         ) : null}
       </Card>
