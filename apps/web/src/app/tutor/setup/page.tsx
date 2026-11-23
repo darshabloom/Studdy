@@ -31,7 +31,7 @@ export default async function TutorSetupPage() {
   const checklist = tutorSetupChecklist(facts);
 
   return (
-    <div className="flex flex-col gap-4 text-text-primary">
+    <div className="flex flex-col gap-3 text-text-primary">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold text-parent-navy">
@@ -47,16 +47,31 @@ export default async function TutorSetupPage() {
         </Link>
       </div>
 
-      <Card>
+      <Card className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold">Your progress</h2>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 className="text-sm font-semibold">Your progress</h2>
+            <p className="text-sm text-text-secondary">
+              {checklist.steps.filter((step) => step.status === 'done').length} of 6 stages complete
+            </p>
+          </div>
           <p className="text-sm font-semibold tabular-nums">
             {checklist.percentComplete}% complete
           </p>
         </div>
-        <p className="mt-1 text-sm text-text-secondary">
-          {checklist.steps.filter((step) => step.status === 'done').length} of 6 stages complete
-        </p>
+        <div
+          role="progressbar"
+          aria-label="Tutor setup completion"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={checklist.percentComplete}
+          className="mt-3 h-2 overflow-hidden rounded-full bg-surface-card-secondary"
+        >
+          <div
+            className="h-full rounded-full bg-parent-navy"
+            style={{ width: `${checklist.percentComplete}%` }}
+          />
+        </div>
       </Card>
 
       {checklist.bookable ? (
@@ -80,7 +95,7 @@ export default async function TutorSetupPage() {
           const isNext = checklist.nextStep === step.code;
           return (
             <li key={step.code} className="flex min-w-0">
-              <Card className="w-full">
+              <Card className="w-full p-4 sm:p-5">
                 <div className="flex items-start gap-3">
                   <span
                     className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
@@ -100,7 +115,7 @@ export default async function TutorSetupPage() {
                       {STATUS[step.status]}
                       {isNext ? ' · Next action' : ''}
                     </p>
-                    <p className="mt-2 text-sm text-text-secondary">{copy.detail[step.status]}</p>
+                    <p className="mt-1.5 text-sm text-text-secondary">{copy.detail[step.status]}</p>
                     {step.status === 'todo' ? (
                       <Link
                         href={copy.href}
