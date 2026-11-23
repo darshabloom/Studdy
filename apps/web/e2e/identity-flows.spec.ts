@@ -111,11 +111,13 @@ test.describe('identity and authentication flows', () => {
       await page.getByRole('button', { name: /Tutor/ }).click();
     } else if (page.url().includes('/parent')) {
       // Preference was parent — switch to tutor via the top-bar switcher.
+      await page.locator('summary').filter({ hasText: 'Parent' }).click();
       await page.getByRole('button', { name: 'Tutor', exact: true }).click();
     }
     await expect(page).toHaveURL(/\/tutor/);
 
     // Sign out, sign back in — the saved workspace is restored, no chooser.
+    await page.locator('summary[aria-label^="Account menu for "]').click();
     await page.getByRole('button', { name: 'Sign out' }).click();
     await signIn(page, 'parent.tutor@local.studdy.test', SEEDED_PASSWORD);
     await expect(page).toHaveURL(/\/tutor/);
