@@ -12,6 +12,7 @@ import { formatDeadline } from '@/components/requests/request-status';
 import { SetupChecklist } from '@/components/tutors/setup-checklist';
 import { resolveIdentity } from '@/lib/identity/resolve';
 import { mondayOf, weekDays } from '@/lib/availability/calendar-time';
+import { zonedDateOnly } from '@studdy/domain/availability';
 
 export const metadata = { title: 'Tutor Home' };
 
@@ -69,12 +70,7 @@ export default async function TutorDashboardPage() {
 
   // Monday–Sunday calendar in the tutor's local time zone. These are real
   // bookable openings, never represented as confirmed lessons.
-  const todayKey = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
+  const todayKey = zonedDateOnly(now, timeZone);
   const weekStart = mondayOf(now, timeZone);
   const days = weekDays(weekStart, timeZone);
   const dateLabel = new Intl.DateTimeFormat('en-NZ', {
