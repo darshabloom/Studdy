@@ -72,7 +72,14 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
         </p>
       ) : null}
 
-      <ol className="mt-5 flex flex-col gap-3">
+      <details className="group mt-4 rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card">
+        <summary className="cursor-pointer list-item rounded-[var(--radius-gentle)] px-4 py-3 font-semibold text-text-primary hover:bg-surface-card-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-purple">
+          View all ${checklist.steps.length} setup steps
+          <span className="ml-2 text-sm font-normal text-text-secondary">
+            (${done} complete)
+          </span>
+        </summary>
+      <ol className="flex flex-col gap-3 px-3 pb-3 pt-1">
         {checklist.steps.map((step) => {
           const copy = SETUP_STEP_COPY[step.code];
           return (
@@ -103,6 +110,7 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
           );
         })}
       </ol>
-    </Card>
+ 
+      </details>   </Card>
   );
 }
