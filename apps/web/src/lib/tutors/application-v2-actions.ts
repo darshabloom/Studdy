@@ -28,6 +28,7 @@ async function applicantId(): Promise<string> {
 
 /** Explicit click only: initiating an application changes the account's pending tutor role. */
 export async function startV2ApplicationAction(): Promise<void> {
+  if (process.env.STUDDY_APPLICATION_V2_ENABLED !== 'true') redirect(ROUTE);
   const userId = await applicantId();
   const result = await startTutorApplication({ userId, correlationId: randomUUID() });
   if (result.status === 'already_a_tutor') redirect('/tutor');
@@ -43,6 +44,7 @@ export async function saveV2DraftAction(
   draft: TutorApplicationV2Draft,
   version: number,
 ): Promise<V2DraftSave> {
+  if (process.env.STUDDY_APPLICATION_V2_ENABLED !== 'true') return { status: 'not_editable' };
   const userId = await applicantId();
   if (!Number.isSafeInteger(version) || version < 1) return { status: 'invalid_draft' };
   return saveApplicationV2Draft({ userId, expectedRecordVersion: version, draft });
