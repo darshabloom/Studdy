@@ -127,13 +127,15 @@ describe('application v2 foundation', () => {
   it('requires at least one contact method, permission and timing', () => {
     const draft = {
       ...complete,
-      references: [{
-        ...complete.references[0]!,
-        email: '',
-        phone: '',
-        permissionConfirmed: false,
-        contactPreference: '' as const,
-      }],
+      references: [
+        {
+          ...complete.references[0]!,
+          email: '',
+          phone: '',
+          permissionConfirmed: false,
+          contactPreference: '' as const,
+        },
+      ],
     };
     const result = validate(draft);
     expect(result.issues).toHaveProperty('references.0.contact');
