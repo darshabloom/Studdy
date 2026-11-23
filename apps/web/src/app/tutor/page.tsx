@@ -65,8 +65,7 @@ export default async function TutorDashboardPage() {
     .filter((request) => request.holdExpiresAt !== null && request.offeredTimes.length > 0)
     .sort(
       (a, b) =>
-        (a.offeredTimes[0]?.startAt.getTime() ?? 0) -
-        (b.offeredTimes[0]?.startAt.getTime() ?? 0),
+        (a.offeredTimes[0]?.startAt.getTime() ?? 0) - (b.offeredTimes[0]?.startAt.getTime() ?? 0),
     );
 
   const greeting = identity.displayName?.split(' ')[0] ?? 'tutor';
@@ -79,9 +78,7 @@ export default async function TutorDashboardPage() {
         className="pointer-events-none absolute -right-4 -top-4 -z-10 h-24 w-44 rounded-bl-[90%] bg-parent-sky opacity-45 md:h-32 md:w-72"
       />
       <header className="py-2">
-        <h1 className="font-display text-2xl font-bold md:text-3xl">
-          Welcome back, {greeting}
-        </h1>
+        <h1 className="font-display text-2xl font-bold md:text-3xl">Welcome back, {greeting}</h1>
         <p className="mt-1 text-sm text-text-secondary md:text-base">
           Here&rsquo;s what&rsquo;s happening with your tutoring.
         </p>
@@ -110,8 +107,8 @@ export default async function TutorDashboardPage() {
           <div className="mt-6 rounded-xl bg-parent-cream p-5">
             <p className="font-semibold">Your next confirmed lesson</p>
             <p className="mt-2 text-sm text-text-secondary">
-              Confirmed lesson details will appear here when the lesson schedule is connected.
-              You can manage incoming requests today.
+              Confirmed lesson details will appear here when the lesson schedule is connected. You
+              can manage incoming requests today.
             </p>
             <div className="mt-4">
               <Button asChild size="sm">
@@ -170,8 +167,8 @@ export default async function TutorDashboardPage() {
           </div>
           {held.length === 0 ? (
             <p className="mt-4 text-sm text-text-secondary">
-              No booking-request times are currently on hold. Confirmed lessons will appear
-              here when scheduling is connected.
+              No booking-request times are currently on hold. Confirmed lessons will appear here
+              when scheduling is connected.
             </p>
           ) : (
             <ul className="mt-4 divide-y divide-surface-border">
@@ -200,8 +197,8 @@ export default async function TutorDashboardPage() {
           <div className="mt-4 rounded-xl bg-parent-sky p-5">
             <p className="font-semibold">Earnings summary</p>
             <p className="mt-2 text-sm text-text-secondary">
-              Earnings totals will appear here once verified payment and lesson data is
-              connected. No estimated figures are displayed.
+              Earnings totals will appear here once verified payment and lesson data is connected.
+              No estimated figures are displayed.
             </p>
             <div className="mt-4">
               <Button asChild size="sm" variant="secondary">
@@ -229,13 +226,15 @@ export default async function TutorDashboardPage() {
             <p className="mt-1 text-2xl font-semibold">{exceptions.length}</p>
           </div>
           <div className="rounded-xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm text-text-secondary">Bookable slots, next {LOOKAHEAD_DAYS} days</p>
+            <p className="text-sm text-text-secondary">
+              Bookable slots, next {LOOKAHEAD_DAYS} days
+            </p>
             <p className="mt-1 text-2xl font-semibold">{slots.length}</p>
           </div>
         </div>
         <p className="mt-3 text-xs text-text-muted">
-          Availability is shown in {timeZone}. The weekly lesson calendar will follow once
-          confirmed lesson data is connected.
+          Availability is shown in {timeZone}. The weekly lesson calendar will follow once confirmed
+          lesson data is connected.
         </p>
       </Card>
     </div>
