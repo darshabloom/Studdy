@@ -79,8 +79,8 @@ export default async function TutorSetupPage() {
           const copy = SETUP_STEP_COPY[step.code];
           const isNext = checklist.nextStep === step.code;
           return (
-            <li key={step.code}>
-              <Card>
+            <li key={step.code} className="flex min-w-0">
+              <Card className="w-full">
                 <div className="flex items-start gap-3">
                   <span
                     className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
