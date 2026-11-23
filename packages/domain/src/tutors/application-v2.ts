@@ -98,10 +98,7 @@ export interface TutorApplicationV2Draft {
     readonly relevantQualifications: readonly ApplicationV2Qualification[];
     readonly noRelevantQualifications: boolean;
     readonly evidenceIntention:
-      | 'will_provide_later'
-      | 'available_for_verification'
-      | 'none_to_provide'
-      | '';
+      'will_provide_later' | 'available_for_verification' | 'none_to_provide' | '';
     readonly academicResults: string;
     readonly professionalCredentials: string;
     readonly training: readonly string[];
@@ -174,9 +171,7 @@ export function applicantAge(dateOfBirth: string, today: string): number | null 
   const parse = (value: string): Date | null => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
     const date = new Date(value + 'T00:00:00.000Z');
-    return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value
-      ? null
-      : date;
+    return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
   };
   const birth = parse(dateOfBirth);
   const current = parse(today);
@@ -184,8 +179,7 @@ export function applicantAge(dateOfBirth: string, today: string): number | null 
   let years = current.getUTCFullYear() - birth.getUTCFullYear();
   const birthdayPassed =
     current.getUTCMonth() > birth.getUTCMonth() ||
-    (current.getUTCMonth() === birth.getUTCMonth() &&
-      current.getUTCDate() >= birth.getUTCDate());
+    (current.getUTCMonth() === birth.getUTCMonth() && current.getUTCDate() >= birth.getUTCDate());
   if (!birthdayPassed) years--;
   return years;
 }
@@ -306,7 +300,8 @@ export function validateApplicationV2(
     requireText(`qualifications.relevantQualifications.${index}.institution`, item.institution);
     requireText(`qualifications.relevantQualifications.${index}.field`, item.field);
     if (!/^\d{4}$/.test(item.awardedYear)) {
-      issues[`qualifications.relevantQualifications.${index}.awardedYear`] = 'Enter the award year.';
+      issues[`qualifications.relevantQualifications.${index}.awardedYear`] =
+        'Enter the award year.';
     }
   });
   if (
