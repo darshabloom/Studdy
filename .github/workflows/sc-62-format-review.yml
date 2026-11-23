@@ -1,0 +1,23 @@
+name: SC-62 markdown formatter diagnostics (temporary)
+on:
+  pull_request:
+    paths:
+      - 'documentation/product/tutor-application-questionnaire-approved-2026-11-24.md'
+      - '.github/workflows/sc-62-format-review.yml'
+permissions:
+  contents: read
+jobs:
+  format-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Display exact documentation Prettier changes
+        run: |
+          pnpm exec prettier --write documentation/product/tutor-application-questionnaire-approved-2026-11-24.md
+          git diff -- documentation/product/tutor-application-questionnaire-approved-2026-11-24.md
