@@ -93,9 +93,10 @@ export default async function TutorDashboardPage() {
       .filter((slot) => slot.startAt >= day.startAt && slot.startAt < day.endAt)
       .sort((first, second) => first.startAt.getTime() - second.startAt.getTime()),
   }));
-  const weekLabel = days.length === 7
-    ? `${dateLabel.format(days[0]!.startAt)} – ${dateLabel.format(days[6]!.startAt)}`
-    : 'This week';
+  const weekLabel =
+    days.length === 7
+      ? `${dateLabel.format(days[0]!.startAt)} – ${dateLabel.format(days[6]!.startAt)}`
+      : 'This week';
 
   return (
     <div className="flex flex-col gap-4 text-text-primary md:gap-5">
@@ -117,12 +118,17 @@ export default async function TutorDashboardPage() {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-display text-lg font-semibold">Lessons</h2>
-            <Link href="/tutor/requests" className="text-sm font-semibold text-brand-purple hover:underline">
+            <Link
+              href="/tutor/requests"
+              className="text-sm font-semibold text-brand-purple hover:underline"
+            >
               View requests →
             </Link>
           </div>
           <div className="mt-3 rounded-xl bg-parent-cream px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">Next lesson</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+              Next lesson
+            </p>
             <p className="mt-1 font-semibold">No confirmed lesson to display yet</p>
             <p className="mt-1 text-sm text-text-secondary">
               Confirmed lessons will appear when the lesson schedule is connected.
@@ -137,7 +143,8 @@ export default async function TutorDashboardPage() {
                 {held.slice(0, 2).map((request) => (
                   <li key={request.reference} className="py-2 text-sm">
                     <span className="font-semibold">{request.subjectDisplayName}</span>
-                    {' with '}{request.studentPreferredName}
+                    {' with '}
+                    {request.studentPreferredName}
                     <span className="block text-xs text-text-secondary">
                       Request on hold
                       {request.holdExpiresAt !== null
@@ -157,14 +164,18 @@ export default async function TutorDashboardPage() {
           >
             <span>
               <span className="block font-semibold">Booking requests</span>
-              <span className="text-xs text-text-secondary">{awaiting.length} awaiting your response</span>
+              <span className="text-xs text-text-secondary">
+                {awaiting.length} awaiting your response
+              </span>
               {soonestDeadline !== undefined ? (
                 <span className="block text-xs text-text-muted">
                   Due {formatDeadline(soonestDeadline, timeZone)}
                 </span>
               ) : null}
             </span>
-            <span className="text-xl font-semibold tabular-nums">{awaiting.length} <span aria-hidden="true">→</span></span>
+            <span className="text-xl font-semibold tabular-nums">
+              {awaiting.length} <span aria-hidden="true">→</span>
+            </span>
           </Link>
           <div className="flex min-h-16 items-center justify-between rounded-xl border border-surface-border bg-surface-card px-4 py-3">
             <span className="font-semibold">Lesson summaries</span>
@@ -197,18 +208,33 @@ export default async function TutorDashboardPage() {
             <h2 className="font-display text-lg font-semibold">Your calendar</h2>
             <p className="text-xs text-text-secondary">{weekLabel} · {timeZone}</p>
           </div>
-          <Link href="/tutor/availability" className="text-sm font-semibold text-brand-purple hover:underline">
+          <Link
+            href="/tutor/availability"
+            className="text-sm font-semibold text-brand-purple hover:underline"
+          >
             Open full calendar →
           </Link>
         </div>
-        <div className="mt-3 grid grid-cols-7 overflow-hidden rounded-xl border border-surface-border" aria-label="Monday to Sunday calendar showing bookable times">
+        <div
+          className="mt-3 grid grid-cols-7 overflow-hidden rounded-xl border border-surface-border"
+          aria-label="Monday to Sunday calendar showing bookable times"
+        >
           {calendarDays.map((day) => (
-            <div key={day.date} className="min-w-0 border-r border-surface-border last:border-r-0">
-              <div className={day.isToday
-                ? 'bg-parent-gold-pale px-1 py-2 text-center'
-                : 'bg-surface-card-secondary px-1 py-2 text-center'}>
+            <div
+              key={day.date}
+              className="min-w-0 border-r border-surface-border last:border-r-0"
+            >
+              <div
+                className={
+                  day.isToday
+                    ? 'bg-parent-gold-pale px-1 py-2 text-center'
+                    : 'bg-surface-card-secondary px-1 py-2 text-center'
+                }
+              >
                 <p className="text-xs font-semibold">{day.weekday}</p>
-                <p className="font-display text-lg font-semibold tabular-nums">{day.dayNumber}</p>
+                <p className="font-display text-lg font-semibold tabular-nums">
+                  {day.dayNumber}
+                </p>
               </div>
               <div className="flex min-h-28 flex-col gap-1 border-t border-surface-border p-1 sm:min-h-32 sm:p-2">
                 {day.slots.length === 0 ? (
@@ -216,7 +242,10 @@ export default async function TutorDashboardPage() {
                 ) : (
                   <>
                     {day.slots.slice(0, 3).map((slot) => (
-                      <span key={slot.startAt.toISOString()} className="rounded-md bg-parent-sky px-1 py-1 text-center text-[10px] font-medium text-brand-purple-deep sm:text-xs">
+                      <span
+                        key={slot.startAt.toISOString()}
+                        className="rounded-md bg-parent-sky px-1 py-1 text-center text-[10px] font-medium text-brand-purple-deep sm:text-xs"
+                      >
                         {timeLabel.format(slot.startAt)}
                       </span>
                     ))}
