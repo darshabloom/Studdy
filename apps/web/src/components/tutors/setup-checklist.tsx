@@ -31,16 +31,9 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
             {done} of {checklist.steps.length} complete
           </p>
         </div>
-        {next !== null ? (
-          <Link
-            href={next.href}
-            className="text-sm font-semibold text-brand-purple underline decoration-parent-gold decoration-2 underline-offset-4 hover:text-studdy-orange"
-          >
-            Next: {next.actionLabel} →
-          </Link>
-        ) : checklist.waitingOnStuddy ? (
-          <span className="text-xs text-text-secondary">With Studdy for review</span>
-        ) : null}
+        <span className="text-xs font-semibold text-text-secondary">
+          {checklist.percentComplete}% ready to publish
+        </span>
       </div>
 
       <ol
@@ -76,7 +69,7 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
               </span>
               <span className="mt-1 block text-[11px] text-text-secondary">
                 {STATUS_TEXT[step.status]}
-                {current ? ' · Next' : ''}
+                {current ? ' · Next action' : ''}
               </span>
             </>
           );
@@ -104,6 +97,26 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
           );
         })}
       </ol>
+      {next !== null ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-parent-gold-pale px-3 py-2.5">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-studdy-orange">
+              Your next action
+            </p>
+            <p className="text-sm font-semibold text-parent-navy">{next.title}</p>
+          </div>
+          <Link
+            href={next.href}
+            className="inline-flex shrink-0 items-center rounded-lg bg-studdy-orange px-3 py-2 text-sm font-semibold text-white hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-studdy-orange"
+          >
+            {next.actionLabel} →
+          </Link>
+        </div>
+      ) : checklist.waitingOnStuddy ? (
+        <p className="mt-3 rounded-lg bg-parent-gold-pale p-2 text-sm text-parent-navy">
+          Your service is with Studdy for review. We will update its status here.
+        </p>
+      ) : null}
     </section>
   );
 }
