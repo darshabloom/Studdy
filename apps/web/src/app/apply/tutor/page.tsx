@@ -1,7 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Alert, Button, Card, StatusBadge } from '@studdy/design-system';
-import { applicationForApplicant, applicationV2DraftForApplicant, listSubjects } from '@studdy/database';
+import {
+  applicationForApplicant,
+  applicationV2DraftForApplicant,
+  listSubjects,
+} from '@studdy/database';
 import { ApplicationForm } from '@/components/tutors/application-form';
 import { PendingSubmitButton } from '@/components/common/pending-submit-button';
 import { resolveIdentity } from '@/lib/identity/resolve';
