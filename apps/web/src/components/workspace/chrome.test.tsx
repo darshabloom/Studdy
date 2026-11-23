@@ -79,6 +79,7 @@ const OWNER: readonly WorkspaceCode[] = ['platform_owner'];
 describe('WorkspaceChrome', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    createSupabaseServerClient.mockResolvedValue(null);
     redirect.mockImplementation((url: string) => {
       throw new Error(`REDIRECT:${url}`);
     });

@@ -1,36 +1,28 @@
 import Link from 'next/link';
 import {
   bookableSlotsForTutors,
-  listAvailabilityExceptions,
   listAvailabilityRules,
   listRequestsForTutor,
   tutorProfileForUser,
   tutorSetupFacts,
 } from '@studdy/database';
-import { Alert, Button, Card, EmptyState, RestrictedState } from '@studdy/design-system';
+import { Alert, Button, RestrictedState } from '@studdy/design-system';
 import { tutorSetupChecklist } from '@studdy/domain/tutors';
 import { formatDeadline } from '@/components/requests/request-status';
 import { SetupChecklist } from '@/components/tutors/setup-checklist';
 import { resolveIdentity } from '@/lib/identity/resolve';
+import { mondayOf, weekDays } from '@/lib/availability/calendar-time';
+import { zonedDateOnly } from '@studdy/domain/availability';
 
-export const metadata = { title: 'Tutor workspace' };
+export const metadata = { title: 'Tutor Home' };
 
 const DEFAULT_TIME_ZONE = 'Pacific/Auckland';
 const LOOKAHEAD_DAYS = 14;
 
 /**
- * TUTOR DASHBOARD.
- *
- * Built against the tutor-workspace acceptance criterion in
- * docs/design/multi-time-availability-redesign.md §3.4, which gates the whole
- * slice on this workspace being genuinely useful rather than merely capable.
- *
- * Delivered in this checkpoint: requests needing a response, upcoming held
- * time, the availability summary, and an obvious route into managing it.
- *
- * Deliberately absent until their checkpoints land: per-request offered times,
- * accept and decline, and the accepted-and-holding state. The page says so
- * rather than showing controls that do nothing.
+ * Tutor Home: approved light v3 dashboard structure, with restrained v0.6
+ * decorative accents. Only live request/availability data is displayed.
+ * Lesson schedules and earnings will be connected in separate scoped slices.
  */
 export default async function TutorDashboardPage() {
   const identity = await resolveIdentity();
@@ -49,9 +41,8 @@ export default async function TutorDashboardPage() {
   }
 
   const now = new Date();
-  const [rules, exceptions, slotsByTutor, requests, setupFacts] = await Promise.all([
+  const [rules, slotsByTutor, requests, setupFacts] = await Promise.all([
     listAvailabilityRules(profile.id),
-    listAvailabilityExceptions(profile.id, now),
     bookableSlotsForTutors({
       tutorProfileIds: [profile.id],
       from: now,
@@ -63,8 +54,6 @@ export default async function TutorDashboardPage() {
     tutorSetupFacts(profile.id),
   ]);
 
-  // Shown until the tutor is bookable, and gone the moment they are: a finished
-  // checklist is noise above the work a working tutor came here to do.
   const setup = setupFacts === null ? null : tutorSetupChecklist(setupFacts);
   const timeZone = rules[0]?.ianaTimeZone ?? DEFAULT_TIME_ZONE;
   const slots = slotsByTutor.get(profile.id) ?? [];
@@ -72,8 +61,6 @@ export default async function TutorDashboardPage() {
   const soonestDeadline = awaiting
     .map((request) => request.respondByAt)
     .sort((a, b) => a.getTime() - b.getTime())[0];
-  // Holds exist only once a tutor has accepted (D-1), so this is the accepted
-  // work sitting on the calendar while the family chooses.
   const held = requests
     .filter((request) => request.holdExpiresAt !== null && request.offeredTimes.length > 0)
     .sort(
@@ -81,133 +68,205 @@ export default async function TutorDashboardPage() {
         (a.offeredTimes[0]?.startAt.getTime() ?? 0) - (b.offeredTimes[0]?.startAt.getTime() ?? 0),
     );
 
+  // Monday–Sunday calendar in the tutor's local time zone. These are real
+  // bookable openings, never represented as confirmed lessons.
+  const todayKey = zonedDateOnly(now, timeZone);
+  const weekStart = mondayOf(now, timeZone);
+  const days = weekDays(weekStart, timeZone);
+  const dateLabel = new Intl.DateTimeFormat('en-NZ', {
+    timeZone,
+    month: 'short',
+    day: 'numeric',
+  });
+  const timeLabel = new Intl.DateTimeFormat('en-NZ', {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const calendarDays = days.map((day) => ({
+    ...day,
+    weekday: day.label.split(' ')[0],
+    dayNumber: Number(day.date.slice(-2)),
+    isToday: day.date === todayKey,
+    slots: slots
+      .filter((slot) => slot.startAt >= day.startAt && slot.startAt < day.endAt)
+      .sort((first, second) => first.startAt.getTime() - second.startAt.getTime()),
+  }));
+  const weekLabel =
+    days.length === 7
+      ? `${dateLabel.format(days[0]!.startAt)} – ${dateLabel.format(days[6]!.startAt)}`
+      : 'This week';
+
   return (
-    <>
-      <h1 className="font-display text-2xl font-semibold text-brand-purple-deep">
-        Your tutoring at a glance
-      </h1>
+    <div className="flex flex-col gap-3 text-text-primary md:gap-4">
+      <h1 className="sr-only">Tutor dashboard</h1>
 
-      {setup !== null && !setup.bookable ? (
-        <div className="mt-4">
-          <SetupChecklist checklist={setup} />
-        </div>
-      ) : null}
+      {setup !== null && !setup.bookable ? <SetupChecklist checklist={setup} /> : null}
 
-      {/*
-        A tutor with no availability receives nothing at all. Saying so loudly
-        is the difference between a workspace that looks broken and one that
-        tells you what to do next. The checklist above already says it while
-        setup is unfinished, so this is for a tutor who was bookable and has
-        since removed their hours.
-      */}
       {rules.length === 0 && (setup === null || setup.bookable) ? (
-        <div className="mt-4">
-          <Alert tone="warning" title="Set your availability to start receiving requests">
-            Families can only ask you for times you are free. Until you add your regular hours, you
-            will not appear as bookable and no request can reach you.
-          </Alert>
-          <div className="mt-3">
-            <Button asChild>
-              <Link href="/tutor/availability">Set your availability</Link>
-            </Button>
-          </div>
-        </div>
+        <Alert tone="warning" title="Set your availability to start receiving requests">
+          Families can only request times that you have made available.{' '}
+          <Link href="/tutor/availability" className="font-semibold underline">
+            Set your availability
+          </Link>
+          .
+        </Alert>
       ) : null}
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <Card>
-          <p className="text-sm text-text-secondary">Awaiting your response</p>
-          <p className="mt-1 text-2xl font-semibold">{awaiting.length}</p>
-          {soonestDeadline !== undefined ? (
-            <p className="mt-1 text-sm text-text-secondary">
-              Soonest reply due {formatDeadline(soonestDeadline, timeZone)}
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <section className="rounded-xl border border-surface-border bg-surface-card p-3 sm:p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-semibold">Lessons</h2>
+            <Link
+              href="/tutor/requests"
+              className="text-sm font-semibold text-brand-purple hover:underline"
+            >
+              View requests →
+            </Link>
+          </div>
+          <div className="mt-2 rounded-lg bg-parent-cream px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+              Next lesson
             </p>
-          ) : null}
-        </Card>
-        <Card>
-          <p className="text-sm text-text-secondary">Bookable slots, next {LOOKAHEAD_DAYS} days</p>
-          <p className="mt-1 text-2xl font-semibold">{slots.length}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-text-secondary">One-off changes ahead</p>
-          <p className="mt-1 text-2xl font-semibold">{exceptions.length}</p>
-        </Card>
+            <p className="mt-1 font-semibold">No confirmed lesson to display yet</p>
+            <p className="mt-1 text-sm text-text-secondary">
+              Confirmed lessons will appear when the lesson schedule is connected.
+            </p>
+          </div>
+          <div className="mt-3">
+            <h3 className="text-sm font-semibold">Upcoming request holds</h3>
+            {held.length === 0 ? (
+              <p className="mt-1 text-sm text-text-secondary">No upcoming request holds.</p>
+            ) : (
+              <ul className="mt-1 divide-y divide-surface-border">
+                {held.slice(0, 2).map((request) => (
+                  <li key={request.reference} className="py-2 text-sm">
+                    <span className="font-semibold">{request.subjectDisplayName}</span>
+                    {' with '}
+                    {request.studentPreferredName}
+                    <span className="block text-xs text-text-secondary">
+                      Request on hold
+                      {request.holdExpiresAt !== null
+                        ? ` · Until ${formatDeadline(request.holdExpiresAt, request.timeZone)}`
+                        : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+        <section aria-label="Tutor actions" className="flex flex-col gap-2">
+          <Link
+            href="/tutor/requests"
+            className="flex min-h-20 items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-card px-4 py-3 hover:bg-surface-card-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-purple"
+          >
+            <span>
+              <span className="block font-semibold">Booking requests</span>
+              <span className="text-xs text-text-secondary">
+                {awaiting.length} awaiting your response
+              </span>
+              {soonestDeadline !== undefined ? (
+                <span className="block text-xs text-text-muted">
+                  Due {formatDeadline(soonestDeadline, timeZone)}
+                </span>
+              ) : null}
+            </span>
+            <span className="text-xl font-semibold tabular-nums">
+              {awaiting.length} <span aria-hidden="true">→</span>
+            </span>
+          </Link>
+          <div className="flex min-h-16 items-center justify-between rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+            <span className="font-semibold">Lesson summaries</span>
+            <span className="text-xs text-text-secondary">Coming soon</span>
+          </div>
+          <div className="flex min-h-16 items-center justify-between rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+            <span className="font-semibold">Homework submissions</span>
+            <span className="text-xs text-text-secondary">Coming soon</span>
+          </div>
+        </section>
       </div>
 
-      <section className="mt-10">
+      <section className="rounded-xl border border-surface-border bg-surface-card p-3 sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-xl font-semibold">Requests needing a response</h2>
-          <Button asChild variant="secondary" size="sm">
-            <Link href="/tutor/requests">View all requests</Link>
+          <div>
+            <h2 className="font-display text-lg font-semibold">Earnings</h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              Verified earnings will appear when payment reporting is connected.
+            </p>
+          </div>
+          <Button asChild size="sm" variant="secondary">
+            <Link href="/tutor/payments">Getting paid</Link>
           </Button>
         </div>
-        {awaiting.length === 0 ? (
-          <div className="mt-3">
-            <EmptyState
-              title="Nothing waiting on you"
-              description="When a family asks you for a lesson, it appears here with the times they have in mind and how long you have to reply."
-            />
-          </div>
-        ) : (
-          <ul className="mt-3 flex flex-col gap-3">
-            {awaiting.slice(0, 5).map((request) => (
-              <li key={request.reference}>
-                <Card>
-                  <p className="font-semibold">
-                    {request.subjectDisplayName} with {request.studentPreferredName}
-                  </p>
-                  <p className="mt-1 text-sm text-text-secondary">
-                    Reply due {formatDeadline(request.respondByAt, request.timeZone)}
-                  </p>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
 
-      <section className="mt-10">
-        <h2 className="font-display text-xl font-semibold">Time currently held in your calendar</h2>
-        {held.length === 0 ? (
-          <div className="mt-3">
-            <EmptyState
-              title="No time held right now"
-              description="When a request is holding a slot for you, it shows here with the time it is held until."
-            />
-          </div>
-        ) : (
-          <ul className="mt-3 flex flex-col gap-3">
-            {held.slice(0, 5).map((request) => (
-              <li key={request.reference}>
-                <Card>
-                  <p className="font-semibold">
-                    {request.subjectDisplayName} with {request.studentPreferredName}
-                  </p>
-                  {request.holdExpiresAt !== null ? (
-                    <p className="mt-1 text-sm text-text-secondary">
-                      Held until {formatDeadline(request.holdExpiresAt, request.timeZone)}
-                    </p>
-                  ) : null}
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="mt-10">
+      <section className="rounded-xl border border-surface-border bg-surface-card p-3 sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-xl font-semibold">Your availability</h2>
-          <Button asChild size="sm">
-            <Link href="/tutor/availability">Manage availability</Link>
-          </Button>
+          <div>
+            <h2 className="font-display text-lg font-semibold">Your calendar</h2>
+            <p className="text-xs text-text-secondary">
+              {weekLabel} · {timeZone}
+            </p>
+          </div>
+          <Link
+            href="/tutor/availability"
+            className="text-sm font-semibold text-brand-purple hover:underline"
+          >
+            Open full calendar →
+          </Link>
         </div>
-        <p className="mt-1 text-text-secondary">
-          {rules.length === 0
-            ? 'No regular hours set yet.'
-            : `${String(rules.length)} regular weekly ${rules.length === 1 ? 'block' : 'blocks'} in ${timeZone}.`}
+        <div
+          className="mt-2 grid grid-cols-7 overflow-hidden rounded-lg border border-surface-border"
+          aria-label="Monday to Sunday calendar showing bookable times"
+        >
+          {calendarDays.map((day) => (
+            <div key={day.date} className="min-w-0 border-r border-surface-border last:border-r-0">
+              <div
+                className={
+                  day.isToday
+                    ? 'bg-parent-gold-pale px-1 py-2 text-center'
+                    : 'bg-surface-card-secondary px-1 py-2 text-center'
+                }
+              >
+                <p className="text-xs font-semibold">{day.weekday}</p>
+                <p className="font-display text-lg font-semibold tabular-nums">{day.dayNumber}</p>
+              </div>
+              <div className="flex min-h-24 flex-col gap-1 border-t border-surface-border p-1 sm:min-h-28 sm:p-2">
+                {day.slots.length === 0 ? (
+                  <span className="py-2 text-center text-xs text-text-muted">—</span>
+                ) : (
+                  <>
+                    {day.slots.slice(0, 3).map((slot) => (
+                      <span
+                        key={slot.startAt.toISOString()}
+                        className="rounded-md bg-parent-sky px-1 py-1 text-center text-[10px] font-medium text-brand-purple-deep sm:text-xs"
+                      >
+                        {timeLabel.format(slot.startAt)}
+                      </span>
+                    ))}
+                    {day.slots.length > 3 ? (
+                      <span className="text-center text-[10px] text-text-secondary sm:text-xs">
+                        +{day.slots.length - 3} more
+                      </span>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-text-secondary">
+          Times shown are bookable one-hour openings, rather than confirmed lessons. Manage your
+          availability to see the complete timetable.
         </p>
+        {rules.length === 0 ? (
+          <p className="mt-1 text-xs text-text-secondary">
+            Your available times will appear once regular hours are set.
+          </p>
+        ) : null}
       </section>
-    </>
+    </div>
   );
 }
