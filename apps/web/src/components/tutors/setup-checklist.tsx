@@ -34,7 +34,8 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h2 id="setup-heading" className="font-display text-lg font-semibold">
-            Finish setting up <span className="ml-2 text-sm font-normal text-text-secondary">
+            Finish setting up{' '}
+            <span className="ml-2 text-sm font-normal text-text-secondary">
               {done} of {checklist.steps.length} complete
             </span>
           </h2>
@@ -83,7 +84,9 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
               >
                 <div className="min-w-0 sm:flex-1">
                   <p className="font-semibold">{copy.title}</p>
-                  <p className="mt-0.5 text-sm text-text-secondary">{copy.detail[step.status]}</p>
+                  <p className="mt-0.5 text-sm text-text-secondary">
+                    {copy.detail[step.status]}
+                  </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <StatusBadge family={STEP_FAMILY[step.status]}>
