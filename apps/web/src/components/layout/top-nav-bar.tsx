@@ -2,7 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { WorkspaceCode } from '@studdy/permissions';
 import type { ReactNode } from 'react';
-import logo from '@/assets/brand/studdy-logo.png';
+import logo from '@/assets/brand/studdy-logo-approved.webp';
 import { chooseWorkspaceAction, signOutAction } from '@/lib/auth/actions';
 import type { TopNavItem } from '@/lib/parent/nav';
 import { TopNavLinks } from './top-nav-links';
@@ -47,7 +47,7 @@ export function TopNavBar({
          * page's `load` event open on every Parent screen. As a static asset it
          * is also outside the session middleware's matcher.
          */}
-        <Image src={logo} alt="Studdy" unoptimized priority className="h-[34px] w-auto" />
+        <Image src={logo} alt="Studdy" unoptimized priority className="h-[32px] w-auto" />
       </Link>
       <div className="order-3 w-full min-w-0 md:order-2 md:w-auto md:flex-1">
         <TopNavLinks items={items} />
