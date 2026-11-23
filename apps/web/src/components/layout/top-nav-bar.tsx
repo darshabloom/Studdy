@@ -87,7 +87,9 @@ export function TopNavBar({
             className="flex cursor-pointer list-none items-center gap-2 rounded-full px-1 py-1 text-sm font-medium text-parent-navy outline-offset-2 hover:bg-parent-gold-pale focus-visible:outline focus-visible:outline-2 focus-visible:outline-studdy-orange [&::-webkit-details-marker]:hidden"
           >
             <span className="hidden max-w-32 truncate sm:inline">{firstName}</span>
-            <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-parent-gold bg-parent-navy text-xs font-bold text-white"\n              style={{ width: 36, height: 36, minWidth: 36, minHeight: 36, maxWidth: 36, maxHeight: 36 }}>
+            <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-parent-gold bg-parent-navy text-xs font-bold text-white"
+              style={{ width: 36, height: 36, minWidth: 36, minHeight: 36, maxWidth: 36, maxHeight: 36 }}
+            >
               {accountAvatarUrl ? (
                 <Image
                   src={accountAvatarUrl}
