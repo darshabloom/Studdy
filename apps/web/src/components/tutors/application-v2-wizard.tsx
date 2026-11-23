@@ -443,7 +443,8 @@ export function TutorApplicationV2Wizard({
               ]}
               onChange={(v) => patch('about', { currentActivities: v })}
             />
-            {a.dateOfBirth && applicantIsMinor(a.dateOfBirth, new Date().toISOString().slice(0, 10)) ? (
+            {a.dateOfBirth &&
+            applicantIsMinor(a.dateOfBirth, new Date().toISOString().slice(0, 10)) ? (
               <p className="rounded-lg bg-parent-gold-pale p-3 text-sm">
                 Applicants under 18 require additional safeguarding checks and any required guardian
                 consent before approval.
