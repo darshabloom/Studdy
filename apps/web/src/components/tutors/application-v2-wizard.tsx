@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { TutorApplicationV2Draft } from '@studdy/domain/tutors';
-import { applicantIsMinor, TUTOR_YEAR_LEVELS } from '@studdy/domain/tutors';
+import { applicantIsMinor, TUTOR_YEAR_LEVELS, validateApplicationV2 } from '@studdy/domain/tutors';
 import type { SubjectOption, V2DraftSave } from '@studdy/database';
 
 type Group = 'about' | 'subjects' | 'teaching' | 'qualifications' | 'declarations';
@@ -261,11 +261,13 @@ export function TutorApplicationV2Wizard({
     'idle',
   );
   const savedSerial = useRef(0);
+  const latestSerial = useRef(0);
   const inFlight = useRef(false);
 
   const change = (next: TutorApplicationV2Draft) => {
     setDraft(next);
-    setSerial((value) => value + 1);
+    latestSerial.current += 1;
+    setSerial(latestSerial.current);
     setSaveState('idle');
   };
   const patch = <K extends Group>(group: K, update: Partial<TutorApplicationV2Draft[K]>) => {
@@ -303,7 +305,16 @@ export function TutorApplicationV2Wizard({
   };
 
   useEffect(() => {
-    if (!saveAction || serial === 0 || serial <= savedSerial.current || inFlight.current) return;
+    if (
+      !saveAction ||
+      serial === 0 ||
+      serial <= savedSerial.current ||
+      inFlight.current ||
+      saveState === 'error' ||
+      saveState === 'conflict'
+    ) {
+      return;
+    }
     const pending = window.setTimeout(() => {
       if (inFlight.current) return;
       inFlight.current = true;
@@ -314,7 +325,7 @@ export function TutorApplicationV2Wizard({
           if (result.status === 'saved') {
             savedSerial.current = savingSerial;
             setVersion(result.recordVersion);
-            if (serial === savingSerial) setSaveState('saved');
+            setSaveState(latestSerial.current > savingSerial ? 'idle' : 'saved');
           } else {
             setSaveState(result.status === 'conflict' ? 'conflict' : 'error');
           }
@@ -322,10 +333,14 @@ export function TutorApplicationV2Wizard({
         .catch(() => setSaveState('error'))
         .finally(() => {
           inFlight.current = false;
+          // Trigger the next debounced save if edits arrived during the request.
+          if (latestSerial.current > savingSerial) {
+            setSaveState((current) => (current === 'saved' || current === 'saving' ? 'idle' : current));
+          }
         });
     }, 900);
     return () => window.clearTimeout(pending);
-  }, [draft, serial, version, saveAction]);
+  }, [draft, serial, version, saveAction, saveState]);
 
   const a = draft.about;
   const s = draft.subjects;
@@ -333,6 +348,14 @@ export function TutorApplicationV2Wizard({
   const q = draft.qualifications;
   const d = draft.declarations;
   const isReview = step === STEP_NAMES.length;
+  const validation = validateApplicationV2(draft, {
+    today: new Date().toISOString().slice(0, 10),
+    knownSubjectIds: subjects.map((subject) => subject.subjectId),
+  });
+  const issueEntries = Object.entries(validation.issues);
+  const issuesFor = (index: number) => issueEntries.filter(([path]) =>
+    path.startsWith(['about.', 'subjects.', 'teaching.', 'qualifications.', 'references', 'declarations.'][index] ?? '___'),
+  );
   const labelOf = (options: readonly (readonly [string, string])[], value: string) =>
     options.find(([key]) => key === value)?.[1] ?? value;
   const show = (value: string) => value.trim() || 'Not provided';
@@ -1021,6 +1044,13 @@ export function TutorApplicationV2Wizard({
                       ][i]
                     }
                   </p>
+                  {issuesFor(i).length > 0 ? (
+                    <p className="mt-2 text-sm font-semibold text-red-700">
+                      {issuesFor(i).length} required answer{issuesFor(i).length === 1 ? '' : 's'} to check
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-sm font-semibold text-green-700">Required answers complete</p>
+                  )}
                   <dl className="mt-3 grid gap-1.5 text-sm">
                     {reviewRows[i]?.map(([term, value]) => (
                       <div className="grid gap-1 sm:grid-cols-[10rem_1fr]" key={term}>
@@ -1039,6 +1069,16 @@ export function TutorApplicationV2Wizard({
                 </button>
               </div>
             ))}
+            {issueEntries.length > 0 ? (
+              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+                <p className="font-semibold">{issueEntries.length} item{issueEntries.length === 1 ? '' : 's'} need attention before submission.</p>
+                <p className="mt-1">Use the Edit links above to complete the highlighted sections.</p>
+              </div>
+            ) : (
+              <p role="status" className="rounded-lg bg-green-50 p-4 text-sm text-green-900">
+                All required questionnaire answers are complete. Final submission is still disabled while legal and safeguarding checks are connected.
+              </p>
+            )}
             <div className="rounded-lg bg-brand-lavender p-4 text-sm">
               Your answers can be reviewed here. Final submission and human-review snapshots will be
               enabled after the backend verification stage.
