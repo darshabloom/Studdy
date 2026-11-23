@@ -1,8 +1,10 @@
 name: SC-62 branch formatter (temporary)
 on:
-  push:
-    branches:
-      - sc-62/tutor-application-v2-foundation
+  pull_request:
+    paths:
+      - 'apps/web/src/app/apply/tutor/v2/page.tsx'
+      - 'apps/web/src/components/tutors/application-v2-wizard.tsx'
+      - '.github/workflows/sc-62-autoformat.yml'
 permissions:
   contents: write
 jobs:
