@@ -38,14 +38,11 @@ export default async function TutorSetupPage() {
             Set up your tutoring
           </h1>
           <p className="mt-1 max-w-prose text-sm text-text-secondary">
-            Complete these six stages to become ready for families to book.
-            Studdy reviews each service before you can publish it.
+            Complete these six stages to become ready for families to book. Studdy reviews each
+            service before you can publish it.
           </p>
         </div>
-        <Link
-          href="/tutor"
-          className="text-sm font-semibold text-parent-navy underline"
-        >
+        <Link href="/tutor" className="text-sm font-semibold text-parent-navy underline">
           Back to Tutor Home
         </Link>
       </div>
