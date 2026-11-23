@@ -64,7 +64,7 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
               >
                 {step.status === 'done' ? '✓' : index + 1}
               </span>
-              <span className="mt-2 block min-h-9 text-xs font-semibold leading-snug text-text-primary sm:text-sm">
+              <span className="mt-2 block text-xs font-semibold leading-snug text-text-primary sm:text-sm">
                 {copy.title}
               </span>
               <span className="mt-1 block text-[11px] text-text-secondary">
@@ -73,7 +73,7 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
               </span>
             </>
           );
-          const className = `flex h-full flex-col border-t-[3px] px-1 pt-3 ${lineClass} ${actionable ? 'rounded-sm hover:bg-parent-gold-pale focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-studdy-orange' : ''}`;
+          const className = `flex flex-col border-t-[3px] px-1 pt-2.5 ${lineClass} ${actionable ? 'rounded-sm hover:bg-parent-gold-pale focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-studdy-orange' : ''}`;
 
           return (
             <li key={step.code} className="min-w-0">
