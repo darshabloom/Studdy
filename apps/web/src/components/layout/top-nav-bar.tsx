@@ -42,7 +42,7 @@ export function TopNavBar({
   const profileHref = currentWorkspace === 'tutor' ? '/tutor/profile' : '/workspace';
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 px-2 sm:px-3">
+    <div data-tutor-workspace={currentWorkspace === 'tutor' ? 'true' : undefined} className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-5 px-2 sm:px-3">
       <Link href={homeHref} className="order-1 flex shrink-0 items-center py-1">
         <Image src={logo} alt="Studdy" unoptimized priority className="h-[46px] w-auto" />
       </Link>
