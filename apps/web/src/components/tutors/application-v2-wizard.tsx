@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { TutorApplicationV2Draft } from '@studdy/domain/tutors';
-import { TUTOR_YEAR_LEVELS } from '@studdy/domain/tutors';
+import { applicantIsMinor, TUTOR_YEAR_LEVELS } from '@studdy/domain/tutors';
 import type { SubjectOption, V2DraftSave } from '@studdy/database';
 
 type Group = 'about' | 'subjects' | 'teaching' | 'qualifications' | 'declarations';
@@ -443,7 +443,7 @@ export function TutorApplicationV2Wizard({
               ]}
               onChange={(v) => patch('about', { currentActivities: v })}
             />
-            {a.dateOfBirth && Number(a.dateOfBirth.slice(0, 4)) > new Date().getFullYear() - 18 ? (
+            {a.dateOfBirth && applicantIsMinor(a.dateOfBirth, new Date().toISOString().slice(0, 10)) ? (
               <p className="rounded-lg bg-parent-gold-pale p-3 text-sm">
                 Applicants under 18 require additional safeguarding checks and any required guardian
                 consent before approval.
