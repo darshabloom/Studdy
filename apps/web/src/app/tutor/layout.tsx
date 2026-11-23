@@ -12,7 +12,6 @@ const TUTOR_NAV: readonly TopNavItem[] = [
   { label: 'Booking requests', href: '/tutor/requests' },
   { label: 'Availability', href: '/tutor/availability' },
   { label: 'Services', href: '/tutor/services' },
-  { label: 'Profile', href: '/tutor/profile' },
   { label: 'Getting paid', href: '/tutor/payments' },
 ];
 
