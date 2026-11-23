@@ -31,48 +31,40 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
 
   return (
     <Card tone="brand" aria-labelledby="setup-heading">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id="setup-heading" className="font-display text-xl font-semibold">
-            Finish setting up
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 id="setup-heading" className="font-display text-lg font-semibold">
+            Finish setting up <span className="ml-2 text-sm font-normal text-text-secondary">
+              {done} of {checklist.steps.length} complete
+            </span>
           </h2>
-          <p className="mt-1 text-text-secondary">
-            Families cannot book you until every step is done. {done} of {checklist.steps.length}{' '}
-            complete.
-          </p>
+          <div
+            className="mt-2 h-1.5 w-full max-w-lg overflow-hidden rounded-full bg-surface-card"
+            role="progressbar"
+            aria-label="Setup progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={checklist.percentComplete}
+          >
+            <div
+              className="h-full rounded-full bg-parent-gold"
+              style={{ width: `${String(checklist.percentComplete)}%` }}
+            />
+          </div>
         </div>
-        <p className="text-2xl font-semibold tabular-nums" aria-hidden="true">
+        <p className="font-semibold tabular-nums" aria-hidden="true">
           {checklist.percentComplete}%
         </p>
-      </div>
-
-      <div
-        className="mt-4 h-2 w-full overflow-hidden rounded-full bg-surface-card"
-        role="progressbar"
-        aria-label="Setup progress"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={checklist.percentComplete}
-      >
-        <div
-          className="h-full rounded-full bg-brand-purple"
-          style={{ width: `${String(checklist.percentComplete)}%` }}
-        />
-      </div>
-
-      {next !== null ? (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button asChild>
+        {next !== null ? (
+          <Button asChild size="sm">
             <Link href={next.href}>Next: {next.actionLabel}</Link>
           </Button>
-        </div>
-      ) : checklist.waitingOnStuddy ? (
-        <p className="mt-4 font-medium">
-          Nothing for you to do right now. Studdy is reviewing your service.
-        </p>
-      ) : null}
+        ) : checklist.waitingOnStuddy ? (
+          <p className="text-sm font-medium">Studdy is reviewing your service.</p>
+        ) : null}
+      </div>
 
-      <details className="group mt-4 rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card">
+      <details className="group mt-3 rounded-[var(--radius-gentle)] border border-surface-border bg-surface-card">
         <summary className="cursor-pointer list-item rounded-[var(--radius-gentle)] px-4 py-3 font-semibold text-text-primary hover:bg-surface-card-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-purple">
           View all {checklist.steps.length} setup steps
           <span className="ml-2 text-sm font-normal text-text-secondary">
