@@ -139,6 +139,7 @@ export async function WorkspaceChrome({
             currentWorkspace={enteredWorkspace ?? accepts[0]!}
             workspaces={identity.workspaces}
             accountLabel={identity.displayName ?? identity.email ?? 'Your account'}
+            accountAvatarUrl={null}
           />
         }
       >
