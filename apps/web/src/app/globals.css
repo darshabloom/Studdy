@@ -70,9 +70,8 @@ body {
   color: var(--color-text-primary);
 }
 
-/* Tutor interface: light surfaces with the four approved wordmark colours. */
-.parent-theme:has(a[href='/tutor'][aria-current='page']),
-.parent-theme:has(a[href='/tutor/requests'][aria-current='page']) {
+/* Completion and success in the light workspace use navy and yellow, not green. */
+.parent-theme {
   --color-status-success: #001c44;
   --color-status-success-bg: #fff6df;
   --color-status-success-border: #fbb800;
