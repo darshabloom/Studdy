@@ -2,7 +2,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { WORKSPACE_ROUTE_SEGMENTS } from '@studdy/permissions';
 import logo from '@/assets/brand/studdy-logo-approved.webp';
 import { chooseWorkspaceAction, signOutAction } from '@/lib/auth/actions';
 import { WORKSPACE_LABELS } from '@/components/layout/workspace-top-bar';
