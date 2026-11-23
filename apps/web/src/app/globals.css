@@ -76,3 +76,9 @@ body {
   --color-status-success-bg: #fff6df;
   --color-status-success-border: #fbb800;
 }
+
+/* Tutor-only chrome: reclaim the development notice height for the main header.
+ * Other routes keep the warning; the Tutor account menu retains the notice. */
+body:has([data-tutor-workspace='true']) [data-studdy-environment-banner] {
+  display: none;
+}
