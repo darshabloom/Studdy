@@ -13,6 +13,20 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Tutor Application — Six Steps' };
 
 export default async function TutorApplicationV2Page() {
+  // Personal DOB and referee records must not be collected until the dedicated
+  // safeguarding/privacy workflow and immutable v2 submission are released.
+  if (process.env.STUDDY_APPLICATION_V2_ENABLED !== 'true') {
+    return <Card>
+      <h1 className="text-xl font-semibold">Six-step application design preview</h1>
+      <p className="my-4 text-sm">
+        The new application is being verified. You can explore every step using
+        synthetic details without affecting your existing tutor application.
+      </p>
+      <Link href="/apply/tutor/v2/preview" className="font-semibold text-brand-purple underline">
+        Open interactive preview
+      </Link>
+    </Card>;
+  }
   const identity = await resolveIdentity();
   if (identity === null || identity.studdyUserId === null || !identity.databaseAvailable) {
     return (
