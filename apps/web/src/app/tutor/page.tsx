@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import {
   bookableSlotsForTutors,
-  listAvailabilityExceptions,
   listAvailabilityRules,
   listRequestsForTutor,
   tutorProfileForUser,
@@ -40,9 +39,8 @@ export default async function TutorDashboardPage() {
   }
 
   const now = new Date();
-  const [rules, exceptions, slotsByTutor, requests, setupFacts] = await Promise.all([
+  const [rules, slotsByTutor, requests, setupFacts] = await Promise.all([
     listAvailabilityRules(profile.id),
-    listAvailabilityExceptions(profile.id, now),
     bookableSlotsForTutors({
       tutorProfileIds: [profile.id],
       from: now,
@@ -69,6 +67,25 @@ export default async function TutorDashboardPage() {
     );
 
   const greeting = identity.displayName?.split(' ')[0] ?? 'tutor';
+  // Seven days from today, with real bookable slots. Slots are possible
+  // appointments, not scheduled lessons; never present them as bookings.
+  const localDateKey = (date: Date) =>
+    new Intl.DateTimeFormat('sv-SE', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  const nextSevenDays = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(now.getTime() + index * 24 * 60 * 60 * 1000);
+    const key = localDateKey(day);
+    return {
+      key,
+      day: new Intl.DateTimeFormat('en-NZ', { timeZone, weekday: 'short' }).format(day),
+      date: new Intl.DateTimeFormat('en-NZ', { timeZone, day: 'numeric' }).format(day),
+      count: slots.filter((slot) => localDateKey(slot.startAt) === key).length,
+    };
+  });
 
   return (
     <div className="relative flex flex-col gap-5 text-brand-purple-deep md:gap-6">
@@ -98,19 +115,16 @@ export default async function TutorDashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
         <Card>
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-display text-lg font-semibold">Next lesson</h2>
-            <Link href="/tutor/requests" className="text-sm font-semibold text-brand-purple">
-              Lesson requests →
-            </Link>
-          </div>
-          <div className="mt-6 rounded-xl bg-parent-cream p-5">
-            <p className="font-semibold">Your next confirmed lesson</p>
-            <p className="mt-2 text-sm text-text-secondary">
-              Confirmed lesson details will appear here when the lesson schedule is connected. You
-              can manage incoming requests today.
-            </p>
-            <div className="mt-4">
+          <h2 className="font-display text-lg font-semibold">Next lesson</h2>
+          <div className="mt-5 flex min-h-44 flex-col justify-between rounded-xl bg-parent-cream p-5">
+            <div>
+              <p className="text-lg font-semibold">Your next confirmed lesson</p>
+              <p className="mt-2 max-w-md text-sm text-text-secondary">
+                Your next lesson will appear here when confirmed lesson records are connected.
+                Until then, you can review your current booking requests.
+              </p>
+            </div>
+            <div className="mt-5">
               <Button asChild size="sm">
                 <Link href="/tutor/requests">View booking requests</Link>
               </Button>
@@ -118,45 +132,35 @@ export default async function TutorDashboardPage() {
           </div>
         </Card>
 
-        <Card>
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-display text-lg font-semibold">Needs action</h2>
-            <Link href="/tutor/requests" className="text-sm font-semibold text-brand-purple">
-              View all →
-            </Link>
-          </div>
-          <div className="mt-4 flex flex-col gap-3">
-            <Link
-              href="/tutor/requests"
-              className="flex items-center justify-between rounded-xl border border-surface-border bg-surface-card px-4 py-4 hover:bg-surface-card-secondary"
-            >
-              <span>
-                <span className="block font-semibold">Booking requests</span>
-                <span className="text-sm text-text-secondary">
-                  {awaiting.length} awaiting your response
-                </span>
+        <section aria-label="Tutor actions" className="flex flex-col gap-3">
+          <Link
+            href="/tutor/requests"
+            className="flex min-h-24 items-center justify-between gap-4 rounded-xl border border-surface-border bg-surface-card px-5 py-4 transition-colors hover:bg-surface-card-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-purple"
+          >
+            <span>
+              <span className="block text-lg font-semibold">Booking requests</span>
+              <span className="mt-1 block text-sm text-text-secondary">
+                {awaiting.length} awaiting your response
               </span>
-              <span aria-hidden="true">→</span>
-            </Link>
-            {soonestDeadline !== undefined ? (
-              <p className="text-sm text-text-secondary">
-                Next response due {formatDeadline(soonestDeadline, timeZone)}
-              </p>
-            ) : null}
-            <Link
-              href="/tutor/availability"
-              className="flex items-center justify-between rounded-xl border border-surface-border bg-surface-card px-4 py-4 hover:bg-surface-card-secondary"
-            >
-              <span>
-                <span className="block font-semibold">Availability</span>
-                <span className="text-sm text-text-secondary">
-                  {slots.length} bookable slots in the next {LOOKAHEAD_DAYS} days
+              {soonestDeadline !== undefined ? (
+                <span className="mt-1 block text-xs text-text-muted">
+                  Next reply due {formatDeadline(soonestDeadline, timeZone)}
                 </span>
-              </span>
-              <span aria-hidden="true">→</span>
-            </Link>
+              ) : null}
+            </span>
+            <span className="text-2xl font-semibold tabular-nums" aria-label={`${awaiting.length} awaiting booking requests`}>
+              {awaiting.length} <span aria-hidden="true">→</span>
+            </span>
+          </Link>
+          <div className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-surface-border bg-surface-card px-5 py-4">
+            <span className="text-lg font-semibold">Lesson summaries</span>
+            <span className="text-sm text-text-secondary">Coming soon</span>
           </div>
-        </Card>
+          <div className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-surface-border bg-surface-card px-5 py-4">
+            <span className="text-lg font-semibold">Homework submissions</span>
+            <span className="text-sm text-text-secondary">Coming soon</span>
+          </div>
+        </section>
 
         <Card>
           <div className="flex items-center justify-between gap-3">
@@ -216,26 +220,30 @@ export default async function TutorDashboardPage() {
             Manage availability →
           </Link>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm text-text-secondary">Regular weekly blocks</p>
-            <p className="mt-1 text-2xl font-semibold">{rules.length}</p>
-          </div>
-          <div className="rounded-xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm text-text-secondary">Upcoming one-off changes</p>
-            <p className="mt-1 text-2xl font-semibold">{exceptions.length}</p>
-          </div>
-          <div className="rounded-xl border border-surface-border bg-surface-card p-4">
-            <p className="text-sm text-text-secondary">
-              Bookable slots, next {LOOKAHEAD_DAYS} days
-            </p>
-            <p className="mt-1 text-2xl font-semibold">{slots.length}</p>
-          </div>
+        <div className="mt-5 grid grid-cols-7 gap-1.5 sm:gap-3" aria-label="Available one-hour slots for the next seven days">
+          {nextSevenDays.map((day) => (
+            <div
+              key={day.key}
+              className="min-w-0 rounded-xl border border-surface-border bg-surface-card-secondary px-1 py-3 text-center sm:p-4"
+            >
+              <p className="text-xs font-semibold text-text-secondary">{day.day}</p>
+              <p className="mt-1 font-display text-xl font-semibold tabular-nums">{day.date}</p>
+              <p className="mt-3 text-base font-semibold tabular-nums">{day.count}</p>
+              <p className="text-[10px] leading-tight text-text-secondary sm:text-xs">
+                {day.count === 1 ? 'slot' : 'slots'}
+              </p>
+            </div>
+          ))}
         </div>
-        <p className="mt-3 text-xs text-text-muted">
-          Availability is shown in {timeZone}. The weekly lesson calendar will follow once confirmed
-          lesson data is connected.
+        <p className="mt-4 text-sm text-text-secondary">
+          Bookable one-hour slots over the next seven days, in {timeZone}. These show available
+          times, not confirmed lessons. Confirmed lessons will appear once scheduling is connected.
         </p>
+        {rules.length === 0 ? (
+          <p className="mt-2 text-sm text-text-secondary">
+            Set your regular hours to make times available to families.
+          </p>
+        ) : null}
       </Card>
     </div>
   );
