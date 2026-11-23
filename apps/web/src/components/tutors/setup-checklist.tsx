@@ -93,7 +93,10 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
                   {details}
                 </Link>
               ) : (
-                <div className={className} aria-label={`${copy.title}: ${STATUS_TEXT[step.status]}`}>
+                <div
+                  className={className}
+                  aria-label={`${copy.title}: ${STATUS_TEXT[step.status]}`}
+                >
                   {details}
                 </div>
               )}
