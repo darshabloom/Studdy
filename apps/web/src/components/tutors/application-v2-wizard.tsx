@@ -333,6 +333,64 @@ export function TutorApplicationV2Wizard({
   const q = draft.qualifications;
   const d = draft.declarations;
   const isReview = step === STEP_NAMES.length;
+  const labelOf = (options: readonly (readonly [string, string])[], value: string) =>
+    options.find(([key]) => key === value)?.[1] ?? value;
+  const show = (value: string) => value.trim() || 'Not provided';
+  const reviewRows: [string, string][][] = [
+    [
+      ['Legal name', show(a.legalFirstName + ' ' + a.legalFamilyName)],
+      ['Public first name', show(a.preferredFirstName)],
+      ['Date of birth', show(a.dateOfBirth)],
+      ['Mobile', show(a.mobile)],
+      ['Location', show(a.location)],
+      ['Work / study status', a.currentActivities.join(', ') || 'Not provided'],
+    ],
+    [
+      ['Subjects and levels', s.selections.map((item) =>
+        (subjects.find((subject) => subject.subjectId === item.subjectId)?.displayName ?? 'Subject') +
+        ': ' + item.levels.map((level) => TUTOR_YEAR_LEVELS.find((entry) =>
+          Number(entry.value) === level)?.label ?? String(level)).join(', '),
+      ).join(' | ') || 'None selected'],
+      ['Suggested subjects', s.suggestedSubjects.join(', ') || 'None'],
+      ['Lesson formats', [s.offersOnline ? 'Online' : '', s.offersInPerson ? 'In person' : ''].filter(Boolean).join(', ') || 'None'],
+      ['Curricula', s.curricula.map((key) => labelOf(CURRICULA, key)).join(', ') || 'None selected'],
+      ['Specialisations', s.selections.map((item) => item.specialisations).filter(Boolean).join(' | ') || 'Not provided'],
+    ],
+    [
+      ['Experience', labelOf(EXPERIENCE, t.experience) || 'Not selected'],
+      ['Settings', t.settings.map((key) => labelOf(SETTINGS, key)).join(', ') || 'None selected'],
+      ['Teaching approach', show(t.approach)],
+      ['Student groups', t.studentGroups.map((key) => labelOf(STUDENTS, key)).join(', ') || 'None selected'],
+      ['Learning needs experience', t.learningNeeds.map((key) => labelOf(NEEDS, key)).join(', ') || 'Not provided'],
+      ['Example', show(t.example)],
+    ],
+    [
+      ['Highest education', labelOf(EDUCATION, q.highestEducation) || 'Not selected'],
+      ['Currently studying', show(q.currentlyStudying)],
+      ['Current qualification', show(q.currentQualification)],
+      ['Qualifications', q.noRelevantQualifications ? 'None yet' :
+        q.relevantQualifications.map((item) => item.title + ' — ' + item.institution).join('; ') || 'Not provided'],
+      ['Evidence', show(q.evidenceIntention.replaceAll('_', ' '))],
+      ['Academic results', show(q.academicResults)],
+      ['Professional credentials', show(q.professionalCredentials)],
+      ['Training', q.training.join(', ') || 'Not provided'],
+    ],
+    [
+      ['Referees', draft.references.map((ref) =>
+        ref.fullName + ' (' + ref.relationship + '), ' +
+        (ref.email || ref.phone || 'contact missing') + ' — ' +
+        (ref.contactPreference === 'contact_me_first' ? 'Contact me first' : 'Contact now'),
+      ).join('; ') || 'No referee added'],
+    ],
+    [
+      ['Accuracy', d.accuracyAccepted ? 'Accepted' : 'Pending'],
+      ['Safeguarding', d.safeguardingAccepted ? 'Accepted' : 'Pending'],
+      ['Code of Conduct', d.codeOfConductAccepted ? 'Accepted' : 'Pending'],
+      ['Tutor Agreement', d.tutorAgreementAccepted ? 'Accepted' : 'Pending'],
+      ['Privacy Notice', d.privacyNoticeAccepted ? 'Acknowledged' : 'Pending'],
+      ['Interview', d.interviewAccepted ? 'Accepted' : 'Pending'],
+    ],
+  ];
   const next = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setStep((value) => Math.min(value + 1, STEP_NAMES.length));
@@ -914,10 +972,18 @@ export function TutorApplicationV2Wizard({
                       ][i]
                     }
                   </p>
+                  <dl className="mt-3 grid gap-1.5 text-sm">
+                    {reviewRows[i]?.map(([term, value]) => (
+                      <div className="grid gap-1 sm:grid-cols-[10rem_1fr]" key={term}>
+                        <dt className="font-medium text-text-secondary">{term}</dt>
+                        <dd className="break-words text-text-primary">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
                 </div>
                 <button
                   type="button"
-                  className="text-sm font-semibold text-brand-purple underline"
+                  className="shrink-0 self-start text-sm font-semibold text-brand-purple underline"
                   onClick={() => setStep(i)}
                 >
                   Edit
