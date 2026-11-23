@@ -2,23 +2,16 @@ import Link from 'next/link';
 import type { TutorSetupChecklist, TutorSetupStepStatus } from '@studdy/domain/tutors';
 import { SETUP_STEP_COPY } from '@/lib/tutors/service-status';
 
-const STEP_LABEL: Readonly<Record<TutorSetupStepStatus, string>> = {
+const STATUS_TEXT: Readonly<Record<TutorSetupStepStatus, string>> = {
   done: 'Complete',
   todo: 'To do',
   waiting: 'In review',
-  blocked: 'Not yet',
-};
-
-const STEP_TONE: Readonly<Record<TutorSetupStepStatus, string>> = {
-  done: 'border-status-success-border bg-status-success-bg',
-  todo: 'border-parent-gold bg-parent-gold-pale',
-  waiting: 'border-surface-border bg-parent-sky',
-  blocked: 'border-surface-border bg-surface-card-secondary',
+  blocked: 'Locked',
 };
 
 /**
- * A six-stage visual overview. Preserve the exact statuses calculated by the
- * domain checklist: a blocked step must never look actionable or completed.
+ * Compact six-stage setup tracker. Only actionable steps are linked; blocked
+ * steps remain clearly distinguished from completed and reviewed stages.
  */
 export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }) {
   const done = checklist.steps.filter((step) => step.status === 'done').length;
@@ -27,38 +20,67 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
   return (
     <section
       aria-labelledby="setup-heading"
-      className="rounded-xl border border-surface-border bg-parent-sky p-3 sm:p-4"
+      className="rounded-xl border border-surface-border bg-white px-4 py-3 sm:px-5"
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <h2 id="setup-heading" className="font-display text-lg font-semibold">
-          Finish setting up
-        </h2>
-        <p className="text-sm text-text-secondary">
-          {done} of {checklist.steps.length} complete · {checklist.percentComplete}%
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <h2 id="setup-heading" className="font-display text-lg font-semibold">
+            Finish setting up
+          </h2>
+          <p className="text-xs font-medium text-text-secondary">
+            {done} of {checklist.steps.length} complete
+          </p>
+        </div>
+        {next !== null ? (
+          <Link
+            href={next.href}
+            className="text-sm font-semibold text-brand-purple underline decoration-parent-gold decoration-2 underline-offset-4 hover:text-studdy-orange"
+          >
+            Next: {next.actionLabel} →
+          </Link>
+        ) : checklist.waitingOnStuddy ? (
+          <span className="text-xs text-text-secondary">With Studdy for review</span>
+        ) : null}
       </div>
 
-      <ol className="mt-3 grid grid-cols-3 gap-2 lg:grid-cols-6" aria-label="Tutor setup progress">
+      <ol
+        className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-3 lg:grid-cols-6"
+        aria-label="Tutor setup steps"
+      >
         {checklist.steps.map((step, index) => {
           const copy = SETUP_STEP_COPY[step.code];
           const actionable = step.status === 'todo';
-          const content = (
+          const current = step.code === checklist.nextStep;
+          const lineClass =
+            step.status === 'done'
+              ? 'border-parent-gold'
+              : current
+                ? 'border-studdy-orange'
+                : 'border-surface-border';
+          const numberClass =
+            step.status === 'done'
+              ? 'bg-parent-navy text-white'
+              : current
+                ? 'bg-studdy-orange text-white'
+                : 'border border-surface-border bg-white text-text-secondary';
+          const details = (
             <>
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-xs font-semibold" aria-hidden="true">
-                  {step.status === 'done' ? '✓' : index + 1}
-                </span>
-                <span className="text-[10px] font-medium">{STEP_LABEL[step.status]}</span>
-              </div>
-              <span className="mt-2 block text-sm font-semibold leading-snug">{copy.title}</span>
-              {actionable ? (
-                <span className="mt-1 block text-xs font-medium underline underline-offset-2">
-                  {copy.actionLabel} →
-                </span>
-              ) : null}
+              <span
+                className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${numberClass}`}
+                aria-hidden="true"
+              >
+                {step.status === 'done' ? '✓' : index + 1}
+              </span>
+              <span className="mt-2 block min-h-9 text-xs font-semibold leading-snug text-text-primary sm:text-sm">
+                {copy.title}
+              </span>
+              <span className="mt-1 block text-[11px] text-text-secondary">
+                {STATUS_TEXT[step.status]}
+                {current ? ' · Next' : ''}
+              </span>
             </>
           );
-          const className = `flex min-h-24 flex-col rounded-lg border px-3 py-2 text-left ${STEP_TONE[step.status]} ${actionable ? 'hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-parent-navy' : ''}`;
+          const className = `flex h-full flex-col border-t-[3px] px-1 pt-3 ${lineClass} ${actionable ? 'rounded-sm hover:bg-parent-gold-pale focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-studdy-orange' : ''}`;
 
           return (
             <li key={step.code} className="min-w-0">
@@ -66,25 +88,19 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
                 <Link
                   href={copy.href}
                   className={className}
-                  aria-label={`${copy.title}: ${STEP_LABEL[step.status]}. ${copy.actionLabel}`}
+                  aria-label={`${copy.title}: ${STATUS_TEXT[step.status]}. ${copy.actionLabel}`}
                 >
-                  {content}
+                  {details}
                 </Link>
               ) : (
-                <div className={className} aria-label={`${copy.title}: ${STEP_LABEL[step.status]}`}>
-                  {content}
+                <div className={className} aria-label={`${copy.title}: ${STATUS_TEXT[step.status]}`}>
+                  {details}
                 </div>
               )}
             </li>
           );
         })}
       </ol>
-
-      {next === null && checklist.waitingOnStuddy ? (
-        <p className="mt-2 text-xs text-text-secondary">
-          Studdy is reviewing your service. No action is needed right now.
-        </p>
-      ) : null}
     </section>
   );
 }
