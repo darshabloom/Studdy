@@ -111,7 +111,7 @@ export async function applicationV2DraftForApplicant(userId: string): Promise<V2
  */
 export async function initialiseApplicationV2Draft(input: {
   readonly userId: string;
-  readonly expectedRecordVersion: number;
+  readonly expectedRecordVersion?: number;
 }): Promise<V2DraftRead> {
   const { sql: client, db } = createDatabaseClient();
   try {
@@ -132,7 +132,11 @@ export async function initialiseApplicationV2Draft(input: {
       if (isV2Draft(row.draft)) {
         return { status: 'ready', draft: row.draft, recordVersion: row.recordVersion };
       }
-      if (row.recordVersion !== input.expectedRecordVersion || hasLegacyAnswers(row.draft)) {
+      if (
+        (input.expectedRecordVersion !== undefined &&
+          row.recordVersion !== input.expectedRecordVersion) ||
+        hasLegacyAnswers(row.draft)
+      ) {
         return { status: 'legacy_requires_review' };
       }
       const legacy = coerceDraft(row.draft);
@@ -157,7 +161,7 @@ export async function initialiseApplicationV2Draft(input: {
         .where(
           and(
             eq(tutorApplications.id, row.id),
-            eq(tutorApplications.recordVersion, input.expectedRecordVersion),
+            eq(tutorApplications.recordVersion, row.recordVersion),
           ),
         )
         .returning({ recordVersion: tutorApplications.recordVersion });
