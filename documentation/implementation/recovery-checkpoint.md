@@ -133,3 +133,56 @@ Status: **IN PROGRESS — read-only verification, no testing mutations**. The pr
 - Transaction-scoped read-only RLS tests with actual fixture Auth subjects and SET LOCAL ROLE authenticated, rolled back: parent sees exactly Charlie/Jamie, independent student sees exactly Sam, tutor-only sees zero student profiles. No persistent DB changes during verification. These are database policy tests, not authenticated HTTP server-action tests.
 - Source review found missing explicit parent workspace guard on addStudentAction and updateStudentAction. Added guard before validation/DB mutation at 03ecc34c2e239785a05dceaf74bd347f267821f3 and 1153d960231f5bdb2bb870c25c02d12936636b5f respectively. Existing ownership checks preserved. Further review needed: repository family membership queries omit some date/archive/account status checks found in RLS helpers; role lifecycle predicates and other direct server actions need review. SC-117 blocks T00 pending focused regression/authorization verification. No claim of complete app-wide isolation.
 - Removed temporary diagnostic source at 4797cfb636c7d0f01e42f079c0bff4b409343106. At check deployment dpl_B4tnkXf9txQMNZwhhsAbfLLdct7q BUILDING, previous doc-only 46db590 READY; commit workflow lookup returned no PR runs (not evidence of green CI). Verify latest READY SHA and diagnostic returns 404, run positive/negative server action regression tests, resolve or bound SC-117 findings before closure. Main previously verified unchanged at a3eb917. Stripe disabled; sandbox payments not tested. SC-109 UX deferred, original blocking link cannot be removed with exposed Shortcut tools. T00 remains open. Next chat may be named T00 — Final security verification if needed; do not start T01 until remaining gates satisfied.
+
+## T00 closure — 25 November 2026
+
+**Status: COMPLETE for pre-launch protected development; T01 may begin.**
+This closes the T00 scoped verification gates, not the public-launch security review.
+
+- Owner-confirmed manual Google authentication, existing account recovery,
+  pending applicant restrictions, Tutor/Parent switching, tutor-only and
+  independent student-only role isolation passed. SC-109 chooser loading polish
+  was explicitly deferred as a non-blocking UX issue; SC-112 workspace transition
+  remains a design concept.
+- Read-only fixture verification: Charlie (Year 8), Jamie (Year 11) persist as
+  dependents of the fictional guardian family; Sam (Year 13) persists as an
+  independent student. Transaction-scoped authenticated RLS tests previously
+  returned two guardian students, the independent student's own record only,
+  and zero students for the tutor-only identity.
+- SC-117: development commits 03ecc34 and 1153d96 added explicit Parent role
+  checks before student creation/update. Follow-up commits e18e5c1,
+  8034fbc and e7364c2 added direct action regression tests, guardian
+  effective-date/role and family/account-status filters, and active identity
+  and role assignment lifecycle enforcement. PR #71 added local integration
+  regressions plus Tutor server-action role checks and tests.
+- All four required PR #71 checks passed on run 45507458535:
+  typecheck/lint/format/unit/build; database migration/seeds/integration/RLS;
+  Playwright end-to-end; secret scan. PR #71 merged by squash to
+  **development** at a101da1913f375e97545efd26e1842276525bf52. This is
+  a development integration, **not a main/production release**.
+- Vercel deployment dpl_9Eh4K8ANaz4JmJGsVRvE6YoVWByi was verified
+  **READY**, linked to the exact development SHA a101da1, with stable alias
+  studdy-git-development-darsha-waterhouses-projects.vercel.app.
+  Authenticated Vercel HTTP access on its immutable deployment returned
+  /api/t00-environment **404** without diagnostic data, /sign-in **200**
+  with Google CTA, and unauthenticated /parent and /tutor login screens.
+  The temporary diagnostic source had been removed at 4797cfb.
+- The original diagnostic, before removal, established that the preview used
+  the expected shared Supabase server target and that Stripe and transactional
+  Resend email were disabled. Supabase built-in authentication email remains
+  separate. No live payment, provider message or destructive shared-database
+  action was performed in this closure slice.
+- Verification boundary: new direct server-action regressions exercised
+  action functions with mocked authenticated identities, and integration
+  tests exercised repository policies on a local synthetic database.
+  These are stronger than browser-only role tests; a complete authenticated
+  cross-account HTTP mutation/security penetration suite has not been run.
+  Public tutor-search security-definer view, launch-wide permission audit,
+  shared fixture exclusion and fully separated production infrastructure
+  remain launch gates, not T01-blocking verification failures.
+- Shortcut SC-117 and SC-92 carry detailed execution evidence.
+  T01 handover lives at documentation/implementation/t01-handover.md.
+  Exact next task: begin bounded **T01a Tutor Home and Navigation**, inspect
+  SC-60 and the latest approved UI, preserve existing working routes, implement
+  trustworthy navigation and real-data home cards on development, and present
+  a commit-matched preview for product-owner interaction.
