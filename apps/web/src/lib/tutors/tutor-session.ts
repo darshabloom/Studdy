@@ -23,7 +23,7 @@ export async function requireTutor(returnTo: string): Promise<TutorActor> {
     redirect(`/sign-in?next=${encodeURIComponent(returnTo)}`);
   }
   // A database blip must never read as "yes".
-  if (!identity.databaseAvailable) redirect('/workspace');
+  if (!identity.databaseAvailable || !identity.workspaces.includes('tutor')) redirect('/workspace');
   const profile = await tutorProfileForUser(identity.studdyUserId);
   if (profile === null) redirect('/tutor');
   return { tutorProfileId: profile.id, studdyUserId: identity.studdyUserId };
