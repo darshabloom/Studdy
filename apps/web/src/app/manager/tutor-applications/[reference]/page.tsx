@@ -62,7 +62,10 @@ export default async function ReviewApplicationPage({
   await requireStaff(`/manager/tutor-applications/${reference}`);
   if (!REFERENCE.test(reference)) notFound();
 
-  const v2Review = await v2ApplicationForReview(reference);
+  const v2Review =
+    process.env.STUDDY_APPLICATION_V2_ENABLED === 'true'
+      ? await v2ApplicationForReview(reference)
+      : null;
   if (v2Review !== null) {
     return <TutorApplicationV2Review review={v2Review} subjects={await listSubjects()} />;
   }
