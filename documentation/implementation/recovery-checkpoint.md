@@ -129,3 +129,8 @@ Status: **IN PROGRESS — read-only verification, no testing mutations**. The pr
 
 - Owner confirms Daniel (tutor-only fixture) can access Tutor workspace and cannot access Parent or Student workspaces. Browser test 9 passed; exact tested commit not captured. At follow-up development alias READY at 4c573333c1b3daef0fbc88ad2f1101e88ee51074. No database or application-code changes for this test.
 - Next owner test: Sam independent student can access Student, cannot access Tutor or Parent. Then technical record-level and server permission checks, SC-109 fix, diagnostic cleanup; T00 open.
+
+
+## T00 student-only browser isolation — 25 November 2026
+
+- Owner confirmed test 10 access as expected: independent student can enter Student workspace and is denied Tutor and Parent access. Year 13 profile retention was included in test instructions but not separately confirmed; verify in database. At follow-up development alias READY at f7ce70ff28aab084a9e7a6f06d68f6ccd0af1799. Manual access test sequence complete, with SC-109 chooser loading defect remaining. Next bounded technical slice: inspect and fix SC-109, verify server-side role/record permissions and saved fixture records, remove temporary diagnostic, record actual CI and deployment results. T00 remains open; no release authorised.
