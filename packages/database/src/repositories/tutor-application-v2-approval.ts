@@ -26,8 +26,15 @@ import {
 } from '../schema/index';
 
 export type ApproveV2Result =
-  | { readonly status: 'approved'; readonly tutorProfileId: string; readonly tutorReference: string }
-  | { readonly status: 'not_found' | 'not_decidable' | 'profile_exists' | 'guardian_consent_missing' }
+  | {
+      readonly status: 'approved';
+      readonly tutorProfileId: string;
+      readonly tutorReference: string;
+    }
+  | {
+      readonly status:
+        'not_found' | 'not_decidable' | 'profile_exists' | 'guardian_consent_missing';
+    }
   | {
       readonly status: 'checks_incomplete';
       readonly missing: readonly ApplicationCheckCode[];
@@ -60,9 +67,8 @@ export async function approveApplicationV2(input: {
         .limit(1)
         .for('update');
       if (!application) return { status: 'not_found' };
-      if (
-        !(DECIDABLE_APPLICATION_STATUSES as readonly string[]).includes(application.statusCode)
-      ) return { status: 'not_decidable' };
+      if (!(DECIDABLE_APPLICATION_STATUSES as readonly string[]).includes(application.statusCode))
+        return { status: 'not_decidable' };
 
       const [revision] = await tx
         .select()

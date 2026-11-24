@@ -167,9 +167,8 @@ export function TutorApplicationV2Review({
       <Card>
         <h2 className="text-lg font-semibold">Verification checks</h2>
         <p className="mt-1 text-sm text-text-secondary">
-          Identity, safeguarding, references and interview are individually
-          verified by authorised staff. The applicant's declarations alone
-          never mark a check as complete.
+          Identity, safeguarding, references and interview are individually verified by authorised
+          staff. The applicant's declarations alone never mark a check as complete.
         </p>
         <ul className="mt-4 flex flex-col gap-5">
           {review.checks.map((check) => (
@@ -179,7 +178,9 @@ export function TutorApplicationV2Review({
               checkCode={check.code}
               initialStatus={check.status}
               initialNote={check.note}
-              checkedAtText={check.checkedAt === null ? null : check.checkedAt.toISOString().slice(0, 10)}
+              checkedAtText={
+                check.checkedAt === null ? null : check.checkedAt.toISOString().slice(0, 10)
+              }
               required
               decidable={decidable && approvalEnabled}
             />
@@ -194,8 +195,8 @@ export function TutorApplicationV2Review({
           </form>
         ) : (
           <p className="mt-4 text-sm text-text-secondary">
-            Approval controls are locked until the v2 release and notification
-            requirements are complete.
+            Approval controls are locked until the v2 release and notification requirements are
+            complete.
           </p>
         )}
       </Card>

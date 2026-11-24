@@ -6,7 +6,11 @@ import type {
   TutorApplicationStatus,
 } from '@studdy/domain/tutors';
 import { createDatabaseClient } from '../client';
-import { tutorApplicationChecks, tutorApplications, tutorApplicationV2Revisions } from '../schema/index';
+import {
+  tutorApplicationChecks,
+  tutorApplications,
+  tutorApplicationV2Revisions,
+} from '../schema/index';
 
 /**
  * Staff-only v2 projections. Callers MUST use requireStaff() with MFA before
@@ -117,7 +121,9 @@ export async function v2ApplicationForReview(reference: string): Promise<V2Revie
       .where(eq(tutorApplications.reference, reference))
       .limit(1);
     if (!application) return null;
-    const checkRows = await db.select().from(tutorApplicationChecks)
+    const checkRows = await db
+      .select()
+      .from(tutorApplicationChecks)
       .where(eq(tutorApplicationChecks.applicationId, application.id));
     return {
       reference: row.reference,
