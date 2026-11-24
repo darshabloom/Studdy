@@ -46,6 +46,8 @@ export {
   tutorApplications,
 } from './tutors/tutor-applications';
 
+export { tutorApplicationV2Revisions } from './tutors/tutor-application-v2-revisions';
+
 // services
 export { services, serviceReviews, serviceVersions } from './services/services';
 
