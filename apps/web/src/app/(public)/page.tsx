@@ -35,6 +35,7 @@ export default function HomePage() {
             </p>
             <h1
               id="studdy-hero-title"
+              aria-label="Tutoring that builds confidence."
               className="text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] sm:text-6xl lg:text-[4.5rem]"
             >
               Tutoring that
