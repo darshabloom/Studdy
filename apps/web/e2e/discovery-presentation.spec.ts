@@ -53,7 +53,7 @@ test.describe('tutor discovery presentation', () => {
         'aria-current',
         'page',
       );
-      await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+      await expect(page.locator('summary[aria-label^="Account menu for "]')).toBeVisible();
 
       // No competing public sign-in emphasis.
       await expect(page.getByRole('link', { name: 'Log in' })).toHaveCount(0);
