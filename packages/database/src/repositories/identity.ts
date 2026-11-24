@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, lte, or } from 'drizzle-orm';
 import { createDatabaseClient } from '../client';
 import {
   auditEvents,
@@ -72,8 +72,13 @@ export async function ensureIdentityForAuthUser(
     if (link !== undefined) {
       studdyUserId = link.userId;
       const [record] = await db.select().from(users).where(eq(users.id, link.userId));
-      displayName = record?.displayName ?? 'Studdy user';
-      preferredName = record?.preferredName ?? null;
+      // A suspended/closed identity must never retain workspace access through
+      // an otherwise active role assignment.
+      if (record === undefined || record.accountStatusCode !== 'active' || record.archivedAt !== null) {
+        throw new Error('Studdy identity is not active');
+      }
+      displayName = record.displayName;
+      preferredName = record.preferredName;
     } else {
       const correlationId = `cor_${randomUUID()}`;
       const result = await db.transaction(async (tx) => {
@@ -120,7 +125,13 @@ export async function ensureIdentityForAuthUser(
       })
       .from(userRoleAssignments)
       .innerJoin(roleDefinitions, eq(userRoleAssignments.roleDefinitionId, roleDefinitions.id))
-      .where(eq(userRoleAssignments.userId, studdyUserId));
+      .where(
+        and(
+          eq(userRoleAssignments.userId, studdyUserId),
+          lte(userRoleAssignments.effectiveFrom, new Date()),
+          or(isNull(userRoleAssignments.effectiveUntil), gt(userRoleAssignments.effectiveUntil, new Date())),
+        ),
+      );
 
     const [preferences] = await db
       .select()
