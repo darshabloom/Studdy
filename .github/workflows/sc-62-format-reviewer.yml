@@ -1,0 +1,33 @@
+name: SC-62 format reviewer files (temporary)
+on:
+  pull_request:
+    paths:
+      - 'apps/web/src/components/tutors/application-v2-review.tsx'
+      - 'packages/database/src/repositories/tutor-application-v2-review.ts'
+      - '.github/workflows/sc-62-format-reviewer.yml'
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: sc-62/tutor-application-v2-foundation
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write apps/web/src/components/tutors/application-v2-review.tsx packages/database/src/repositories/tutor-application-v2-review.ts
+      - name: Commit project formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/components/tutors/application-v2-review.tsx packages/database/src/repositories/tutor-application-v2-review.ts
+          if ! git diff --cached --quiet; then
+            git commit -m "style: format v2 staff review files [sc-62]"
+            git push origin HEAD:sc-62/tutor-application-v2-foundation
+          fi
