@@ -13,7 +13,7 @@ These instructions apply to every Studdy coding, review, deployment and merge ta
 
 ## Preview accuracy
 
-1. Before each browser-testing link, fetch the *current* PR head SHA and confirm it matches the Vercel deployment SHA, branch, READY state and intended route. Preview URLs are immutable snapshots; never reuse a stale URL for new work.
+1. Before each browser-testing link, fetch the _current_ PR head SHA and confirm it matches the Vercel deployment SHA, branch, READY state and intended route. Preview URLs are immutable snapshots; never reuse a stale URL for new work.
 2. Label all links **Production · main** or **Preview · branch**. Include commit, exact route, expected visual changes and whether data is synthetic, persisted or submitted.
 3. READY only means deployed. Verify the correct component and approved design, not just build status. Check old versus new headers, routes and identity states.
 4. Never send an approved tutor to a legacy approved-status page for testing a new applicant form. Use public synthetic preview for form design review when appropriate.
