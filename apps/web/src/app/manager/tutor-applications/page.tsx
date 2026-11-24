@@ -29,7 +29,10 @@ const dateFormat = new Intl.DateTimeFormat('en-NZ', {
  */
 export default async function TutorApplicationsPage() {
   await requireStaff('/manager/tutor-applications');
-  const [legacyQueue, v2Queue] = await Promise.all([reviewQueue(), v2ReviewQueue()]);
+  const [legacyQueue, v2Queue] = await Promise.all([
+    reviewQueue(),
+    process.env.STUDDY_APPLICATION_V2_ENABLED === 'true' ? v2ReviewQueue() : Promise.resolve([]),
+  ]);
   const queue = [
     ...legacyQueue,
     ...v2Queue.map((entry) => ({
