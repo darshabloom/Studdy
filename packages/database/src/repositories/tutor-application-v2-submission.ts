@@ -123,6 +123,19 @@ export async function submitApplicationV2(input: {
         .returning({ id: tutorApplications.id });
       if (!moved) throw new Error('Tutor Application changed during v2 submission.');
 
+      // A new revision invalidates earlier human verification outcomes. The
+      // reviewer must re-check this submission, including changed referees.
+      await tx
+        .update(tutorApplicationChecks)
+        .set({
+          statusCode: 'pending',
+          note: null,
+          checkedByUserId: null,
+          checkedAt: null,
+          updatedAt: now,
+        })
+        .where(eq(tutorApplicationChecks.applicationId, application.id));
+
       await tx
         .insert(tutorApplicationChecks)
         .values(
