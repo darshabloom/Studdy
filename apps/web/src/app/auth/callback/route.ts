@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { safeAuthNext } from '@/lib/auth/safe-next';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 /**
@@ -9,9 +10,14 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
-  const nextParam = url.searchParams.get('next') ?? '/workspace';
-  // Only ever redirect within the app.
-  const next = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/workspace';
+  const next = safeAuthNext(url.searchParams.get('next'));
+  const googleFlow = url.searchParams.get('provider') === 'google';
+  if (
+    googleFlow &&
+    (url.searchParams.has('error') || process.env.STUDDY_GOOGLE_AUTH_ENABLED !== 'true')
+  ) {
+    return NextResponse.redirect(new URL('/sign-in?error=google_unavailable', url.origin));
+  }
 
   if (code !== null) {
     const supabase = await createSupabaseServerClient();
@@ -22,5 +28,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
     }
   }
-  return NextResponse.redirect(new URL('/verify?error=invalid_link', url.origin));
+  return NextResponse.redirect(
+    new URL(
+      googleFlow ? '/sign-in?error=google_unavailable' : '/verify?error=invalid_link',
+      url.origin,
+    ),
+  );
 }

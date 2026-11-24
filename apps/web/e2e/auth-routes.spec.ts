@@ -17,6 +17,17 @@ test.describe('authentication routes', () => {
     await expect(page.getByRole('link', { name: 'Forgotten your password?' })).toBeVisible();
   });
 
+  test('Google OAuth stays inaccessible while the server release gate is disabled', async ({
+    page,
+  }) => {
+    await page.goto('/sign-in');
+    await expect(page.getByRole('link', { name: 'Continue with Google' })).toHaveCount(0);
+
+    await page.goto('/auth/google?next=//unsafe.example');
+    await expect(page).toHaveURL(/\/sign-in\?error=google_unavailable$/);
+    await expect(page.getByRole('heading', { name: 'Log in to Studdy' })).toBeVisible();
+  });
+
   test('verify page explains the pending state', async ({ page }) => {
     await page.goto('/verify');
     await expect(page.getByRole('heading', { name: 'Verify your email' })).toBeVisible();
