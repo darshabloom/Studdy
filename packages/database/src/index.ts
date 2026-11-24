@@ -239,6 +239,12 @@ export {
   type V2DraftSave,
 } from './repositories/tutor-application-v2-drafts';
 
+// Not yet exposed to applicant actions: gated v2 immutable submission transaction.
+export {
+  submitApplicationV2,
+  type SubmitV2Result,
+} from './repositories/tutor-application-v2-submission';
+
 // Tutor-managed services and the tutor's own profile (feat/tutor-onboarding-setup)
 export {
   approveTutorService,
