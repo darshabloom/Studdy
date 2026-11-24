@@ -134,3 +134,9 @@ Status: **IN PROGRESS — read-only verification, no testing mutations**. The pr
 ## T00 student-only browser isolation — 25 November 2026
 
 - Owner confirmed test 10 access as expected: independent student can enter Student workspace and is denied Tutor and Parent access. Year 13 profile retention was included in test instructions but not separately confirmed; verify in database. At follow-up development alias READY at f7ce70ff28aab084a9e7a6f06d68f6ccd0af1799. Manual access test sequence complete, with SC-109 chooser loading defect remaining. Next bounded technical slice: inspect and fix SC-109, verify server-side role/record permissions and saved fixture records, remove temporary diagnostic, record actual CI and deployment results. T00 remains open; no release authorised.
+
+
+## T00 scope decision — 25 November 2026
+
+- Owner prefers completing T00 foundations before fixing chooser loading UX. SC-109 deferred as a non-blocking follow-up on the evidence that workspace switching and persisted choice work; reopen as blocker if reliable navigation or authorization fails. Supersedes earlier plan to require its fix before T00 closure. SC-112 animation remains proposed.
+- Remaining T00: verify saved family/student fixtures and server-side/record-level permissions, resolve or document security findings according to risk, remove temporary diagnostic, verify final deployment and checkpoint. Do not claim closure before checks. Development alias READY at 7451dcb2c8f583bc480d1d844aa3ff99e86e5405 before this documentation change. No implementation or DB changes in this decision.
