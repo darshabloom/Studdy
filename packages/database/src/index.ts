@@ -252,6 +252,11 @@ export {
   type V2ReviewDetail,
 } from './repositories/tutor-application-v2-review';
 
+export {
+  approveApplicationV2,
+  type ApproveV2Result,
+} from './repositories/tutor-application-v2-approval';
+
 // Tutor-managed services and the tutor's own profile (feat/tutor-onboarding-setup)
 export {
   approveTutorService,
