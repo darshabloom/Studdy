@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import {
   approveApplication,
   approveApplicationV2,
+  decideApplicationV2,
   recordApplicationCheck,
   rejectApplication,
   requestApplicationChanges,
@@ -209,4 +210,43 @@ export async function approveApplicationV2Action(formData: FormData): Promise<vo
   }
   if (result.status === 'profile_exists') return back(reference, REVIEW_NOTICE.profileExists);
   return back(reference, REVIEW_NOTICE.notDecidable);
+}
+
+/** Dedicated v2 decisions preserve/restage v2 answers and queue v2-aware emails. */
+async function decideV2(
+  formData: FormData,
+  decision: 'changes_requested' | 'rejected',
+): Promise<never> {
+  const actor = await requireStaff('/manager/tutor-applications');
+  const reference = readReference(formData);
+  if (
+    process.env.STUDDY_APPLICATION_V2_ENABLED !== 'true' ||
+    process.env.STUDDY_APPLICATION_V2_DECISIONS_ENABLED !== 'true'
+  ) {
+    back(reference, REVIEW_NOTICE.notDecidable);
+  }
+  const message = readMessage(formData, reference);
+  const result = await decideApplicationV2({
+    reference,
+    decision,
+    message,
+    actorUserId: actor.studdyUserId,
+    correlationId: randomUUID(),
+  });
+  return back(
+    reference,
+    result.status === 'done'
+      ? decision === 'rejected'
+        ? REVIEW_NOTICE.rejected
+        : REVIEW_NOTICE.changesRequested
+      : REVIEW_NOTICE.notDecidable,
+  );
+}
+
+export async function requestChangesV2Action(formData: FormData): Promise<void> {
+  await decideV2(formData, 'changes_requested');
+}
+
+export async function rejectV2Action(formData: FormData): Promise<void> {
+  await decideV2(formData, 'rejected');
 }
