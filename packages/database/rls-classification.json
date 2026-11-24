@@ -96,6 +96,11 @@
       "policy": null,
       "notes": "An immutable submitted revision of a tutor application: legal names, phone, experience and the declarations accepted. Server-only; personal data. Written once at submission and never updated."
     },
+    "tutors.tutor_application_v2_revisions": {
+      "classification": "server_only",
+      "policy": null,
+      "notes": "Private, immutable v2 Tutor Application answers including date of birth, referees, and exact legal document versions. Server-only; no anon/authenticated grants or browser policies."
+    },
     "tutors.tutor_application_revision_subjects": {
       "classification": "server_only",
       "policy": null,

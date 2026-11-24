@@ -1,7 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Alert, Button, Card, StatusBadge } from '@studdy/design-system';
-import { applicationForApplicant, listSubjects } from '@studdy/database';
+import {
+  applicationForApplicant,
+  applicationV2DraftForApplicant,
+  listSubjects,
+} from '@studdy/database';
 import { ApplicationForm } from '@/components/tutors/application-form';
 import { PendingSubmitButton } from '@/components/common/pending-submit-button';
 import { resolveIdentity } from '@/lib/identity/resolve';
@@ -93,6 +97,8 @@ export default async function TutorApplicationPage() {
   );
 
   if (application.editable) {
+    const v2Draft = await applicationV2DraftForApplicant(identity.studdyUserId);
+    if (v2Draft.status === 'ready') redirect('/apply/tutor/v2');
     const subjects = await listSubjects();
     const changesRequested = application.status === 'changes_requested';
     return (

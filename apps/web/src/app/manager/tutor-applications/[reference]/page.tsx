@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Alert, Button, Card, StatusBadge, TextareaField } from '@studdy/design-system';
 import { ReviewCheckControls } from '@/components/tutors/review-check-controls';
-import { applicationForReview } from '@studdy/database';
+import { TutorApplicationV2Review } from '@/components/tutors/application-v2-review';
+import { applicationForReview, listSubjects, v2ApplicationForReview } from '@studdy/database';
 import { DECIDABLE_APPLICATION_STATUSES, TUTOR_YEAR_LEVELS } from '@studdy/domain/tutors';
 import { requireStaff } from '@/lib/auth/staff';
 import {
@@ -60,6 +61,14 @@ export default async function ReviewApplicationPage({
   const { reference } = await params;
   await requireStaff(`/manager/tutor-applications/${reference}`);
   if (!REFERENCE.test(reference)) notFound();
+
+  const v2Review =
+    process.env.STUDDY_APPLICATION_V2_ENABLED === 'true'
+      ? await v2ApplicationForReview(reference)
+      : null;
+  if (v2Review !== null) {
+    return <TutorApplicationV2Review review={v2Review} subjects={await listSubjects()} />;
+  }
 
   const review = await applicationForReview(reference);
   if (review === null) notFound();

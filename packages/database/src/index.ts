@@ -230,6 +230,38 @@ export {
   type WithdrawResult,
 } from './repositories/tutor-applications';
 
+// Approved Tutor application v2 working copies (server-only, no v1 route cutover)
+export {
+  applicationV2DraftForApplicant,
+  initialiseApplicationV2Draft,
+  saveApplicationV2Draft,
+  type V2DraftRead,
+  type V2DraftSave,
+} from './repositories/tutor-application-v2-drafts';
+
+// Not yet exposed to applicant actions: gated v2 immutable submission transaction.
+export {
+  submitApplicationV2,
+  type SubmitV2Result,
+} from './repositories/tutor-application-v2-submission';
+
+export {
+  v2ReviewQueue,
+  v2ApplicationForReview,
+  type V2ReviewQueueEntry,
+  type V2ReviewDetail,
+} from './repositories/tutor-application-v2-review';
+
+export {
+  approveApplicationV2,
+  type ApproveV2Result,
+} from './repositories/tutor-application-v2-approval';
+
+export {
+  decideApplicationV2,
+  type V2DecisionResult,
+} from './repositories/tutor-application-v2-decisions';
+
 // Tutor-managed services and the tutor's own profile (feat/tutor-onboarding-setup)
 export {
   approveTutorService,

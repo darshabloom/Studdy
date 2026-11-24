@@ -763,6 +763,27 @@ async function resolveContext(
   if (isApplicationEventType(eventType)) {
     const applicationId = payload['applicationId'];
     if (typeof applicationId !== 'string') return null;
+    // V2 snapshots and v1 revisions have different structures. Only a
+    // server-authored schemaVersion=2 event may query the v2 private table,
+    // so legacy notifications work on databases not yet migrated to v2.
+    if (payload['schemaVersion'] === 2) {
+      const revisionNumber = payload['revisionNumber'];
+      if (!Number.isInteger(revisionNumber) || (revisionNumber as number) < 1) return null;
+      const [row] = await tx.execute(raw`
+        select a.reference,
+               r.snapshot -> 'answers' -> 'about' ->> 'preferredFirstName' as preferred_first_name
+        from tutors.tutor_applications a
+        join tutors.tutor_application_v2_revisions r
+          on r.application_id = a.id and r.revision_number = ${revisionNumber as number}
+        where a.id = ${applicationId}::uuid
+        limit 1`);
+      if (row === undefined) return null;
+      return {
+        ...EMPTY_CONTEXT,
+        applicationReference: row['reference'] as string,
+        recipientFirstName: (row['preferred_first_name'] as string | null) ?? null,
+      };
+    }
     const [row] = await tx.execute(raw`
       select a.reference, r.preferred_first_name
       from tutors.tutor_applications a

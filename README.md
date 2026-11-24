@@ -64,6 +64,9 @@ fail safely when the target environment is unclear.
 
 ## Rules of the road
 
+- **Before browser testing, verify the newest correct feature branch, PR head SHA, exact route and READY deployment. Never reuse an old preview link.** See `AGENTS.md`.
+- **After merging a PR, delete its merged source feature branch once dependent PRs and protected-branch rules have been checked.** Confirm deletion or document any permissions/tooling blocker. See `AGENTS.md`.
+
 - The repository is the source of truth for database structure.
 - Every exposed table has RLS enabled with an intentional, classified policy — CI fails otherwise.
 - Business rules live server-side in the domain layer, never in React components.
