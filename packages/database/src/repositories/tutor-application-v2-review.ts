@@ -1,10 +1,12 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type {
+  ApplicationCheckCode,
+  ApplicationCheckStatus,
   ApplicationV2SubmissionSnapshot,
   TutorApplicationStatus,
 } from '@studdy/domain/tutors';
 import { createDatabaseClient } from '../client';
-import { tutorApplications, tutorApplicationV2Revisions } from '../schema/index';
+import { tutorApplicationChecks, tutorApplications, tutorApplicationV2Revisions } from '../schema/index';
 
 /**
  * Staff-only v2 projections. Callers MUST use requireStaff() with MFA before
@@ -27,6 +29,12 @@ export interface V2ReviewDetail extends V2ReviewQueueEntry {
     readonly privacyNotice: string;
   };
   readonly guardianConsentReference: string | null;
+  readonly checks: readonly {
+    readonly code: ApplicationCheckCode;
+    readonly status: ApplicationCheckStatus;
+    readonly note: string | null;
+    readonly checkedAt: Date | null;
+  }[];
 }
 
 export async function v2ReviewQueue(): Promise<readonly V2ReviewQueueEntry[]> {
@@ -103,6 +111,14 @@ export async function v2ApplicationForReview(reference: string): Promise<V2Revie
       .limit(1);
     if (!row) return null;
     const snapshot = row.snapshot as ApplicationV2SubmissionSnapshot;
+    const [application] = await db
+      .select({ id: tutorApplications.id })
+      .from(tutorApplications)
+      .where(eq(tutorApplications.reference, reference))
+      .limit(1);
+    if (!application) return null;
+    const checkRows = await db.select().from(tutorApplicationChecks)
+      .where(eq(tutorApplicationChecks.applicationId, application.id));
     return {
       reference: row.reference,
       status: row.statusCode as TutorApplicationStatus,
@@ -110,6 +126,12 @@ export async function v2ApplicationForReview(reference: string): Promise<V2Revie
       submittedAt: row.submittedAt,
       preferredFirstName: snapshot.answers.about.preferredFirstName,
       verifiedChecks: row.verifiedChecks,
+      checks: checkRows.map((check) => ({
+        code: check.checkCode as ApplicationCheckCode,
+        status: check.statusCode as ApplicationCheckStatus,
+        note: check.note,
+        checkedAt: check.checkedAt,
+      })),
       snapshot,
       documentVersions: {
         tutorAgreement: row.tutorAgreementVersion,
