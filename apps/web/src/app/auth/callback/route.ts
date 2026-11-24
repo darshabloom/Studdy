@@ -12,7 +12,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const code = url.searchParams.get('code');
   const next = safeAuthNext(url.searchParams.get('next'));
   const googleFlow = url.searchParams.get('provider') === 'google';
-  if (googleFlow && (url.searchParams.has('error') || process.env.STUDDY_GOOGLE_AUTH_ENABLED !== 'true')) {
+  if (
+    googleFlow &&
+    (url.searchParams.has('error') || process.env.STUDDY_GOOGLE_AUTH_ENABLED !== 'true')
+  ) {
     return NextResponse.redirect(new URL('/sign-in?error=google_unavailable', url.origin));
   }
 
@@ -26,6 +29,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   }
   return NextResponse.redirect(
-    new URL(googleFlow ? '/sign-in?error=google_unavailable' : '/verify?error=invalid_link', url.origin),
+    new URL(
+      googleFlow ? '/sign-in?error=google_unavailable' : '/verify?error=invalid_link',
+      url.origin,
+    ),
   );
 }

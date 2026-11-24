@@ -14,7 +14,11 @@ export default function SignUpPage() {
         Create your account. You will verify your email, then set up who the tutoring is for — as a
         parent or guardian, or as an independent student.
       </p>
-      {googleEnabled ? <div className="mt-6"><GoogleSignIn next="/welcome" /></div> : null}
+      {googleEnabled ? (
+        <div className="mt-6">
+          <GoogleSignIn next="/welcome" />
+        </div>
+      ) : null}
       <div className="mt-6">
         <SignUpForm />
       </div>

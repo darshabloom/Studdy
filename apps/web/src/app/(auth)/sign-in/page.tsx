@@ -22,7 +22,11 @@ export default async function SignInPage({
           </Alert>
         </div>
       ) : null}
-      {googleEnabled ? <div className="mt-6"><GoogleSignIn next={next} /></div> : null}
+      {googleEnabled ? (
+        <div className="mt-6">
+          <GoogleSignIn next={next} />
+        </div>
+      ) : null}
       <div className="mt-6">
         <SignInForm next={next ?? ''} />
       </div>

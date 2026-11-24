@@ -17,7 +17,6 @@ test.describe('authentication routes', () => {
     await expect(page.getByRole('link', { name: 'Forgotten your password?' })).toBeVisible();
   });
 
-
   test('Google OAuth stays inaccessible while the server release gate is disabled', async ({
     page,
   }) => {
