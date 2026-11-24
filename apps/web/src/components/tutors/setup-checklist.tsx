@@ -31,9 +31,14 @@ export function SetupChecklist({ checklist }: { checklist: TutorSetupChecklist }
             {done} of {checklist.steps.length} complete
           </p>
         </div>
-        <span className="text-xs font-semibold text-text-secondary">
-          {checklist.percentComplete}% ready to publish
-        </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold text-text-secondary">
+            {checklist.percentComplete}% ready to publish
+          </span>
+          <Link href="/tutor/setup" className="text-xs font-semibold text-parent-navy underline">
+            View all steps
+          </Link>
+        </div>
       </div>
 
       <ol
