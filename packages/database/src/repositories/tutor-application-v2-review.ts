@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type {
   ApplicationV2SubmissionSnapshot,
   TutorApplicationStatus,
@@ -19,6 +19,7 @@ export interface V2ReviewQueueEntry {
   readonly revisionNumber: number;
   readonly submittedAt: Date;
   readonly preferredFirstName: string;
+  readonly verifiedChecks: number;
 }
 
 export interface V2ReviewDetail extends V2ReviewQueueEntry {
@@ -41,6 +42,10 @@ export async function v2ReviewQueue(): Promise<readonly V2ReviewQueueEntry[]> {
         revisionNumber: tutorApplications.currentRevisionNumber,
         submittedAt: tutorApplicationV2Revisions.submittedAt,
         snapshot: tutorApplicationV2Revisions.snapshot,
+        verifiedChecks: sql<number>`(
+          select count(*)::int from tutors.tutor_application_checks c
+          where c.application_id = ${tutorApplications.id} and c.status_code = 'verified'
+        )`,
       })
       .from(tutorApplications)
       .innerJoin(
@@ -67,6 +72,7 @@ export async function v2ReviewQueue(): Promise<readonly V2ReviewQueueEntry[]> {
         revisionNumber: row.revisionNumber,
         submittedAt: row.submittedAt,
         preferredFirstName: snapshot.answers.about.preferredFirstName,
+        verifiedChecks: row.verifiedChecks,
       };
     });
   } finally {
@@ -88,6 +94,10 @@ export async function v2ApplicationForReview(reference: string): Promise<V2Revie
         codeOfConductVersion: tutorApplicationV2Revisions.codeOfConductVersion,
         privacyNoticeVersion: tutorApplicationV2Revisions.privacyNoticeVersion,
         guardianConsentReference: tutorApplicationV2Revisions.guardianConsentReference,
+        verifiedChecks: sql<number>`(
+          select count(*)::int from tutors.tutor_application_checks c
+          where c.application_id = ${tutorApplications.id} and c.status_code = 'verified'
+        )`,
       })
       .from(tutorApplications)
       .innerJoin(
@@ -110,6 +120,7 @@ export async function v2ApplicationForReview(reference: string): Promise<V2Revie
       revisionNumber: row.revisionNumber,
       submittedAt: row.submittedAt,
       preferredFirstName: snapshot.answers.about.preferredFirstName,
+      verifiedChecks: row.verifiedChecks,
       snapshot,
       documentVersions: {
         tutorAgreement: row.tutorAgreementVersion,
