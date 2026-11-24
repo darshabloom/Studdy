@@ -24,7 +24,7 @@ export default async function SignInPage({
       ) : null}
       {googleEnabled ? (
         <div className="mt-6">
-          <GoogleSignIn next={next} />
+          <GoogleSignIn next={next ?? '/workspace'} />
         </div>
       ) : null}
       <div className="mt-6">
