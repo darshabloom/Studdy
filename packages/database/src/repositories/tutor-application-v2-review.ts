@@ -4,10 +4,7 @@ import type {
   TutorApplicationStatus,
 } from '@studdy/domain/tutors';
 import { createDatabaseClient } from '../client';
-import {
-  tutorApplications,
-  tutorApplicationV2Revisions,
-} from '../schema/index';
+import { tutorApplications, tutorApplicationV2Revisions } from '../schema/index';
 
 /**
  * Staff-only v2 projections. Callers MUST use requireStaff() with MFA before
@@ -52,16 +49,11 @@ export async function v2ReviewQueue(): Promise<readonly V2ReviewQueueEntry[]> {
         tutorApplicationV2Revisions,
         and(
           eq(tutorApplicationV2Revisions.applicationId, tutorApplications.id),
-          eq(
-            tutorApplicationV2Revisions.revisionNumber,
-            tutorApplications.currentRevisionNumber,
-          ),
+          eq(tutorApplicationV2Revisions.revisionNumber, tutorApplications.currentRevisionNumber),
         ),
       )
       .where(
-        inArray(tutorApplications.statusCode, [
-          'submitted', 'under_review', 'changes_requested',
-        ]),
+        inArray(tutorApplications.statusCode, ['submitted', 'under_review', 'changes_requested']),
       )
       .orderBy(asc(tutorApplications.submittedAt));
     return rows.map((row) => {
@@ -104,10 +96,7 @@ export async function v2ApplicationForReview(reference: string): Promise<V2Revie
         tutorApplicationV2Revisions,
         and(
           eq(tutorApplicationV2Revisions.applicationId, tutorApplications.id),
-          eq(
-            tutorApplicationV2Revisions.revisionNumber,
-            tutorApplications.currentRevisionNumber,
-          ),
+          eq(tutorApplicationV2Revisions.revisionNumber, tutorApplications.currentRevisionNumber),
         ),
       )
       .where(eq(tutorApplications.reference, reference))
