@@ -9,6 +9,7 @@ import {
 import { createDatabaseClient } from '../client';
 import {
   domainEvents,
+  outboxEntries,
   statusTransitions,
   subjects,
   tutorApplicationChecks,
@@ -152,8 +153,14 @@ export async function submitApplicationV2(input: {
         correlationId: input.correlationId,
         occurredAt: now,
       });
-      // No legacy v1 outbox: its email renderer relies on a v1 revision row.
-      // Versioned reviewer/notification support must be added before release.
+      // Reuse the existing applicant + operations templates, resolving only
+      // the preferred name and APP reference from this exact v2 revision.
+      await tx.insert(outboxEntries).values({
+        eventType: 'tutor_application.submitted',
+        payload: { applicationId: application.id, revisionNumber, schemaVersion: 2 },
+        idempotencyKey: `tutor_application.submitted:v2:${application.id}:${revisionNumber}`,
+        correlationId: input.correlationId,
+      });
       return { status: 'submitted', revisionNumber };
     });
   } finally {
