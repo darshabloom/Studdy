@@ -1,0 +1,47 @@
+name: Delete merged feature branches safely
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  delete-head:
+    if: ${{ github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete merged head only when no open PR depends on it
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const head = context.payload.pull_request.head.ref;
+            const protectedNames = new Set(['main', 'master', 'develop', 'development']);
+            if (protectedNames.has(head) || head.startsWith('release/production')) {
+              core.notice(`Keeping protected/shared branch: ${head}`);
+              return;
+            }
+            const open = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100
+            });
+            if (open.some(pr => pr.base.ref === head)) {
+              core.notice(`Keeping ${head}: an open PR depends on this base branch`);
+              return;
+            }
+            try {
+              await github.rest.git.deleteRef({ owner, repo, ref: `heads/${head}` });
+              core.notice(`Deleted safely merged head branch: ${head}`);
+            } catch (error) {
+              if (error.status === 404) {
+                core.notice(`Merged head already removed: ${head}`);
+                return;
+              }
+              if (error.status === 422 || error.status === 403) {
+                core.warning(`Unable to remove ${head}; protected rules or permissions require manual cleanup: ${error.message}`);
+                return;
+              }
+              throw error;
+            }
