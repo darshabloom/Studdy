@@ -11,6 +11,8 @@ export interface TopNavItem {
   /** Home matches only itself; everything else matches its subtree. */
   readonly exact?: boolean;
   readonly matches?: readonly string[];
+  /** Render an unavailable destination as labelled text, never a navigable link. */
+  readonly comingSoon?: boolean;
 }
 
 export const PARENT_NAV: readonly TopNavItem[] = [
@@ -22,6 +24,7 @@ export const PARENT_NAV: readonly TopNavItem[] = [
 ];
 
 export function isActiveNavItem(item: TopNavItem, pathname: string): boolean {
+  if (item.comingSoon === true) return false;
   if (item.exact === true) return pathname === item.href;
   return [item.href, ...(item.matches ?? [])].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
