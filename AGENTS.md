@@ -23,6 +23,8 @@ These instructions apply to every Studdy coding, review, deployment and merge ta
 
 Preserve the approved Tutor Home, role isolation, Parent workspace, Stripe, safeguarding, and production. Real Tutor Application v2 collection must remain gated until legal document versions, guardian consent, reviewer decisions and end-to-end integration tests are complete.
 
-## Verified audit (24 November 2026; re-fetch before relying on it)
+## Current product knowledge and session handoff
 
-At audit time production `main` was commit `6c7364e`. Approved Tutor Home PR #60 had been merged into open feature branch `sc-42/google-primary-email-password-alternative`, **not main**. Open PRs #55 Google sign-in (main base), #61 Tutor Setup (base #55), #62 Tutor Application v2 (base #61), and #50 broader Tutor Workspace (main base, conflict) were absent from main. Other PRs #58 and #59 also merged into the Google feature branch only. The user expects approved, safely deliverable slices to be merged promptly to main.
+Read [current product direction](documentation/product/current-direction.md), [development workflow](documentation/implementation/development-workflow.md) and [recovery checkpoint](documentation/implementation/recovery-checkpoint.md) at the beginning of each task. Fetch live repository and deployment state before acting. The old launch-status document and historical PDFs are reference snapshots, not verified current status.
+
+Record material approvals, superseded decisions and unresolved conflicts in the current product documentation. Update the checkpoint throughout each slice and at handoff. Scope work to manageable, independently testable increments; ask about material uncertainty and challenge unnecessary complexity. Preserve approved designs and protect production. Use synthetic isolated development data for interactive previews.
