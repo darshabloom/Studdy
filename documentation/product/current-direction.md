@@ -13,7 +13,7 @@ Confirmed with product owner, 25 November 2026. This is the current baseline; de
 
 SC-60 (23 November): light Tutor Home v3 layout with restrained v0.6 motifs, Nunito and Inter, navy #0B2D5C, yellow #F6B61C, orange #F36F2B, pale blue #DDEBFF. No gradients or overlapping decoration. Target desktop navigation: Home, Calendar, Students, Lessons, Earnings, Resources. Original exports home_v3.png and motif_v6.png and Figma URL remain unverified. Do not assert approval for other screen layouts or exact mobile navigation without evidence.
 
-SC-42: Google primary sign-in, retain email/password and recovery. Provider enablement is separately gated.
+SC-42: Google primary sign-in, retain email/password and recovery. Product owner reaffirmed 25 November 2026: configure and verify Google sign-in during T00, before T01 and from the beginning of hosted development testing. Provider activation must follow callback, account-linking and access safety checks; the earlier assistant choice to defer activation is superseded. Production activation remains subject to release gates.
 
 SC-62: progressive six-section tutor application with draft saving; exact approved questions and options are recorded in story comments. Retrieve those before building; preserve independent review and safeguarding gates.
 
