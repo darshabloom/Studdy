@@ -30,6 +30,7 @@ import {
   tutorApplicationRevisionReferences,
   tutorApplicationRevisions,
   tutorApplicationRevisionSubjects,
+  tutorApplicationV2Revisions,
   tutorApplications,
   tutorProfiles,
   tutorVerifications,
@@ -1172,6 +1173,20 @@ export async function approveApplication(input: {
       if (found.kind !== 'locked') return { status: found.kind };
       const application = found.application;
       const from = application.statusCode as TutorApplicationStatus;
+
+      // The legacy approval path builds a public profile from v1 headline/year
+      // fields. A v2 submission must use its dedicated approval transition.
+      const [v2Revision] = await tx
+        .select({ id: tutorApplicationV2Revisions.id })
+        .from(tutorApplicationV2Revisions)
+        .where(
+          and(
+            eq(tutorApplicationV2Revisions.applicationId, application.id),
+            eq(tutorApplicationV2Revisions.revisionNumber, application.currentRevisionNumber),
+          ),
+        )
+        .limit(1);
+      if (v2Revision !== undefined) return { status: 'not_decidable' };
 
       // THE GATE, read under the lock.
       const required = await loadRequiredChecks(tx);
