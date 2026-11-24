@@ -1,8 +1,9 @@
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte, or } from 'drizzle-orm';
 import { createDatabaseClient } from '../client';
 import {
   familyAccounts,
   familyMemberships,
+  users,
   studentProfiles,
   studentSubjectSections,
   subjectSectionShortlistEntries,
@@ -192,11 +193,21 @@ export async function listAccessibleStudents(
     const [membership] = await db
       .select({ familyAccountId: familyMemberships.familyAccountId })
       .from(familyMemberships)
+      .innerJoin(familyAccounts, eq(familyMemberships.familyAccountId, familyAccounts.id))
+      .innerJoin(users, eq(familyMemberships.userId, users.id))
       .where(
         and(
           eq(familyMemberships.userId, studdyUserId),
           eq(familyMemberships.statusCode, 'active'),
+          eq(familyAccounts.statusCode, 'active'),
+          eq(users.accountStatusCode, 'active'),
+          or(
+            eq(familyMemberships.membershipRoleCode, 'primary_guardian'),
+            eq(familyMemberships.membershipRoleCode, 'additional_guardian'),
+          ),
           isNull(familyMemberships.endedAt),
+          lte(familyMemberships.effectiveFrom, new Date()),
+          or(isNull(familyMemberships.effectiveUntil), gt(familyMemberships.effectiveUntil, new Date())),
         ),
       );
     const familyAccountId = membership?.familyAccountId ?? null;
@@ -344,9 +355,21 @@ export async function subjectSectionBelongsToUser(
        and membership.user_id = ${studdyUserId}
        and membership.status_code = 'active'
        and membership.ended_at is null
+       and membership.effective_from <= now()
+       and (membership.effective_until is null or membership.effective_until > now())
+       and membership.membership_role_code in ('primary_guardian', 'additional_guardian')
+      left join families.family_accounts as family
+        on family.id = profile.default_family_account_id
+      join identity.users as actor
+        on actor.id = ${studdyUserId}
       where section.id = ${subjectSectionId}
         and section.status_code = 'active'
         and profile.status_code = 'active'
+        and profile.archived_at is null
+        and actor.account_status_code = 'active'
+        and (
+          profile.user_id = ${studdyUserId} or family.status_code = 'active'
+        )
         and (
           profile.user_id = ${studdyUserId}
           or (profile.independence_status_code = 'dependent' and membership.id is not null)
