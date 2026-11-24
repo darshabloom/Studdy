@@ -32,6 +32,9 @@ export async function addStudentAction(
 ): Promise<FormState> {
   const identity = await resolveIdentity();
   if (identity === null || identity.studdyUserId === null) redirect('/sign-in?next=%2Fparent');
+  if (!identity.workspaces.includes('parent')) {
+    return { ...INITIAL, error: 'A parent or guardian workspace is required.' };
+  }
 
   const validated = validateStudentProfile({
     preferredName: String(formData.get('preferredName') ?? ''),
