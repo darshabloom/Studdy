@@ -14,6 +14,7 @@ import { createDatabaseClient } from '../client';
 import {
   auditEvents,
   domainEvents,
+  outboxEntries,
   roleDefinitions,
   ruleSettings,
   statusTransitions,
@@ -285,8 +286,18 @@ export async function approveApplicationV2(input: {
         occurredAt: now,
       });
 
-      // No v1 email outbox here: the existing template joins the v1 revision.
-      // A v2-specific renderer is required before the release flag is enabled.
+      // Applicant receipt uses the shared approved template. The resolver
+      // reads the v2 snapshot by exact revision number and exposes only first name.
+      await tx.insert(outboxEntries).values({
+        eventType: 'tutor.approved',
+        payload: {
+          applicationId: application.id,
+          revisionNumber: application.currentRevisionNumber,
+          schemaVersion: 2,
+        },
+        idempotencyKey: `tutor.approved:v2:${application.id}`,
+        correlationId: input.correlationId,
+      });
       return {
         status: 'approved',
         tutorProfileId: profile.id,
