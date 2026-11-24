@@ -23,6 +23,9 @@ export async function updateStudentAction(
 ): Promise<FormState> {
   const identity = await resolveIdentity();
   if (identity === null || identity.studdyUserId === null) redirect('/sign-in?next=%2Fparent');
+  if (!identity.workspaces.includes('parent')) {
+    return { ...INITIAL, error: 'A parent or guardian workspace is required.' };
+  }
 
   const { familyAccountId, students } = await listAccessibleStudents(identity.studdyUserId);
   const student = students.find((entry) => entry.reference === studentReference);
