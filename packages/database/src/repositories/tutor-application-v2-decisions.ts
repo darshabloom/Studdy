@@ -15,7 +15,9 @@ import {
   userRoleAssignments,
 } from '../schema/index';
 
-export type V2DecisionResult = { readonly status: 'done' | 'not_found' | 'not_decidable' | 'invalid' };
+export type V2DecisionResult = {
+  readonly status: 'done' | 'not_found' | 'not_decidable' | 'invalid';
+};
 
 export async function decideApplicationV2(input: {
   readonly reference: string;
@@ -58,19 +60,20 @@ export async function decideApplicationV2(input: {
       // Restore a detached copy of the exact prior v2 answers. Every required
       // declaration must be accepted again when a revised draft is submitted.
       const restored = structuredClone(snapshot.answers);
-      const draft = input.decision === 'changes_requested'
-        ? {
-            ...restored,
-            declarations: {
-              accuracyAccepted: false,
-              safeguardingAccepted: false,
-              codeOfConductAccepted: false,
-              tutorAgreementAccepted: false,
-              privacyNoticeAccepted: false,
-              interviewAccepted: false,
-            },
-          }
-        : null;
+      const draft =
+        input.decision === 'changes_requested'
+          ? {
+              ...restored,
+              declarations: {
+                accuracyAccepted: false,
+                safeguardingAccepted: false,
+                codeOfConductAccepted: false,
+                tutorAgreementAccepted: false,
+                privacyNoticeAccepted: false,
+                interviewAccepted: false,
+              },
+            }
+          : null;
 
       const [moved] = await tx
         .update(tutorApplications)
@@ -83,24 +86,37 @@ export async function decideApplicationV2(input: {
           recordVersion: app.recordVersion + 1,
           updatedAt: now,
         })
-        .where(and(
-          eq(tutorApplications.id, app.id),
-          inArray(tutorApplications.statusCode, [...DECIDABLE_APPLICATION_STATUSES]),
-        ))
+        .where(
+          and(
+            eq(tutorApplications.id, app.id),
+            inArray(tutorApplications.statusCode, [...DECIDABLE_APPLICATION_STATUSES]),
+          ),
+        )
         .returning({ id: tutorApplications.id });
       if (!moved) throw new Error('The v2 application changed during the decision');
 
       if (input.decision === 'rejected') {
-        const [role] = await tx.select({ id: roleDefinitions.id })
-          .from(roleDefinitions).where(eq(roleDefinitions.code, 'tutor')).limit(1);
+        const [role] = await tx
+          .select({ id: roleDefinitions.id })
+          .from(roleDefinitions)
+          .where(eq(roleDefinitions.code, 'tutor'))
+          .limit(1);
         if (!role) throw new Error('Tutor role definition missing');
-        const [ended] = await tx.update(userRoleAssignments)
-          .set({ statusCode: 'ended', workspaceEnabled: false, effectiveUntil: now, updatedAt: now })
-          .where(and(
-            eq(userRoleAssignments.userId, app.applicantUserId),
-            eq(userRoleAssignments.roleDefinitionId, role.id),
-            eq(userRoleAssignments.statusCode, 'pending'),
-          ))
+        const [ended] = await tx
+          .update(userRoleAssignments)
+          .set({
+            statusCode: 'ended',
+            workspaceEnabled: false,
+            effectiveUntil: now,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(userRoleAssignments.userId, app.applicantUserId),
+              eq(userRoleAssignments.roleDefinitionId, role.id),
+              eq(userRoleAssignments.statusCode, 'pending'),
+            ),
+          )
           .returning({ id: userRoleAssignments.id });
         if (ended) {
           await tx.insert(statusTransitions).values({
@@ -141,13 +157,21 @@ export async function decideApplicationV2(input: {
         eventType: `tutor_application.v2_${input.decision}`,
         entityType: 'tutor_application',
         entityId: app.id,
-        payload: { applicationId: app.id, revisionNumber: app.currentRevisionNumber, schemaVersion: 2 },
+        payload: {
+          applicationId: app.id,
+          revisionNumber: app.currentRevisionNumber,
+          schemaVersion: 2,
+        },
         correlationId: input.correlationId,
         occurredAt: now,
       });
       await tx.insert(outboxEntries).values({
         eventType: `tutor_application.${input.decision}`,
-        payload: { applicationId: app.id, revisionNumber: app.currentRevisionNumber, schemaVersion: 2 },
+        payload: {
+          applicationId: app.id,
+          revisionNumber: app.currentRevisionNumber,
+          schemaVersion: 2,
+        },
         idempotencyKey: `tutor_application.${input.decision}:v2:${app.id}:${app.currentRevisionNumber}`,
         correlationId: input.correlationId,
       });

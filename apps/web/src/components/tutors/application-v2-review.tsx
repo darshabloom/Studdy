@@ -206,7 +206,11 @@ export function TutorApplicationV2Review({
                 rows={3}
                 helper="The previous v2 answers will be restored as a draft. The applicant must accept declarations again."
               />
-              <div><Button type="submit" variant="secondary">Request changes</Button></div>
+              <div>
+                <Button type="submit" variant="secondary">
+                  Request changes
+                </Button>
+              </div>
             </form>
             <form action={rejectV2Action} className="flex flex-col gap-2">
               <input type="hidden" name="reference" value={review.reference} />
@@ -216,7 +220,11 @@ export function TutorApplicationV2Review({
                 rows={3}
                 helper="The applicant receives a notification and reads the decision in Studdy."
               />
-              <div><Button type="submit" variant="secondary">Decline application</Button></div>
+              <div>
+                <Button type="submit" variant="secondary">
+                  Decline application
+                </Button>
+              </div>
             </form>
           </div>
         ) : (
