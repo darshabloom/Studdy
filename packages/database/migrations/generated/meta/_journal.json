@@ -106,6 +106,13 @@
       "when": 1795479754630,
       "tag": "0014_square_midnight",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795478400000,
+      "tag": "0014_tutor_application_v2_revisions",
+      "breakpoints": true
     }
   ]
 }
