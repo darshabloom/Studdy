@@ -1176,17 +1176,19 @@ export async function approveApplication(input: {
 
       // The legacy approval path builds a public profile from v1 headline/year
       // fields. A v2 submission must use its dedicated approval transition.
-      const [v2Revision] = await tx
-        .select({ id: tutorApplicationV2Revisions.id })
-        .from(tutorApplicationV2Revisions)
-        .where(
-          and(
-            eq(tutorApplicationV2Revisions.applicationId, application.id),
-            eq(tutorApplicationV2Revisions.revisionNumber, application.currentRevisionNumber),
-          ),
-        )
-        .limit(1);
-      if (v2Revision !== undefined) return { status: 'not_decidable' };
+      if (process.env.STUDDY_APPLICATION_V2_ENABLED === 'true') {
+        const [v2Revision] = await tx
+          .select({ id: tutorApplicationV2Revisions.id })
+          .from(tutorApplicationV2Revisions)
+          .where(
+            and(
+              eq(tutorApplicationV2Revisions.applicationId, application.id),
+              eq(tutorApplicationV2Revisions.revisionNumber, application.currentRevisionNumber),
+            ),
+          )
+          .limit(1);
+        if (v2Revision !== undefined) return { status: 'not_decidable' };
+      }
 
       // THE GATE, read under the lock.
       const required = await loadRequiredChecks(tx);
