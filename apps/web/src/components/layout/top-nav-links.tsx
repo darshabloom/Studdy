@@ -23,6 +23,18 @@ export function TopNavLinks({ items }: { items: readonly TopNavItem[] }): ReactN
     >
       {items.map((item) => {
         const active = isActiveNavItem(item, pathname);
+        if (item.comingSoon === true) {
+          return (
+            <span
+              key={item.href}
+              aria-label={`${item.label}, coming soon`}
+              className="flex shrink-0 flex-col items-center border-b-2 border-transparent px-1 pb-1.5 pt-2 text-xs text-text-muted md:px-3"
+            >
+              <span className="text-sm">{item.label}</span>
+              <span className="text-[10px]">Soon</span>
+            </span>
+          );
+        }
         return (
           <Link
             key={item.href}
