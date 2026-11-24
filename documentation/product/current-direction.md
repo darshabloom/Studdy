@@ -21,6 +21,10 @@ SC-62: progressive six-section tutor application with draft saving; exact approv
 
 Use the existing Studdy database for pre-launch development; no additional database subscription now. Preserve existing accounts and records. Shared database is permitted only while there are no real customers or live transactions; use fictional test data, restricted access and sandbox payments. Separate production database and verified isolation are mandatory before public launch. This supersedes earlier plans for immediate separate development and production databases.
 
+## Pre-launch registration decision (25 November 2026)
+
+Owner explicitly chose to keep new user sign-up enabled in the shared Supabase project to test first-time Google and other onboarding journeys. Supersedes the proposed temporary sign-up disablement. This is a testing requirement, not authorisation for public customer acquisition. Preview access remains protected. Direct Auth/API registration and the main host are outside preview protection; monitor unexpected accounts, use controlled test identities, and review shared exposure before public launch. Do not disable registration without discussing the testing impact with the owner.
+
 ## Open decisions
 
 Historical booking, payment and instant-booking specifications conflict; reconcile against current code and approved decisions when relevant. Earnings eligibility and lesson completion semantics need confirmation before adopting older earnings logic. Remaining Tutor screen designs and mobile navigation need verification.
