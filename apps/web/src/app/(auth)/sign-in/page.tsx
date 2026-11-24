@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Card } from '@studdy/design-system';
+import { Alert, Card } from '@studdy/design-system';
+import { GoogleSignIn } from '@/components/auth/google-sign-in';
 import { SignInForm } from './sign-in-form';
 
 export const metadata = { title: 'Log in' };
@@ -7,13 +8,23 @@ export const metadata = { title: 'Log in' };
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, error } = await searchParams;
   return (
     <Card>
       <h1 className="text-2xl font-semibold">Log in to Studdy</h1>
+      {error === 'google_unavailable' ? (
+        <div className="mt-4">
+          <Alert tone="critical">
+            Google sign-in is unavailable. You can still sign in with email and password.
+          </Alert>
+        </div>
+      ) : null}
       <div className="mt-6">
+        <GoogleSignIn next={next ?? '/workspace'} />
+      </div>
+      <div className="mt-4">
         <SignInForm next={next ?? ''} />
       </div>
       <div className="mt-6 flex flex-col gap-1 text-sm text-text-secondary">

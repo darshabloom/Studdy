@@ -223,7 +223,7 @@ export function publicLabelForCheck(code: ApplicationCheckCode): string | null {
 // The application's content
 // ---------------------------------------------------------------------------
 
-export const APPLICATION_DECLARATIONS_VERSION = 'v1';
+export const APPLICATION_DECLARATIONS_VERSION = 'v2';
 
 export const APPLICATION_REFERENCES_MIN = 2;
 export const APPLICATION_REFERENCES_MAX = 3;
@@ -250,7 +250,7 @@ export interface TutorApplicationInput {
   readonly offersOnline: boolean;
   readonly offersInPerson: boolean;
   readonly references: readonly ApplicationReferenceInput[];
-  /** All of: 18 or older, accurate, agrees to the terms, accepts the safeguarding requirements. */
+  /** All of: at least 16, accurate, agrees to terms, and accepts safeguarding review. */
   readonly declarationsAccepted: boolean;
 }
 
@@ -277,9 +277,22 @@ const LONG_TEXT_MIN = 40;
 const LONG_TEXT_MAX = 2000;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^[0-9 +()-]{6,20}$/;
-/** New Zealand school years, the platform's first market. */
-export const YEAR_LEVEL_MIN = 1;
-export const YEAR_LEVEL_MAX = 13;
+/** Ordered level codes: 0 = preschool/Pre-K; 1–13 = NZ school years; 14–17 = university years 1–4; 18 = postgraduate. */
+export const YEAR_LEVEL_MIN = 0;
+export const YEAR_LEVEL_MAX = 18;
+
+export const TUTOR_YEAR_LEVELS = [
+  { value: '0', label: 'Preschool / Pre-K' },
+  ...Array.from({ length: 13 }, (_, index) => ({
+    value: String(index + 1),
+    label: `Year ${String(index + 1)}`,
+  })),
+  ...Array.from({ length: 4 }, (_, index) => ({
+    value: String(index + 14),
+    label: `University — Year ${String(index + 1)}`,
+  })),
+  { value: '18', label: 'Postgraduate' },
+] as const;
 
 function integerYear(value: string): number | null {
   if (!/^\d{1,2}$/.test(value.trim())) return null;

@@ -28,6 +28,14 @@ Four checks, each recorded on its own: **identity**, **safeguarding requirements
 staff-only, and the applicant never sees it. Studdy keeps the outcome, not documents: do not
 paste an identity document or number into a note.
 
+Applicants may be **16 or 17**. During the identity and safeguarding checks, confirm the
+applicant's age directly. For 16–17-year-olds, verify parent/guardian involvement and consent,
+confirm how lessons will be supervised and how payments/contracts will be handled, and document
+the outcome of those checks **before marking safeguarding verified or approving**. Do not collect
+identity documents, birth dates or guardians' personal information in unprotected notes. Where a
+minor's legal or safeguarding arrangements are unclear, leave the checks pending and escalate to
+the platform owner; an application can remain pending indefinitely.
+
 Recording your first check moves the application to **Under review**.
 
 ## 4. Decide

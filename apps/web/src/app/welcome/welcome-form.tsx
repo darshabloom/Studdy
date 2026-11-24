@@ -61,7 +61,7 @@ export function WelcomeForm() {
 
       <fieldset>
         <legend className="mb-2 block text-sm font-medium text-text-primary">
-          Who is Studdy for?
+          How will you use Studdy?
         </legend>
         {state.issues?.['roleChoice'] !== undefined ? (
           <p role="alert" className="mb-2 text-sm text-status-critical">

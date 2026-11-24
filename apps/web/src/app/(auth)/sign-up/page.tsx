@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Card } from '@studdy/design-system';
+import { GoogleSignIn } from '@/components/auth/google-sign-in';
 import { SignUpForm } from './sign-up-form';
 
 export const metadata = { title: 'Join Studdy' };
@@ -9,10 +10,12 @@ export default function SignUpPage() {
     <Card>
       <h1 className="text-2xl font-semibold">Join Studdy</h1>
       <p className="mt-1 text-sm text-text-secondary">
-        Create your account. You will verify your email, then set up who the tutoring is for — as a
-        parent or guardian, or as an independent student.
+        Join with Google or email and password. Then choose your account type.
       </p>
       <div className="mt-6">
+        <GoogleSignIn />
+      </div>
+      <div className="mt-4">
         <SignUpForm />
       </div>
       <p className="mt-6 text-sm text-text-secondary">

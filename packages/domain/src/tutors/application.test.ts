@@ -211,8 +211,10 @@ describe('validateTutorApplication', () => {
 
   it('requires a sensible year range', () => {
     expect(issuesFor({ yearLevelFrom: '' })).toHaveProperty('yearLevelFrom');
-    expect(issuesFor({ yearLevelTo: '14' })).toHaveProperty('yearLevelTo');
-    expect(issuesFor({ yearLevelFrom: '0' })).toHaveProperty('yearLevelFrom');
+    expect(issuesFor({ yearLevelTo: '19' })).toHaveProperty('yearLevelTo');
+    expect(issuesFor({ yearLevelFrom: '-1' })).toHaveProperty('yearLevelFrom');
+    expect(issuesFor({ yearLevelFrom: '0', yearLevelTo: '14' })).toEqual({});
+    expect(issuesFor({ yearLevelFrom: '14', yearLevelTo: '18' })).toEqual({});
     expect(issuesFor({ yearLevelFrom: '9', yearLevelTo: '7' })).toHaveProperty('yearLevelTo');
     expect(issuesFor({ yearLevelFrom: '7', yearLevelTo: '7' })).toEqual({});
   });
