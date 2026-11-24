@@ -245,6 +245,13 @@ export {
   type SubmitV2Result,
 } from './repositories/tutor-application-v2-submission';
 
+export {
+  v2ReviewQueue,
+  v2ApplicationForReview,
+  type V2ReviewQueueEntry,
+  type V2ReviewDetail,
+} from './repositories/tutor-application-v2-review';
+
 // Tutor-managed services and the tutor's own profile (feat/tutor-onboarding-setup)
 export {
   approveTutorService,
