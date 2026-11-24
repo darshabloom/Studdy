@@ -7,6 +7,8 @@ import {
   ensureFamilyAccountForGuardian,
   ensureIndependentStudentProfile,
   listSubjects,
+  listAccessibleStudents,
+  subjectSectionBelongsToUser,
 } from '../repositories/students';
 import { addToShortlist } from '../repositories/discovery';
 import { searchPublicTutors } from '../repositories/discovery';
@@ -254,5 +256,47 @@ describe.skipIf(!available)('public tutor boundary (integration)', () => {
     } finally {
       await sql.end();
     }
+  });
+});
+
+describe.skipIf(!available)('SC-117 server repository lifecycle checks (integration)', () => {
+  it('excludes an expired guardian membership from student and section access', async () => {
+    const guardian = await guardianWithStudent('Expired Guardian');
+    const before = await listAccessibleStudents(guardian.userId);
+    expect(before.students.some((student) => student.studentProfileId === guardian.studentProfileId)).toBe(true);
+
+    const { sql } = createDatabaseClient();
+    try {
+      await sql`
+        update families.family_memberships
+           set effective_until = now() - interval '1 minute'
+         where user_id = ${guardian.userId}
+      `;
+    } finally {
+      await sql.end();
+    }
+
+    const after = await listAccessibleStudents(guardian.userId);
+    expect(after.students).toHaveLength(0);
+    expect(after.familyAccountId).toBeNull();
+    expect(await subjectSectionBelongsToUser(guardian.subjectSectionId, guardian.userId)).toBe(false);
+  });
+
+  it('excludes a suspended family account from student and section access', async () => {
+    const guardian = await guardianWithStudent('Suspended Family');
+    const { sql } = createDatabaseClient();
+    try {
+      await sql`
+        update families.family_accounts
+           set status_code = 'suspended'
+         where id = (select family_account_id from families.family_memberships where user_id = ${guardian.userId} limit 1)
+      `;
+    } finally {
+      await sql.end();
+    }
+
+    const after = await listAccessibleStudents(guardian.userId);
+    expect(after.students).toHaveLength(0);
+    expect(await subjectSectionBelongsToUser(guardian.subjectSectionId, guardian.userId)).toBe(false);
   });
 });
