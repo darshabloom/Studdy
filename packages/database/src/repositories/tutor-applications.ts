@@ -1079,6 +1079,17 @@ export async function requestApplicationChanges(input: {
     return await db.transaction(async (tx): Promise<ReviewActionResult> => {
       const found = await lockDecidable(tx, input.reference);
       if (found.kind !== 'locked') return { status: found.kind };
+      // A v2 applicant needs a v2 draft restored from the submitted snapshot.
+      // Legacy change requests assume v1 fields and email templates.
+      if (process.env.STUDDY_APPLICATION_V2_ENABLED === 'true') {
+        const [v2] = await tx.select({ id: tutorApplicationV2Revisions.id })
+          .from(tutorApplicationV2Revisions)
+          .where(and(
+            eq(tutorApplicationV2Revisions.applicationId, found.application.id),
+            eq(tutorApplicationV2Revisions.revisionNumber, found.application.currentRevisionNumber),
+          )).limit(1);
+        if (v2) return { status: 'not_decidable' };
+      }
       const moved = await applyDecision(tx, found.application, 'changes_requested', {
         message: input.message,
         internalNote: input.internalNote ?? null,
@@ -1108,6 +1119,17 @@ export async function rejectApplication(input: {
     return await db.transaction(async (tx): Promise<ReviewActionResult> => {
       const found = await lockDecidable(tx, input.reference);
       if (found.kind !== 'locked') return { status: found.kind };
+      // This decision sends a legacy email sourced from a v1 revision.
+      // Use a v2-specific rejection workflow after notifications are complete.
+      if (process.env.STUDDY_APPLICATION_V2_ENABLED === 'true') {
+        const [v2] = await tx.select({ id: tutorApplicationV2Revisions.id })
+          .from(tutorApplicationV2Revisions)
+          .where(and(
+            eq(tutorApplicationV2Revisions.applicationId, found.application.id),
+            eq(tutorApplicationV2Revisions.revisionNumber, found.application.currentRevisionNumber),
+          )).limit(1);
+        if (v2) return { status: 'not_decidable' };
+      }
       const moved = await applyDecision(tx, found.application, 'rejected', {
         message: input.message,
         internalNote: input.internalNote ?? null,
