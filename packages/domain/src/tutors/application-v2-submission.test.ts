@@ -124,9 +124,9 @@ describe('Tutor Application v2 submission policy', () => {
     const result = prepareApplicationV2Submission(complete, policy);
     expect(result.status).toBe('ready');
     if (result.status !== 'ready') return;
-    const original = result.snapshot.answers.about.legalFirstName;
-    const edited = structuredClone(complete);
-    edited.about.legalFirstName = 'Edited';
-    expect(result.snapshot.answers.about.legalFirstName).toBe(original);
+    expect(result.snapshot.answers).not.toBe(complete);
+    expect(result.snapshot.answers.about).not.toBe(complete.about);
+    expect(result.snapshot.answers.references).not.toBe(complete.references);
+    expect(result.snapshot.answers.about.legalFirstName).toBe('Aroha');
   });
 });
