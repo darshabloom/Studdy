@@ -5,11 +5,15 @@ test.describe('public homepage', () => {
     page,
   }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Tutoring that builds confidence.' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Tutoring that builds confidence.' }),
+    ).toBeVisible();
     await expect(page.getByRole('link', { name: 'Find a tutor' }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: 'Join as a tutor' }).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Explore tutoring by subject' })).toBeVisible();
-    await expect(page.getByText('Illustrative interface preview — no real student information')).toBeVisible();
+    await expect(
+      page.getByText('Illustrative interface preview — no real student information'),
+    ).toBeVisible();
     await expect(page.getByRole('link', { name: 'Studdy home' }).first()).toBeVisible();
   });
 
