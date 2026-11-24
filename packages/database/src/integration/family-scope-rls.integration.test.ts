@@ -263,7 +263,9 @@ describe.skipIf(!available)('SC-117 server repository lifecycle checks (integrat
   it('excludes an expired guardian membership from student and section access', async () => {
     const guardian = await guardianWithStudent('Expired Guardian');
     const before = await listAccessibleStudents(guardian.userId);
-    expect(before.students.some((student) => student.studentProfileId === guardian.studentProfileId)).toBe(true);
+    expect(
+      before.students.some((student) => student.studentProfileId === guardian.studentProfileId),
+    ).toBe(true);
 
     const { sql } = createDatabaseClient();
     try {
@@ -279,7 +281,9 @@ describe.skipIf(!available)('SC-117 server repository lifecycle checks (integrat
     const after = await listAccessibleStudents(guardian.userId);
     expect(after.students).toHaveLength(0);
     expect(after.familyAccountId).toBeNull();
-    expect(await subjectSectionBelongsToUser(guardian.subjectSectionId, guardian.userId)).toBe(false);
+    expect(await subjectSectionBelongsToUser(guardian.subjectSectionId, guardian.userId)).toBe(
+      false,
+    );
   });
 
   it('excludes a suspended family account from student and section access', async () => {
@@ -297,6 +301,8 @@ describe.skipIf(!available)('SC-117 server repository lifecycle checks (integrat
 
     const after = await listAccessibleStudents(guardian.userId);
     expect(after.students).toHaveLength(0);
-    expect(await subjectSectionBelongsToUser(guardian.subjectSectionId, guardian.userId)).toBe(false);
+    expect(await subjectSectionBelongsToUser(guardian.subjectSectionId, guardian.userId)).toBe(
+      false,
+    );
   });
 });
