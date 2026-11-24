@@ -82,3 +82,35 @@ body {
 body:has([data-tutor-workspace='true']) [data-studdy-environment-banner] {
   display: none;
 }
+
+/*
+ * Public-site migration from legacy Tutoryn purple/green to the approved
+ * Studdy brand kit. Scoped to signed-out routes; student, tutor, manager and
+ * owner workspaces keep their own explicit, independently reviewed tokens.
+ */
+.studdy-public-theme {
+  --color-brand-purple-deep: #0b2d5c;
+  --color-brand-purple: #0b2d5c;
+  --color-brand-purple-mid: #173b68;
+  --color-brand-lavender: #ddebff;
+  --color-brand-green-deep: #0b2d5c;
+  --color-brand-green: #0b2d5c;
+  --color-brand-green-pale: #ddebff;
+  --color-surface-page: #ffffff;
+  --color-surface-card: #ffffff;
+  --color-surface-card-secondary: #f6f9fc;
+  --color-surface-border: #e1e7ef;
+  --color-text-primary: #0b2d5c;
+  --color-text-secondary: #435772;
+  --color-text-muted: #596d87;
+  --color-action-primary: #f6b61c;
+  --color-action-primary-hover: #ffd049;
+  --color-action-primary-active: #e6a80b;
+  --color-focus-ring: #f36f2b;
+  --font-display: var(--font-inter, 'Inter'), ui-sans-serif, system-ui, sans-serif;
+  color: #0b2d5c;
+  background: #ffffff;
+}
+.studdy-public-theme :is(a, button, input, select, textarea):focus-visible {
+  outline-color: #f36f2b;
+}

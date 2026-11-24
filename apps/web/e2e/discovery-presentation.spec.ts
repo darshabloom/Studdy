@@ -25,7 +25,7 @@ test.describe('tutor discovery presentation', () => {
     // Public chrome is present in the site header.
     const header = page.getByRole('banner');
     await expect(header.getByRole('link', { name: 'Log in' })).toBeVisible();
-    await expect(header.getByRole('link', { name: 'Join Studdy' })).toBeVisible();
+    await expect(header.getByRole('link', { name: 'Get started' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
 
     // Authenticated chrome is absent.
