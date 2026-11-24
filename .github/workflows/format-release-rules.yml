@@ -1,0 +1,32 @@
+name: Format release rules (temporary)
+on:
+  pull_request:
+    paths:
+      - AGENTS.md
+      - .github/workflows/format-release-rules.yml
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/release-to-main-discipline
+          persist-credentials: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write AGENTS.md
+      - name: Commit formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add AGENTS.md
+          if ! git diff --cached --quiet; then
+            git commit -m "style: format Studdy release rules"
+            git push origin HEAD:docs/release-to-main-discipline
+          fi
