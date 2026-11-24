@@ -43,6 +43,7 @@ async function requireTutorProfileId(): Promise<string> {
   if (identity === null || identity.studdyUserId === null) {
     redirect(`/sign-in?next=${encodeURIComponent(PAYMENTS_PATH)}`);
   }
+  if (!identity.workspaces.includes('tutor')) redirect('/workspace');
   const profile = await tutorProfileForUser(identity.studdyUserId);
   if (profile === null) redirect('/tutor');
   return profile.id;
