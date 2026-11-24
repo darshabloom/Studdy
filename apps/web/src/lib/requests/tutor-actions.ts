@@ -30,6 +30,9 @@ export async function acceptTimeAction(
 ): Promise<TutorResponseFormState> {
   const identity = await resolveIdentity();
   if (identity === null || identity.studdyUserId === null) redirect('/sign-in');
+  if (!identity.workspaces.includes('tutor')) {
+    return { error: 'Tutor workspace access is required.' };
+  }
   const profile = await tutorProfileForUser(identity.studdyUserId);
   if (profile === null) return { error: 'Your tutor profile is not active yet.' };
 
@@ -74,6 +77,9 @@ export async function declineRequestAction(
 ): Promise<TutorResponseFormState> {
   const identity = await resolveIdentity();
   if (identity === null || identity.studdyUserId === null) redirect('/sign-in');
+  if (!identity.workspaces.includes('tutor')) {
+    return { error: 'Tutor workspace access is required.' };
+  }
   const profile = await tutorProfileForUser(identity.studdyUserId);
   if (profile === null) return { error: 'Your tutor profile is not active yet.' };
 

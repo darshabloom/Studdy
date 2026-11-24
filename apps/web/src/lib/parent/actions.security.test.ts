@@ -6,7 +6,9 @@ const ensureFamilyAccountForGuardian = vi.fn();
 const createDependentStudent = vi.fn();
 const listAccessibleStudents = vi.fn();
 const updateDependentStudent = vi.fn();
-const redirect = vi.fn((path: string) => { throw new Error(`REDIRECT:${path}`); });
+const redirect = vi.fn((path: string) => {
+  throw new Error(`REDIRECT:${path}`);
+});
 
 vi.mock('@/lib/identity/resolve', () => ({
   resolveIdentity: (...args: unknown[]) => resolveIdentity(...args),
@@ -16,8 +18,10 @@ vi.mock('@studdy/database', () => ({
   createDependentStudent: (...args: unknown[]) => createDependentStudent(...args),
   listAccessibleStudents: (...args: unknown[]) => listAccessibleStudents(...args),
   updateDependentStudent: (...args: unknown[]) => updateDependentStudent(...args),
-  addToShortlist: vi.fn(), createSubjectSection: vi.fn(),
-  ensureIndependentStudentProfile: vi.fn(), removeFromShortlist: vi.fn(),
+  addToShortlist: vi.fn(),
+  createSubjectSection: vi.fn(),
+  ensureIndependentStudentProfile: vi.fn(),
+  removeFromShortlist: vi.fn(),
   subjectSectionBelongsToUser: vi.fn(),
 }));
 vi.mock('next/navigation', () => ({
@@ -31,10 +35,16 @@ const { updateStudentAction } = await import('./actions');
 const state = { error: null, message: null };
 function identity(workspaces: ResolvedIdentity['workspaces']): ResolvedIdentity {
   return {
-    authUserId: 'auth-test', email: 'fictional@example.test',
-    studdyUserId: 'studdy-test', displayName: 'Test User',
-    roleAssignments: [], pendingRoleCodes: [], workspaces,
-    lastActiveWorkspaceCode: null, needsSetup: false, databaseAvailable: true,
+    authUserId: 'auth-test',
+    email: 'fictional@example.test',
+    studdyUserId: 'studdy-test',
+    displayName: 'Test User',
+    roleAssignments: [],
+    pendingRoleCodes: [],
+    workspaces,
+    lastActiveWorkspaceCode: null,
+    needsSetup: false,
+    databaseAvailable: true,
   };
 }
 function form(): FormData {
@@ -92,7 +102,11 @@ describe('SC-117 direct server action authorisation', () => {
     const result = await updateStudentAction('STU-1', state, form());
     expect(result.savedHref).toBe('/parent/students/STU-1');
     expect(updateDependentStudent).toHaveBeenCalledWith(
-      expect.objectContaining({ studentProfileId: 'student-1', familyAccountId: 'family-1', actorUserId: 'studdy-test' }),
+      expect.objectContaining({
+        studentProfileId: 'student-1',
+        familyAccountId: 'family-1',
+        actorUserId: 'studdy-test',
+      }),
     );
   });
 

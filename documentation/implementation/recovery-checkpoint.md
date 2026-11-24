@@ -26,7 +26,6 @@ Open blockers: original Figma exports/URL, unverified remaining designs/mobile n
 
 R03 PR #69 merged at f3206331e39227b21e6e7853607a068d7f75dabd; all four CI jobs passed and matching Vercel main deployment READY. Product owner approved single existing Supabase database for pre-launch development, with separate production required before public launch. Read-only exact aggregate checks found no family, student, booking, request, payment or service records; existing account/tutor/application records must be preserved. This does not establish the ownership or sensitivity of all existing data. Vercel reports password protection configured, but browser access and protection scope have not been independently tested. Stable development preview, auth redirects, synthetic test accounts and sandbox payment/email isolation remain unverified. No database writes or paid infrastructure changes made. Next: verify protection, provider configuration and stable preview, then seed only approved fictional scenarios; hand off with these blockers if needed.
 
-
 ## T00 development hub checkpoint (25 November 2026)
 
 Status: **IN PROGRESS — read-only verification, no testing mutations**. The product owner opened the Studdy Development Hub for T00 before T01.
@@ -42,7 +41,6 @@ Status: **IN PROGRESS — read-only verification, no testing mutations**. The pr
 - **T00 remaining gates:** verify branch deployment after synchronisation; protect development access; verify effective DB project URL and server connection target without exposing credentials; confirm authentication callback and return URLs end-to-end; check Stripe test mode, email provider suppression/sandbox and registration restrictions; create clearly fictional role-based accounts only after those gates pass.
 - **T01 gate:** confirm actual live approved design reference and account/role access, then implement Tutor Home/navigation in small testable PR slices. No merge to main and no live payments/registration authorised by this checkpoint.
 
-
 ## T00 execution update — 25 November 2026 (continued)
 
 - Retrieved all four required documents directly from `development`. Current preview deployment is READY at `0bc92774419c2efd18a9327ebcea66ca9273a191` (deployment `dpl_5Tfp3HAGp9Kmh8hhWB1ivv6DWi5y`); production main remains READY at `a3eb917f33e832946f5d08124dcd0d28c8eb86d5` in the deployment history. No browser authentication or workflow test was completed.
@@ -53,7 +51,6 @@ Status: **IN PROGRESS — read-only verification, no testing mutations**. The pr
 - External browser-level verification of the development alias could not be established in this session; environment runner cannot resolve the host and web retrieval failed. No account creation, test booking, Stripe charge, outbound email, destructive database write or merge to main occurred.
 - Shortcut tracking created at https://app.shortcut.com/studdy/story/92 .
 - **Remaining before seed accounts:** verify actual protection challenge on development alias and account access; inspect effective server database target, callback allowlist, registration controls and existing auth/account model; demonstrate test-only payments and suppressed emails; review public view security. Only then create explicitly fictional tutor, parent and student fixtures and run role isolation tests. **Next task:** resolve those gates, document results and deliver a verified stable protected preview.
-
 
 ## T00 continuation — hosted sign-in and branch configuration (25 November 2026)
 
@@ -66,20 +63,17 @@ Status: **IN PROGRESS — read-only verification, no testing mutations**. The pr
 - SC-92 moved to In Progress. Owner action needed: verify anonymous Vercel challenge in private browser; inspect Supabase Auth URL configuration and email settings (connector has no Auth settings/admin-user management action); confirm server DB connection project reference without sharing secrets. Maintain Google disabled and public registration restricted during prelaunch. Main release remains unchanged. No test accounts or live sends/payments created.
 - Next: verify fresh development deployment, obtain owner dashboard evidence for inaccessible settings, implement/verify explicit provider and registration safeguards if needed, provision fictional role accounts through supported admin interface, validate role isolation. T01 remains blocked.
 
-
 ## T00 owner verification and authentication decision (25 November 2026)
 
 - Owner supplied an incognito screenshot of the stable development alias redirecting to Vercel login. Anonymous browser challenge passed for that visit; retain preview SSO. Authenticated HTTP access was previously verified. This does not prove every deployment or main is protected.
 - Owner explicitly reaffirmed Google primary sign-in from the start, during T00 before T01; email/password remains alternative. Supersedes assistant's earlier decision to defer Google activation. Configure Google provider and exact development callback, verify successful/cancelled/returning flows and identity linking before activation is considered complete. No production activation authorised by this decision.
 - Next owner-assisted step: inspect Supabase Authentication URL Configuration (Site URL and redirect allowlist), then Google provider, registration/email settings and Vercel server DB target. Do not share secrets. No account creation or provider activation yet.
 
-
 ## T00 Google development activation — 25 November 2026
 
 - Owner screenshot confirms Supabase Google provider enabled, client ID and masked secret configured, nonce checks retained, email required. Owner confirms saving canonical main Site URL and both stable development/main callback URLs as instructed. This is owner-confirmed configuration, not an independently inspected post-save allowlist. Old preview entries remain pending review.
 - Rechecked Vercel: stable development alias READY at 96d39e243394fafccd9e23b8bdc0353f217f0b71, preview SSO enabled; main READY at a3eb917f33e832946f5d08124dcd0d28c8eb86d5. Added STUDDY_GOOGLE_AUTH_ENABLED=true scoped to preview gitBranch development only, variable ID 8SZOejzsRzRUZHVm. No production variable changed. This checkpoint triggers a fresh preview build.
 - Verify new deployment SHA, Google CTA and OAuth initiation without completing a sign-in or creating an account until remaining database/provider safety gates are checked. End-to-end account linking and role tests remain pending. Next owner-assisted step is Vercel DATABASE_URL target and Supabase registration/email controls. No credentials recorded.
-
 
 ## T00 owner registration decision and Google initiation verification (25 November 2026)
 
@@ -89,25 +83,21 @@ Status: **IN PROGRESS — read-only verification, no testing mutations**. The pr
 - Vercel development alias READY at 2891deee6921648c175475859bbdb7e3437a3dae. Authenticated GET /sign-in 200, Continue with Google present. GET /auth/google 307 to expected Supabase project's /auth/v1/authorize; Google provider present in redirect. No OAuth completion, account linking, or database mutation performed. Subsequent documentation commits trigger builds; recheck latest SHA before providing interactive test URL.
 - Remaining: server DB target, runtime payment/email safeguards, test identities, full OAuth and role tests, public view security review. No public launch or production activation. Next technical slice: narrowly scoped runtime environment verification without exposing credentials, then controlled sign-in tests.
 
-
 ## T00 runtime verification — 25 November 2026
 
 - Temporary read-only diagnostic apps/web/src/app/api/t00-environment/route.ts committed at 341dd40b943ed147635b0926c6a26f1ef1c625ec. Stable development alias READY at matching deployment dpl_6xeC9kYQWJc17NihTUN7AnFRdh1F. Authenticated HTTP GET diagnostic 200: databaseTargetMatches=true, databaseReachable=true (SELECT 1), stripeDisabled=true, stripeTestKeys=false, transactionalEmailDisabled=true, siteOriginMatches=true, googleEnabled=true. This verifies configured server target and read connectivity, not full role permissions; payments disabled, not sandbox operational. Supabase Auth email remains separate. No credentials returned and no database writes.
 - Same deployment GET /sign-in HTTP 200 with Google CTA and synthetic-only banner. Next controlled browser Google OAuth with owner-controlled test identity, then fictional onboarding/role fixtures and isolation tests. No real student details, no payment or email testing against live recipients. Public tutor search view review and broader launch controls remain open. Remove temporary diagnostic before release; do not merge it to main. SC-92 comment 105 records results. No production changes.
-
 
 ## T00 interactive Google sign-in — 25 November 2026
 
 - Product owner reports successful interactive Google sign-in and expected behaviour on the protected development website. At follow-up the stable alias was READY at 5a4e2fd808ec728dc73d3dd82ff2f9134dc6ed08, deployment dpl_5fQQJP9PPPT6F56MtWUKLMyJG8Zz. Exact landing route, whether first-time or returning identity, and role not yet specified. This is owner-reported browser acceptance of initial sign-in, not complete identity-linking or role isolation verification.
 - Next: confirm landing/workspace and repeat sign-out/sign-in with the same controlled account; then establish separate fictional tutor, parent and student fixtures and verify permissions. Stripe remains disabled and no real student data or payments authorised. Remove temporary diagnostic before release. T00 remains open; main unchanged.
 
-
 ## T00 owner browser authentication and applicant restrictions — 25 November 2026
 
 - Owner screenshot and report: existing Tutor account returned to /tutor on both Google sign-ins with existing setup progress (1 of 6 complete). Separate new Google user reached /welcome with parent, independent adult student and tutor applicant choices. Selecting tutor resulted in Application pending and application continuation CTA; direct /tutor navigation displayed Restricted access. Owner confirmed Booking requests, Availability, Services and Getting paid all restricted for the pending applicant. These are browser observations, not proof of server action/API or cross-account data isolation.
 - Owner confirmed purple welcome/application-pending branding belongs to the old version. Track redesign in T07 onboarding; pending applicant still sees Tutor navigation, proposed dedicated applicant navigation/status experience to be evaluated in T07. T01 retains approved Tutor navigation target. No actual safeguarding documents/referee submissions requested or verified.
 - At follow-up stable development alias READY at 57e978a669ed26f34c5d73157d142261f3de4938, deployment dpl_G8ubqswk9zVoznFg4nSvxmJ7rypA. Exact commit of each browser test was not captured. Next: verify application entry without submission, provision dedicated fictional parent/student and approved tutor test identities; verify role and record isolation including server-side checks. Existing account and pending applicant preserved. T00 open; temporary diagnostic cleanup pending.
-
 
 ## T00 test role provisioning — 25 November 2026
 
@@ -116,7 +106,6 @@ Status: **IN PROGRESS — read-only verification, no testing mutations**. The pr
 - Executed one guarded atomic SQL statement in approved shared Supabase project: two pending tutor assignments activated and one parent_guardian assignment added to dual-role test identity; all three reason development_seed. Three audit events and three status transitions written with correlation T00-20261125-test-role-provisioning; audit explicitly records testOnly=true, safeguardingApproval=false and owner-authorised maintenance. No ordinary approval events/outbox emitted, no application or tutor profile created or changed. Read-back verified owner/tutor unchanged, dual tutor/parent active, independent student unchanged, second tutor active; zero tutor profiles for the two newly activated tutors. Personal login addresses kept out of repository; database audit identifies exact assignments. Shared database means assignments are not inherently isolated from main; exclude development fixtures from future production, no publishing authorised. No new privileged roles granted.
 - Next owner browser check: sign out/in as dual-role account, verify Tutor and Parent workspace switching; create fictional children Charlie Test (Year 8) and Jamie Test (Year 11) via normal Parent UI if available. Test tutor-only and student-only restrictions, verify saved student profile and record-level/server actions. Tutor profile fixtures may be required separately; no genuine safeguarding decisions. Temporary diagnostic cleanup pending. T00 remains open.
 
-
 ## T00 workspace and family browser testing — 25 November 2026
 
 - Owner likes multi-role workspace chooser. Both Tutor/Parent cards appeared; initial clicks lacked visible loading feedback, apparent stall after repeated clicks, reload retained Parent choice. SC-109 remains open for pending feedback, duplicate submission protection and single-click navigation verification.
@@ -124,23 +113,19 @@ Status: **IN PROGRESS — read-only verification, no testing mutations**. The pr
 - Owner proposed split-and-slide workspace transition: outgoing cards separate left/right and incoming workspace cards slide in from both sides. Recorded as design concept SC-112; prototype after switching is stable. Suggested stationary header, short duration, reduced-motion support and loading/error handling are assistant proposals pending design review.
 - Next: verify student-only and tutor-only isolation, server-side permissions, saved student/family records and SC-109 fix. No animation implemented. T00 open.
 
-
 ## T00 tutor-only browser isolation — 25 November 2026
 
 - Owner confirms Daniel (tutor-only fixture) can access Tutor workspace and cannot access Parent or Student workspaces. Browser test 9 passed; exact tested commit not captured. At follow-up development alias READY at 4c573333c1b3daef0fbc88ad2f1101e88ee51074. No database or application-code changes for this test.
 - Next owner test: Sam independent student can access Student, cannot access Tutor or Parent. Then technical record-level and server permission checks, SC-109 fix, diagnostic cleanup; T00 open.
 
-
 ## T00 student-only browser isolation — 25 November 2026
 
 - Owner confirmed test 10 access as expected: independent student can enter Student workspace and is denied Tutor and Parent access. Year 13 profile retention was included in test instructions but not separately confirmed; verify in database. At follow-up development alias READY at f7ce70ff28aab084a9e7a6f06d68f6ccd0af1799. Manual access test sequence complete, with SC-109 chooser loading defect remaining. Next bounded technical slice: inspect and fix SC-109, verify server-side role/record permissions and saved fixture records, remove temporary diagnostic, record actual CI and deployment results. T00 remains open; no release authorised.
-
 
 ## T00 scope decision — 25 November 2026
 
 - Owner prefers completing T00 foundations before fixing chooser loading UX. SC-109 deferred as a non-blocking follow-up on the evidence that workspace switching and persisted choice work; reopen as blocker if reliable navigation or authorization fails. Supersedes earlier plan to require its fix before T00 closure. SC-112 animation remains proposed.
 - Remaining T00: verify saved family/student fixtures and server-side/record-level permissions, resolve or document security findings according to risk, remove temporary diagnostic, verify final deployment and checkpoint. Do not claim closure before checks. Development alias READY at 7451dcb2c8f583bc480d1d844aa3ff99e86e5405 before this documentation change. No implementation or DB changes in this decision.
-
 
 ## T00 final verification slice — 25 November 2026
 

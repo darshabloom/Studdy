@@ -74,7 +74,11 @@ export async function ensureIdentityForAuthUser(
       const [record] = await db.select().from(users).where(eq(users.id, link.userId));
       // A suspended/closed identity must never retain workspace access through
       // an otherwise active role assignment.
-      if (record === undefined || record.accountStatusCode !== 'active' || record.archivedAt !== null) {
+      if (
+        record === undefined ||
+        record.accountStatusCode !== 'active' ||
+        record.archivedAt !== null
+      ) {
         throw new Error('Studdy identity is not active');
       }
       displayName = record.displayName;
@@ -129,7 +133,10 @@ export async function ensureIdentityForAuthUser(
         and(
           eq(userRoleAssignments.userId, studdyUserId),
           lte(userRoleAssignments.effectiveFrom, new Date()),
-          or(isNull(userRoleAssignments.effectiveUntil), gt(userRoleAssignments.effectiveUntil, new Date())),
+          or(
+            isNull(userRoleAssignments.effectiveUntil),
+            gt(userRoleAssignments.effectiveUntil, new Date()),
+          ),
         ),
       );
 

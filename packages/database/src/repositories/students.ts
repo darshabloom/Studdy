@@ -207,7 +207,10 @@ export async function listAccessibleStudents(
           ),
           isNull(familyMemberships.endedAt),
           lte(familyMemberships.effectiveFrom, new Date()),
-          or(isNull(familyMemberships.effectiveUntil), gt(familyMemberships.effectiveUntil, new Date())),
+          or(
+            isNull(familyMemberships.effectiveUntil),
+            gt(familyMemberships.effectiveUntil, new Date()),
+          ),
         ),
       );
     const familyAccountId = membership?.familyAccountId ?? null;
