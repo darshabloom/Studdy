@@ -1,8 +1,12 @@
 import Link from 'next/link';
-import { Alert, Button, Card, StatusBadge } from '@studdy/design-system';
+import { Alert, Button, Card, StatusBadge, TextareaField } from '@studdy/design-system';
 import { APPLICATION_CHECK_CODES, DECIDABLE_APPLICATION_STATUSES } from '@studdy/domain/tutors';
 import { ReviewCheckControls } from '@/components/tutors/review-check-controls';
-import { approveApplicationV2Action } from '@/lib/tutors/review-actions';
+import {
+  approveApplicationV2Action,
+  requestChangesV2Action,
+  rejectV2Action,
+} from '@/lib/tutors/review-actions';
 import type { SubjectOption, V2ReviewDetail } from '@studdy/database';
 import {
   APPLICATION_STATUS_FAMILY,
@@ -187,12 +191,34 @@ export function TutorApplicationV2Review({
           ))}
         </ul>
         {approvalEnabled && decidable ? (
-          <form action={approveApplicationV2Action} className="mt-5">
-            <input type="hidden" name="reference" value={review.reference} />
-            <Button type="submit" disabled={!allChecksVerified}>
-              Approve tutor and open private setup
-            </Button>
-          </form>
+          <div className="mt-5 flex flex-col gap-6">
+            <form action={approveApplicationV2Action}>
+              <input type="hidden" name="reference" value={review.reference} />
+              <Button type="submit" disabled={!allChecksVerified}>
+                Approve tutor and open private setup
+              </Button>
+            </form>
+            <form action={requestChangesV2Action} className="flex flex-col gap-2">
+              <input type="hidden" name="reference" value={review.reference} />
+              <TextareaField
+                label="Ask for changes — message to the applicant"
+                name="message"
+                rows={3}
+                helper="The previous v2 answers will be restored as a draft. The applicant must accept declarations again."
+              />
+              <div><Button type="submit" variant="secondary">Request changes</Button></div>
+            </form>
+            <form action={rejectV2Action} className="flex flex-col gap-2">
+              <input type="hidden" name="reference" value={review.reference} />
+              <TextareaField
+                label="Decline — message to the applicant"
+                name="message"
+                rows={3}
+                helper="The applicant receives a notification and reads the decision in Studdy."
+              />
+              <div><Button type="submit" variant="secondary">Decline application</Button></div>
+            </form>
+          </div>
         ) : (
           <p className="mt-4 text-sm text-text-secondary">
             Approval controls are locked until the v2 release and notification requirements are
