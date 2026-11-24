@@ -84,8 +84,9 @@ export interface ApplicationV2SubmissionSnapshot {
 export function prepareApplicationV2Submission(
   draft: TutorApplicationV2Draft,
   policy: ApplicationV2SubmissionPolicy,
-): { readonly status: 'invalid'; readonly issues: ApplicationV2Issues } |
-  { readonly status: 'ready'; readonly snapshot: ApplicationV2SubmissionSnapshot } {
+):
+  | { readonly status: 'invalid'; readonly issues: ApplicationV2Issues }
+  | { readonly status: 'ready'; readonly snapshot: ApplicationV2SubmissionSnapshot } {
   const result = applicationV2SubmissionReadiness(draft, policy);
   if (!result.ready) return { status: 'invalid', issues: result.issues };
 
@@ -95,7 +96,10 @@ export function prepareApplicationV2Submission(
   const conduct = policy.codeOfConductVersion?.trim();
   const notice = policy.privacyNoticeVersion?.trim();
   if (!agreement || !conduct || !notice) {
-    return { status: 'invalid', issues: { 'declarations.documents': 'Required legal documents are unavailable.' } };
+    return {
+      status: 'invalid',
+      issues: { 'declarations.documents': 'Required legal documents are unavailable.' },
+    };
   }
 
   return {

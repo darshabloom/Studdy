@@ -15,7 +15,9 @@ import { tutorApplications } from './tutor-applications';
 export const tutorApplicationV2Revisions = tutorsSchema.table(
   'tutor_application_v2_revisions',
   {
-    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
     applicationId: uuid('application_id')
       .notNull()
       .references(() => tutorApplications.id, { onDelete: 'restrict' }),

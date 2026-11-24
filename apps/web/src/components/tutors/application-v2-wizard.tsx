@@ -335,7 +335,9 @@ export function TutorApplicationV2Wizard({
           inFlight.current = false;
           // Trigger the next debounced save if edits arrived during the request.
           if (latestSerial.current > savingSerial) {
-            setSaveState((current) => (current === 'saved' || current === 'saving' ? 'idle' : current));
+            setSaveState((current) =>
+              current === 'saved' || current === 'saving' ? 'idle' : current,
+            );
           }
         });
     }, 900);
@@ -353,9 +355,14 @@ export function TutorApplicationV2Wizard({
     knownSubjectIds: subjects.map((subject) => subject.subjectId),
   });
   const issueEntries = Object.entries(validation.issues);
-  const issuesFor = (index: number) => issueEntries.filter(([path]) =>
-    path.startsWith(['about.', 'subjects.', 'teaching.', 'qualifications.', 'references', 'declarations.'][index] ?? '___'),
-  );
+  const issuesFor = (index: number) =>
+    issueEntries.filter(([path]) =>
+      path.startsWith(
+        ['about.', 'subjects.', 'teaching.', 'qualifications.', 'references', 'declarations.'][
+          index
+        ] ?? '___',
+      ),
+    );
   const labelOf = (options: readonly (readonly [string, string])[], value: string) =>
     options.find(([key]) => key === value)?.[1] ?? value;
   const show = (value: string) => value.trim() || 'Not provided';
@@ -1046,10 +1053,13 @@ export function TutorApplicationV2Wizard({
                   </p>
                   {issuesFor(i).length > 0 ? (
                     <p className="mt-2 text-sm font-semibold text-red-700">
-                      {issuesFor(i).length} required answer{issuesFor(i).length === 1 ? '' : 's'} to check
+                      {issuesFor(i).length} required answer{issuesFor(i).length === 1 ? '' : 's'} to
+                      check
                     </p>
                   ) : (
-                    <p className="mt-2 text-sm font-semibold text-green-700">Required answers complete</p>
+                    <p className="mt-2 text-sm font-semibold text-green-700">
+                      Required answers complete
+                    </p>
                   )}
                   <dl className="mt-3 grid gap-1.5 text-sm">
                     {reviewRows[i]?.map(([term, value]) => (
@@ -1070,13 +1080,22 @@ export function TutorApplicationV2Wizard({
               </div>
             ))}
             {issueEntries.length > 0 ? (
-              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-                <p className="font-semibold">{issueEntries.length} item{issueEntries.length === 1 ? '' : 's'} need attention before submission.</p>
-                <p className="mt-1">Use the Edit links above to complete the highlighted sections.</p>
+              <div
+                role="alert"
+                className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+              >
+                <p className="font-semibold">
+                  {issueEntries.length} item{issueEntries.length === 1 ? '' : 's'} need attention
+                  before submission.
+                </p>
+                <p className="mt-1">
+                  Use the Edit links above to complete the highlighted sections.
+                </p>
               </div>
             ) : (
               <p role="status" className="rounded-lg bg-green-50 p-4 text-sm text-green-900">
-                All required questionnaire answers are complete. Final submission is still disabled while legal and safeguarding checks are connected.
+                All required questionnaire answers are complete. Final submission is still disabled
+                while legal and safeguarding checks are connected.
               </p>
             )}
             <div className="rounded-lg bg-brand-lavender p-4 text-sm">

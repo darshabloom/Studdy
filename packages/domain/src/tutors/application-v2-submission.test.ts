@@ -38,17 +38,19 @@ const complete: TutorApplicationV2Draft = {
     noRelevantQualifications: true,
     evidenceIntention: 'will_provide_later',
   },
-  references: [{
-    fullName: 'Taylor Example',
-    relationship: 'Teacher',
-    organisation: 'Example School',
-    position: 'Head of Maths',
-    category: 'teacher',
-    email: '',
-    phone: '+64 21 123 1234',
-    permissionConfirmed: true,
-    contactPreference: 'contact_me_first',
-  }],
+  references: [
+    {
+      fullName: 'Taylor Example',
+      relationship: 'Teacher',
+      organisation: 'Example School',
+      position: 'Head of Maths',
+      category: 'teacher',
+      email: '',
+      phone: '+64 21 123 1234',
+      permissionConfirmed: true,
+      contactPreference: 'contact_me_first',
+    },
+  ],
   declarations: {
     accuracyAccepted: true,
     safeguardingAccepted: true,
@@ -96,11 +98,13 @@ describe('Tutor Application v2 submission policy', () => {
       ...complete,
       about: { ...complete.about, dateOfBirth: '2009-08-10' },
     };
-    expect(prepareApplicationV2Submission(minor, {
-      ...policy,
-      guardianConsentVerified: true,
-      guardianConsentReference: 'CONSENT-TEST-001',
-    }).status).toBe('ready');
+    expect(
+      prepareApplicationV2Submission(minor, {
+        ...policy,
+        guardianConsentVerified: true,
+        guardianConsentReference: 'CONSENT-TEST-001',
+      }).status,
+    ).toBe('ready');
   });
 
   it('fails closed when any legal document version is missing', () => {

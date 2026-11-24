@@ -122,13 +122,16 @@ export async function submitApplicationV2(input: {
         .returning({ id: tutorApplications.id });
       if (!moved) throw new Error('Tutor Application changed during v2 submission.');
 
-      await tx.insert(tutorApplicationChecks).values(
-        APPLICATION_CHECK_CODES.map((checkCode) => ({
-          applicationId: application.id,
-          checkCode,
-          statusCode: 'pending',
-        })),
-      ).onConflictDoNothing();
+      await tx
+        .insert(tutorApplicationChecks)
+        .values(
+          APPLICATION_CHECK_CODES.map((checkCode) => ({
+            applicationId: application.id,
+            checkCode,
+            statusCode: 'pending',
+          })),
+        )
+        .onConflictDoNothing();
 
       const reasonCode = revisionNumber === 1 ? 'application_submitted' : 'application_resubmitted';
       await tx.insert(statusTransitions).values({
