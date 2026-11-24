@@ -17,6 +17,10 @@ SC-42: Google primary sign-in, retain email/password and recovery. Provider enab
 
 SC-62: progressive six-section tutor application with draft saving; exact approved questions and options are recorded in story comments. Retrieve those before building; preserve independent review and safeguarding gates.
 
+## Approved pre-launch environment decision (25 November 2026)
+
+Use the existing Studdy database for pre-launch development; no additional database subscription now. Preserve existing accounts and records. Shared database is permitted only while there are no real customers or live transactions; use fictional test data, restricted access and sandbox payments. Separate production database and verified isolation are mandatory before public launch. This supersedes earlier plans for immediate separate development and production databases.
+
 ## Open decisions
 
 Historical booking, payment and instant-booking specifications conflict; reconcile against current code and approved decisions when relevant. Earnings eligibility and lesson completion semantics need confirmation before adopting older earnings logic. Remaining Tutor screen designs and mobile navigation need verification.

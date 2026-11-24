@@ -19,7 +19,7 @@ GitHub holds current product decisions, code and technical documentation. Shortc
 
 ## Environments
 
-Production: https://studdy-one.vercel.app (verify current mapping). Establish a stable separate development URL and fictional role-based test accounts in R04. Confirm isolation from production database, payments and email before interactive mutations. Use sandbox provider credentials and no live student data. Staging/release rehearsal may be separate as needed.
+Pre-launch exception approved 25 November: retain the single existing Studdy Supabase project as a shared development database. Vercel main is a pre-launch release baseline, not an authorised public customer service. Verify protected access, actual database targets, sandbox payment mode and email suppression before test mutations; preserve existing records, prohibit destructive resets, use clearly marked fictional data and review migrations for compatibility with all deployed versions. No live student data or real payments. Establish a stable protected testing URL and fictional role accounts. Separate clean production database, credentials, auth, storage and provider configuration plus verified isolation are mandatory before public launch. Staging may be introduced later.
 
 ## Recovery and transition
 
