@@ -26,7 +26,8 @@ body {
 /*
  * THE PARENT WORKSPACE'S OWN LOOK, scoped to it.
  *
- * Mostly white, deep navy for text and controls, golden yellow used sparingly
+ * Uses the official Studdy logo palette (#0B2D5C, #F6B61C, #F36F2B),
+ * with navy for text and controls, golden yellow used sparingly
  * as the one accent, with pale blue and cream as gentle section tints. These
  * are the colours of the Studdy logo.
  *
@@ -37,33 +38,47 @@ body {
  * workspaces be moved over one at a time rather than all at once.
  */
 @theme {
-  --color-parent-navy: #0b2545;
-  --color-parent-gold: #f5a524;
-  --color-parent-gold-pale: #fff4dc;
-  --color-parent-sky: #eaf2fb;
-  --color-parent-cream: #fbf6ec;
+  --color-parent-navy: #001c44;
+  --color-parent-gold: #fbb800;
+  --color-parent-gold-pale: #fff6df;
+  --color-parent-sky: #f4f7fc;
+  --color-parent-cream: #fff7e9;
+  --color-studdy-orange: #fb6204;
 }
 
 .parent-theme {
-  --color-brand-purple-deep: #0b2545;
-  --color-brand-purple: #14365f;
-  --color-brand-purple-mid: #1d4a80;
-  --color-brand-lavender: #eaf2fb;
+  --color-brand-purple-deep: #001c44;
+  --color-brand-purple: #001c44;
+  --color-brand-purple-mid: #173b68;
+  --color-brand-lavender: #f4f7fc;
 
   --color-surface-page: #ffffff;
   --color-surface-card: #ffffff;
   --color-surface-card-secondary: #f6f9fc;
   --color-surface-border: #e1e7ef;
 
-  --color-text-primary: #0b2545;
-  --color-text-secondary: #42526a;
-  --color-text-muted: #5f6f86;
+  --color-text-primary: #001c44;
+  --color-text-secondary: #435772;
+  --color-text-muted: #596d87;
 
-  --color-action-primary: #0b2545;
-  --color-action-primary-hover: #14365f;
-  --color-action-primary-active: #071a33;
-  --color-focus-ring: #14365f;
+  --color-action-primary: #001c44;
+  --color-action-primary-hover: #173b68;
+  --color-action-primary-active: #00112d;
+  --color-focus-ring: #fb6204;
 
   background-color: var(--color-surface-page);
   color: var(--color-text-primary);
+}
+
+/* Completion and success in the light workspace use navy and yellow, not green. */
+.parent-theme {
+  --color-status-success: #001c44;
+  --color-status-success-bg: #fff6df;
+  --color-status-success-border: #fbb800;
+}
+
+/* Tutor-only chrome: reclaim the development notice height for the main header.
+ * Other routes keep the warning; the Tutor account menu retains the notice. */
+body:has([data-tutor-workspace='true']) [data-studdy-environment-banner] {
+  display: none;
 }

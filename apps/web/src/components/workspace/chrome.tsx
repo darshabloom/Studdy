@@ -130,6 +130,28 @@ export async function WorkspaceChrome({
   // Both frames take the SAME two children, so the access decision is made
   // once and cannot differ between them.
   if (topNav !== undefined) {
+    // Use a trusted Google-hosted account photo when the auth provider has one.
+    // The profile menu falls back to initials for email/password accounts.
+    const supabase = await createSupabaseServerClient();
+    const auth = supabase === null ? null : await supabase.auth.getUser();
+    const metadata = auth?.data.user?.user_metadata;
+    const candidate: unknown = metadata?.avatar_url ?? metadata?.picture;
+    let accountAvatarUrl: string | null = null;
+    if (typeof candidate === 'string') {
+      try {
+        const url = new URL(candidate);
+        if (
+          url.protocol === 'https:' &&
+          (url.hostname === 'googleusercontent.com' ||
+            url.hostname.endsWith('.googleusercontent.com'))
+        ) {
+          accountAvatarUrl = url.toString();
+        }
+      } catch {
+        // Invalid or untrusted avatar URL: show the initials fallback.
+      }
+    }
+
     return (
       <TopNavFrame
         bar={
@@ -139,6 +161,7 @@ export async function WorkspaceChrome({
             currentWorkspace={enteredWorkspace ?? accepts[0]!}
             workspaces={identity.workspaces}
             accountLabel={identity.displayName ?? identity.email ?? 'Your account'}
+            accountAvatarUrl={accountAvatarUrl}
           />
         }
       >

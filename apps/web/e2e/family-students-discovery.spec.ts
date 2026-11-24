@@ -57,7 +57,7 @@ test.describe('family, students and tutor discovery', () => {
     await page.getByLabel('School year').selectOption({ label: 'Year 9' });
     await page.getByRole('button', { name: 'Add student' }).click();
     await expect(page).toHaveURL(/\/parent$/);
-    await expect(page.getByText('Ari')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Ari', exact: true }).first()).toBeVisible();
 
     await page.getByRole('link', { name: 'Add a subject' }).first().click();
     await addSubjectNeed(page, 'Mathematics', 'Year 9');
@@ -96,6 +96,7 @@ test.describe('family, students and tutor discovery', () => {
     // The selection survives signing out and back in.
     const shortlistUrl = page.url();
     await page.goto('/parent');
+    await page.locator('summary[aria-label^="Account menu for "]').click();
     await page.getByRole('button', { name: 'Sign out' }).click();
     await signIn(page, 'parent.one@local.studdy.test');
     await page.goto(shortlistUrl);

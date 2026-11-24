@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Fraunces, Inter } from 'next/font/google';
 import { EnvironmentBanner } from '@studdy/design-system';
 import type { ReactNode } from 'react';
+import { NavigationFeedback } from '@/components/layout/navigation-feedback';
 import './globals.css';
 
 const inter = Inter({
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en-NZ" className={`${inter.variable} ${fraunces.variable}`}>
       <body>
         <EnvironmentBanner environment={environment} />
+        <NavigationFeedback />
         {children}
       </body>
     </html>
