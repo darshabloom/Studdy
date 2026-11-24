@@ -123,3 +123,9 @@ Status: **IN PROGRESS — read-only verification, no testing mutations**. The pr
 - Owner screenshot shows Parent Home with fictional Charlie Year 8 and Jamie Year 11; owner confirms switching Parent → Tutor → Parent retained both children. Browser workspace switching and family persistence passed; database linkage and cross-account/server permissions remain to verify.
 - Owner proposed split-and-slide workspace transition: outgoing cards separate left/right and incoming workspace cards slide in from both sides. Recorded as design concept SC-112; prototype after switching is stable. Suggested stationary header, short duration, reduced-motion support and loading/error handling are assistant proposals pending design review.
 - Next: verify student-only and tutor-only isolation, server-side permissions, saved student/family records and SC-109 fix. No animation implemented. T00 open.
+
+
+## T00 tutor-only browser isolation — 25 November 2026
+
+- Owner confirms Daniel (tutor-only fixture) can access Tutor workspace and cannot access Parent or Student workspaces. Browser test 9 passed; exact tested commit not captured. At follow-up development alias READY at 4c573333c1b3daef0fbc88ad2f1101e88ee51074. No database or application-code changes for this test.
+- Next owner test: Sam independent student can access Student, cannot access Tutor or Parent. Then technical record-level and server permission checks, SC-109 fix, diagnostic cleanup; T00 open.
