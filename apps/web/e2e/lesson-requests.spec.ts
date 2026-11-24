@@ -335,7 +335,7 @@ test.describe('lesson requests', () => {
     await signIn(page, 'tutor.a@local.studdy.test');
     await page.goto('/tutor');
     // Prove the dashboard rendered before asserting an absence on it.
-    await expect(page.getByRole('heading', { name: 'Your availability' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Your week' })).toBeVisible({
       timeout: 15_000,
     });
 

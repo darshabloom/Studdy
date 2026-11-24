@@ -25,13 +25,14 @@ export function TopNavLinks({ items }: { items: readonly TopNavItem[] }): ReactN
         const active = isActiveNavItem(item, pathname);
         return (
           <Link
+            prefetch={false}
             key={item.href}
             href={item.href}
             aria-current={active ? 'page' : undefined}
             className={
               active
-                ? 'shrink-0 border-b-2 border-parent-gold px-1 py-3 text-sm font-semibold text-brand-purple-deep md:px-3'
-                : 'shrink-0 border-b-2 border-transparent px-1 py-3 text-sm font-medium text-text-secondary hover:border-surface-border hover:text-text-primary md:px-3'
+                ? 'shrink-0 border-b-2 border-parent-gold px-[2px] py-3 text-[12px] font-semibold text-brand-purple-deep md:px-3 md:text-sm'
+                : 'shrink-0 border-b-2 border-transparent px-[2px] py-3 text-[12px] font-medium text-text-secondary hover:border-surface-border hover:text-text-primary md:px-3 md:text-sm'
             }
           >
             {item.label}

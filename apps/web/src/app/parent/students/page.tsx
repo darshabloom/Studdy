@@ -26,7 +26,9 @@ export default async function StudentsPage() {
         title="Students"
         action={
           <Button asChild>
-            <Link href="/parent/students/new">Add student</Link>
+            <Link prefetch={false} href="/parent/students/new">
+              Add student
+            </Link>
           </Button>
         }
       />
@@ -61,7 +63,9 @@ export default async function StudentsPage() {
                   </div>
                 </div>
                 <Button variant="secondary" className={COMPACT} asChild>
-                  <Link href={`/parent/students/${student.reference}`}>View student</Link>
+                  <Link prefetch={false} href={`/parent/students/${student.reference}`}>
+                    View student
+                  </Link>
                 </Button>
               </div>
               <div className="grid gap-3 border-t border-surface-border pt-4 sm:grid-cols-3">
@@ -89,6 +93,7 @@ export default async function StudentsPage() {
         })}
         <li>
           <Link
+            prefetch={false}
             href="/parent/students/new"
             className="flex h-full min-h-[120px] items-center justify-center rounded-[var(--radius-medium)] border border-dashed border-text-muted/50 p-5 text-sm font-medium text-brand-purple hover:border-brand-purple hover:bg-surface-card-secondary"
           >
