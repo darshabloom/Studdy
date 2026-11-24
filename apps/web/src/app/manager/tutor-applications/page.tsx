@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Card, EmptyState, StatusBadge } from '@studdy/design-system';
-import { reviewQueue } from '@studdy/database';
+import { reviewQueue, v2ReviewQueue } from '@studdy/database';
 import { requireStaff } from '@/lib/auth/staff';
 import {
   APPLICATION_STATUS_FAMILY,
@@ -29,7 +29,14 @@ const dateFormat = new Intl.DateTimeFormat('en-NZ', {
  */
 export default async function TutorApplicationsPage() {
   await requireStaff('/manager/tutor-applications');
-  const queue = await reviewQueue();
+  const [legacyQueue, v2Queue] = await Promise.all([reviewQueue(), v2ReviewQueue()]);
+  const queue = [
+    ...legacyQueue,
+    ...v2Queue.map((entry) => ({
+      ...entry,
+      headline: 'Six-section Tutor Application · V2',
+    })),
+  ].sort((a, b) => (a.submittedAt?.getTime() ?? 0) - (b.submittedAt?.getTime() ?? 0));
 
   const waiting = queue.filter((entry) => entry.status !== 'changes_requested');
   const withApplicant = queue.filter((entry) => entry.status === 'changes_requested');
