@@ -1,5 +1,8 @@
 import Link from 'next/link';
-import { Alert, Card, StatusBadge } from '@studdy/design-system';
+import { Alert, Button, Card, StatusBadge } from '@studdy/design-system';
+import { APPLICATION_CHECK_CODES, DECIDABLE_APPLICATION_STATUSES } from '@studdy/domain/tutors';
+import { ReviewCheckControls } from '@/components/tutors/review-check-controls';
+import { approveApplicationV2Action } from '@/lib/tutors/review-actions';
 import type { SubjectOption, V2ReviewDetail } from '@studdy/database';
 import {
   APPLICATION_STATUS_FAMILY,
@@ -24,6 +27,13 @@ export function TutorApplicationV2Review({
   subjects: readonly SubjectOption[];
 }) {
   const { answers, documentVersions } = review.snapshot;
+  const decidable = (DECIDABLE_APPLICATION_STATUSES as readonly string[]).includes(review.status);
+  const approvalEnabled =
+    process.env.STUDDY_APPLICATION_V2_ENABLED === 'true' &&
+    process.env.STUDDY_APPLICATION_V2_DECISIONS_ENABLED === 'true';
+  const allChecksVerified = APPLICATION_CHECK_CODES.every((code) =>
+    review.checks.some((check) => check.code === code && check.status === 'verified'),
+  );
   const subjectName = (id: string) =>
     subjects.find((subject) => subject.subjectId === id)?.displayName ?? 'Unavailable subject';
 
@@ -152,6 +162,42 @@ export function TutorApplicationV2Review({
             </li>
           ))}
         </ul>
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-semibold">Verification checks</h2>
+        <p className="mt-1 text-sm text-text-secondary">
+          Identity, safeguarding, references and interview are individually
+          verified by authorised staff. The applicant's declarations alone
+          never mark a check as complete.
+        </p>
+        <ul className="mt-4 flex flex-col gap-5">
+          {review.checks.map((check) => (
+            <ReviewCheckControls
+              key={check.code}
+              reference={review.reference}
+              checkCode={check.code}
+              initialStatus={check.status}
+              initialNote={check.note}
+              checkedAtText={check.checkedAt === null ? null : check.checkedAt.toISOString().slice(0, 10)}
+              required
+              decidable={decidable && approvalEnabled}
+            />
+          ))}
+        </ul>
+        {approvalEnabled && decidable ? (
+          <form action={approveApplicationV2Action} className="mt-5">
+            <input type="hidden" name="reference" value={review.reference} />
+            <Button type="submit" disabled={!allChecksVerified}>
+              Approve tutor and open private setup
+            </Button>
+          </form>
+        ) : (
+          <p className="mt-4 text-sm text-text-secondary">
+            Approval controls are locked until the v2 release and notification
+            requirements are complete.
+          </p>
+        )}
       </Card>
 
       <Card>
