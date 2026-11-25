@@ -52,7 +52,16 @@ describe.skipIf(!(await databaseAvailable()))('Tutor confirmed schedule (integra
         const schedule = await listUpcomingConfirmedBookingsForTutor(other['id'] as string, now);
         expect(schedule.some((entry) => entry.reference === reference)).toBe(false);
       }
-      const future = new Date(own.find((entry) => entry.reference === reference)!.scheduledEndAt);
+      // PostgreSQL timestamps retain microseconds; JS Date retains milliseconds.
+      // Align the fixture's end to milliseconds before testing the exact boundary.
+      await sql`
+        update bookings.bookings
+        set scheduled_end_at = date_trunc('milliseconds', scheduled_end_at)
+        where intended_lesson_request_id = ${fixture.ilrId}::uuid`;
+      const future = own.find((entry) => entry.reference === reference)!.scheduledEndAt;
+      const beforeEnd = new Date(future.getTime() - 1);
+      const ongoing = await listUpcomingConfirmedBookingsForTutor(fixture.tutorProfileId, beforeEnd);
+      expect(ongoing.some((entry) => entry.reference === reference)).toBe(true);
       const elapsed = await listUpcomingConfirmedBookingsForTutor(fixture.tutorProfileId, future);
       expect(elapsed.some((entry) => entry.reference === reference)).toBe(false);
       await sql`
