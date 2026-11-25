@@ -233,13 +233,19 @@ export function WeekCalendar({
       aria-label={ariaLabel}
     >
       {/* Read-only tutor calendars fit seven days on phones; editing grids retain their scroll room. */}
-      <div className={clsx(compact ? 'overflow-x-hidden sm:overflow-x-auto' : 'overflow-x-auto', mini && 'text-[10px]')}>
+      <div
+        className={clsx(
+          compact ? 'overflow-x-hidden sm:overflow-x-auto' : 'overflow-x-auto',
+          mini && 'text-[10px]',
+        )}
+      >
         <div className={mini ? '' : compact ? 'min-w-0 sm:min-w-[44rem]' : 'min-w-[44rem]'}>
           {/* Day headings, held above the scrolling hours. */}
           <div
             className={clsx(
               'sticky top-0 z-10 grid border-b border-surface-border bg-surface-card-secondary',
-              compact && 'grid-cols-[2.5rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]',
+              compact &&
+                'grid-cols-[2.5rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]',
             )}
             style={compact ? undefined : { gridTemplateColumns: columnTemplate }}
           >
@@ -269,8 +275,12 @@ export function WeekCalendar({
               >
                 {compact ? (
                   <>
-                    <span className="block sm:hidden" aria-hidden="true">{label.slice(0, 1)}</span>
-                    <span className="block text-[11px] sm:hidden" aria-hidden="true">{label.match(/\d+/)?.[0] ?? ''}</span>
+                    <span className="block sm:hidden" aria-hidden="true">
+                      {label.slice(0, 1)}
+                    </span>
+                    <span className="block text-[11px] sm:hidden" aria-hidden="true">
+                      {label.match(/\d+/)?.[0] ?? ''}
+                    </span>
                     <span className="hidden sm:inline">{label}</span>
                     <span className="sr-only sm:hidden">{label}</span>
                   </>
@@ -280,8 +290,16 @@ export function WeekCalendar({
           </div>
 
           <div
-            className={clsx('grid', compact && 'grid-cols-[2.5rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]')}
-            style={compact ? { height: bodyHeight } : { gridTemplateColumns: columnTemplate, height: bodyHeight }}
+            className={clsx(
+              'grid',
+              compact &&
+                'grid-cols-[2.5rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]',
+            )}
+            style={
+              compact
+                ? { height: bodyHeight }
+                : { gridTemplateColumns: columnTemplate, height: bodyHeight }
+            }
           >
             {/*
              * The gutter track, ALWAYS occupied — exactly as in the header.
@@ -438,7 +456,16 @@ export function WeekCalendar({
                         )}
 
                         {roomForLabel && block.label !== undefined ? (
-                          <span className={clsx('block pt-0.5 font-medium', compact ? 'line-clamp-3 break-words [overflow-wrap:anywhere] sm:line-clamp-1' : 'truncate')}>{block.label}</span>
+                          <span
+                            className={clsx(
+                              'block pt-0.5 font-medium',
+                              compact
+                                ? 'line-clamp-3 break-words [overflow-wrap:anywhere] sm:line-clamp-1'
+                                : 'truncate',
+                            )}
+                          >
+                            {block.label}
+                          </span>
                         ) : null}
                         {roomForLabel && block.count !== undefined ? (
                           <span className="block truncate">{block.count}</span>
