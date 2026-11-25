@@ -28,3 +28,20 @@ R01 repository/deployment audit; R02 recover Tutor design and functionality; R03
 ## Proposed Tutor chunks
 
 T01 Home and navigation, real scheduled bookings; T02 Calendar and availability; T03 Students; T04 Lesson delivery and learning (split); T05 Earnings (confirm eligibility rules); T06 Resources; T07 Profile, services and onboarding (split). Sequence is proposed and may change with product owner feedback. Do not defer launch-critical security or safeguarding.
+
+
+## Local pre-commit validation (T01b.2)
+
+Run once after cloning (and after any fresh clone) from the repository root:
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+mkdir -p .git/hooks
+cp .githooks/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+The installed local Git hook runs `pnpm format`, `pnpm lint` and `pnpm typecheck` before each commit; a failed check prevents the commit. To fix formatting run `pnpm format:fix`, inspect the diff, stage the corrected files, and retry. This does not replace GitHub CI, database integration or end-to-end tests. The hook is opt-in per clone; the repository copy is intentionally installed with `chmod` because GitHub's file-contents API does not preserve executable mode.
+
+For contributors without local tooling, the manual equivalent is `pnpm format && pnpm lint && pnpm typecheck`. Never bypass mandatory CI for a merge.
