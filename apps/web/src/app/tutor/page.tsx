@@ -278,9 +278,12 @@ export default async function TutorDashboardPage() {
                 {day.lessons.map((lesson) => (
                   <span
                     key={lesson.reference}
-                    className="rounded-md bg-parent-gold-pale px-1 py-1 text-xs font-semibold"
+                    className="block min-w-0 overflow-hidden rounded-md bg-parent-gold-pale px-0.5 py-1 text-center text-[10px] font-semibold leading-tight sm:px-1 sm:text-xs"
+                    title={`${timeLabel.format(lesson.scheduledStartAt)} · Confirmed`}
+                    aria-label={`${timeLabel.format(lesson.scheduledStartAt)} · Confirmed lesson`}
                   >
-                    {timeLabel.format(lesson.scheduledStartAt)} · Confirmed
+                    <span className="block truncate">{timeLabel.format(lesson.scheduledStartAt)}</span>
+                    <span className="hidden sm:block">Confirmed</span>
                   </span>
                 ))}
                 {day.slots.length === 0 && day.lessons.length === 0 ? (
