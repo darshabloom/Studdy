@@ -270,3 +270,8 @@ export {
   type TutorOwnProfile,
   type UpdateTutorProfileResult,
 } from './repositories/tutor-profile';
+
+export {
+  listUpcomingConfirmedBookingsForTutor,
+  type TutorScheduledBooking,
+} from './repositories/tutor-schedule';
