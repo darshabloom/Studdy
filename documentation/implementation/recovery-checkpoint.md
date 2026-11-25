@@ -186,3 +186,12 @@ This closes the T00 scoped verification gates, not the public-launch security re
   SC-60 and the latest approved UI, preserve existing working routes, implement
   trustworthy navigation and real-data home cards on development, and present
   a commit-matched preview for product-owner interaction.
+
+## T01a Tutor navigation shell — 25 November 2026
+
+- Rechecked AGENTS.md, current-direction.md, development-workflow.md, T00 closure checkpoint, SC-60 and T01 handover. T00 is closed for protected pre-launch development; public-launch review remains separate.
+- Scope: small, independently reviewable Tutor navigation shell first. No changes to Tutor Home queries/cards, DB, emails, payments or shared fixtures.
+- Branch `t01a/tutor-navigation-shell` based on development `ae734ccd645ffa9136bdece1d48cab4ba96b1af3`; draft PR #72 targets **development** (not main), head `fd76810393f8b226d0213857c01f019632e2d03a`. Files: tutor/layout.tsx, top-nav-links.tsx and parent/nav.ts.
+- Six approved destinations are visible; unfinished Calendar, Students, Lessons, Earnings and Resources are inert and visibly labelled Soon. Existing functional Booking requests, Availability, Services and Getting paid are retained in an accessible quick-tools row. Home link remains live. Role gate unchanged in WorkspaceChrome; existing loading/error components preserved.
+- At initial PR check, mandatory GitHub CI was queued and Vercel was deploying. No local test, visual inspection, deployed preview identity or cross-role browser re-test has yet passed. **Do not present this branch as ready for product-owner acceptance or merge.**
+- Next: confirm all required CI results and exact SHA-matched protected preview, browser-check tutor and pending-applicant access and mobile navigation, fix any issues, obtain visual feedback, and then close/merge this bounded T01a slice according to AGENTS.md.
