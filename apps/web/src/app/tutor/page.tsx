@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {
   bookableSlotsForTutors,
   listAvailabilityRules,
+  listConfirmedBookingsForTutorWeek,
   listRequestsForTutor,
   listUpcomingConfirmedBookingsForTutor,
   type TutorScheduledBooking,
@@ -95,11 +96,19 @@ export default async function TutorDashboardPage() {
     minute: '2-digit',
     hour12: false,
   });
+  const weekLessons = await listConfirmedBookingsForTutorWeek(
+    profile.id,
+    days[0]!.startAt,
+    days[6]!.endAt,
+  );
   const calendarDays = days.map((day) => ({
     ...day,
     weekday: day.label.split(' ')[0],
     dayNumber: Number(day.date.slice(-2)),
     isToday: day.date === todayKey,
+    lessons: weekLessons.filter(
+      (lesson) => lesson.scheduledStartAt < day.endAt && lesson.scheduledEndAt > day.startAt,
+    ),
     slots: slots
       .filter((slot) => slot.startAt >= day.startAt && slot.startAt < day.endAt)
       .sort((first, second) => first.startAt.getTime() - second.startAt.getTime()),
@@ -243,7 +252,7 @@ export default async function TutorDashboardPage() {
             </p>
           </div>
           <Link
-            href="/tutor/availability"
+            href="/tutor/calendar"
             className="text-sm font-semibold text-brand-purple hover:underline"
           >
             Open full calendar →
@@ -251,7 +260,7 @@ export default async function TutorDashboardPage() {
         </div>
         <div
           className="mt-2 grid grid-cols-7 overflow-hidden rounded-lg border border-surface-border"
-          aria-label="Monday to Sunday calendar showing bookable times"
+          aria-label="Monday to Sunday calendar showing confirmed lessons and bookable times"
         >
           {calendarDays.map((day) => (
             <div key={day.date} className="min-w-0 border-r border-surface-border last:border-r-0">
@@ -266,7 +275,15 @@ export default async function TutorDashboardPage() {
                 <p className="font-display text-lg font-semibold tabular-nums">{day.dayNumber}</p>
               </div>
               <div className="flex min-h-24 flex-col gap-1 border-t border-surface-border p-1 sm:min-h-28 sm:p-2">
-                {day.slots.length === 0 ? (
+                {day.lessons.map((lesson) => (
+                  <span
+                    key={lesson.reference}
+                    className="rounded-md bg-parent-gold-pale px-1 py-1 text-xs font-semibold"
+                  >
+                    {timeLabel.format(lesson.scheduledStartAt)} · Confirmed
+                  </span>
+                ))}
+                {day.slots.length === 0 && day.lessons.length === 0 ? (
                   <span className="py-2 text-center text-xs text-text-muted">—</span>
                 ) : (
                   <>
@@ -290,8 +307,8 @@ export default async function TutorDashboardPage() {
           ))}
         </div>
         <p className="mt-2 text-xs text-text-secondary">
-          Times shown are bookable one-hour openings, rather than confirmed lessons. Manage your
-          availability to see the complete timetable.
+          Gold shows confirmed lessons; blue shows available one-hour openings. Open the full
+          calendar for your schedule.
         </p>
         {rules.length === 0 ? (
           <p className="mt-1 text-xs text-text-secondary">
