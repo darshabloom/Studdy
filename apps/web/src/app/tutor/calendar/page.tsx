@@ -6,6 +6,7 @@ import {
   tutorProfileForUser,
 } from '@studdy/database';
 import { RestrictedState, WeekCalendar, type CalendarBlock } from '@studdy/design-system';
+import { zonedTimeToUtc } from '@studdy/domain/availability';
 import { resolveIdentity } from '@/lib/identity/resolve';
 import { PLATFORM_TIME_ZONE } from '@/lib/time';
 import { bookableSlotBlocks, teachingWindow } from '@/lib/availability/calendar-projection';
@@ -44,7 +45,7 @@ export default async function TutorCalendarPage({
     parsed !== null &&
     Number.isFinite(parsed.getTime()) &&
     parsed.toISOString().slice(0, 10) === requested
-      ? mondayOf(parsed, zone)
+      ? mondayOf(zonedTimeToUtc(requested!, '12:00', zone), zone)
       : current;
   const days = weekDays(week, zone);
   const from = days[0]!.startAt;
@@ -62,9 +63,7 @@ export default async function TutorCalendarPage({
   ]);
   const slots = slotsByTutor.get(profile.id) ?? [];
   const holds = reservations.filter(
-    (row) =>
-      row.reservationTypeCode === 'request_hold' &&
-      (row.expiresAt === null || row.expiresAt > now),
+    (row) => row.reservationTypeCode === 'request_hold' && (row.expiresAt === null || row.expiresAt > now),
   );
   const blocks: CalendarBlock[] = [...bookableSlotBlocks(slots, days, zone)];
   for (const [dayIndex, day] of days.entries()) {
