@@ -273,5 +273,6 @@ export {
 
 export {
   listUpcomingConfirmedBookingsForTutor,
+  listConfirmedBookingsForTutorWeek,
   type TutorScheduledBooking,
 } from './repositories/tutor-schedule';
