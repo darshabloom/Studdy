@@ -117,6 +117,7 @@ export default async function TutorCalendarPage({
         Confirmed lessons, available one-hour openings and temporary request holds are separate.
       </p>
       <WeekCalendar
+        compactMobile
         blocks={blocks}
         window={teachingWindow(blocks)}
         mode="read"
