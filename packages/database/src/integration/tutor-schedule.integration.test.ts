@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDatabaseClient } from '../client';
-import { listUpcomingConfirmedBookingsForTutor } from '../repositories/tutor-schedule';
+import {
+  listConfirmedBookingsForTutorWeek,
+  listUpcomingConfirmedBookingsForTutor,
+} from '../repositories/tutor-schedule';
 import { paymentFixtures } from './helpers/payment-fixtures';
 
 async function databaseAvailable(): Promise<boolean> {
@@ -45,6 +48,20 @@ describe.skipIf(!(await databaseAvailable()))('Tutor confirmed schedule (integra
         where intended_lesson_request_id = ${fixture.ilrId}::uuid`;
       const reference = row!['reference'] as string;
       expect(own.some((entry) => entry.reference === reference)).toBe(true);
+      const booking = own.find((entry) => entry.reference === reference)!;
+      const week = await listConfirmedBookingsForTutorWeek(
+        fixture.tutorProfileId,
+        booking.scheduledStartAt,
+        booking.scheduledEndAt,
+      );
+      expect(week.some((entry) => entry.reference === reference)).toBe(true);
+      expect(
+        await listConfirmedBookingsForTutorWeek(
+          randomUUID(),
+          booking.scheduledStartAt,
+          booking.scheduledEndAt,
+        ),
+      ).toEqual([]);
       const others = await sql`
         select id::text as id from tutors.tutor_profiles
         where id <> ${fixture.tutorProfileId}::uuid`;
