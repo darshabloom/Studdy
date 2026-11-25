@@ -63,7 +63,8 @@ export default async function TutorCalendarPage({
   ]);
   const slots = slotsByTutor.get(profile.id) ?? [];
   const holds = reservations.filter(
-    (row) => row.reservationTypeCode === 'request_hold' && (row.expiresAt === null || row.expiresAt > now),
+    (row) =>
+      row.reservationTypeCode === 'request_hold' && (row.expiresAt === null || row.expiresAt > now),
   );
   const blocks: CalendarBlock[] = [...bookableSlotBlocks(slots, days, zone)];
   for (const [dayIndex, day] of days.entries()) {
