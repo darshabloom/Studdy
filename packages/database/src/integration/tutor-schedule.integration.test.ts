@@ -60,7 +60,10 @@ describe.skipIf(!(await databaseAvailable()))('Tutor confirmed schedule (integra
         where intended_lesson_request_id = ${fixture.ilrId}::uuid`;
       const future = own.find((entry) => entry.reference === reference)!.scheduledEndAt;
       const beforeEnd = new Date(future.getTime() - 1);
-      const ongoing = await listUpcomingConfirmedBookingsForTutor(fixture.tutorProfileId, beforeEnd);
+      const ongoing = await listUpcomingConfirmedBookingsForTutor(
+        fixture.tutorProfileId,
+        beforeEnd,
+      );
       expect(ongoing.some((entry) => entry.reference === reference)).toBe(true);
       const elapsed = await listUpcomingConfirmedBookingsForTutor(fixture.tutorProfileId, future);
       expect(elapsed.some((entry) => entry.reference === reference)).toBe(false);
