@@ -3,6 +3,8 @@ import {
   bookableSlotsForTutors,
   listAvailabilityRules,
   listRequestsForTutor,
+  listUpcomingConfirmedBookingsForTutor,
+  type TutorScheduledBooking,
   tutorProfileForUser,
   tutorSetupFacts,
 } from '@studdy/database';
@@ -21,12 +23,17 @@ const LOOKAHEAD_DAYS = 14;
 
 /**
  * Tutor Home: approved light v3 dashboard structure, with restrained v0.6
- * decorative accents. Only live request/availability data is displayed.
- * Lesson schedules and earnings will be connected in separate scoped slices.
+ * decorative accents. Confirmed bookings, requests and availability stay distinct.
+ * Earnings will be connected in a separate scoped slice.
  */
 export default async function TutorDashboardPage() {
   const identity = await resolveIdentity();
-  if (identity === null || identity.studdyUserId === null) {
+  if (
+    identity === null ||
+    identity.studdyUserId === null ||
+    !identity.databaseAvailable ||
+    !identity.workspaces.includes('tutor')
+  ) {
     return <RestrictedState title="Sign in to see your tutor workspace" />;
   }
 
@@ -41,7 +48,7 @@ export default async function TutorDashboardPage() {
   }
 
   const now = new Date();
-  const [rules, slotsByTutor, requests, setupFacts] = await Promise.all([
+  const [rules, slotsByTutor, requests, setupFacts, confirmed] = await Promise.all([
     listAvailabilityRules(profile.id),
     bookableSlotsForTutors({
       tutorProfileIds: [profile.id],
@@ -52,8 +59,12 @@ export default async function TutorDashboardPage() {
     }),
     listRequestsForTutor(profile.id),
     tutorSetupFacts(profile.id),
+    listUpcomingConfirmedBookingsForTutor(profile.id, now),
   ]);
 
+  const currentLesson = confirmed.find((booking) => booking.scheduledStartAt <= now);
+  const futureLessons = confirmed.filter((booking) => booking.scheduledStartAt > now);
+  const nextLesson = futureLessons[0];
   const setup = setupFacts === null ? null : tutorSetupChecklist(setupFacts);
   const timeZone = rules[0]?.ianaTimeZone ?? DEFAULT_TIME_ZONE;
   const slots = slotsByTutor.get(profile.id) ?? [];
@@ -129,10 +140,31 @@ export default async function TutorDashboardPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
               Next lesson
             </p>
-            <p className="mt-1 font-semibold">No confirmed lesson to display yet</p>
-            <p className="mt-1 text-sm text-text-secondary">
-              Confirmed lessons will appear when the lesson schedule is connected.
-            </p>
+            {nextLesson === undefined ? (
+              <p className="mt-1 font-semibold">No upcoming confirmed lessons</p>
+            ) : (
+              <BookingSummary booking={nextLesson} />
+            )}
+          </div>
+          {currentLesson === undefined ? null : (
+            <div className="mt-3 rounded-lg border border-surface-border px-3 py-2">
+              <h3 className="text-sm font-semibold">Scheduled for now</h3>
+              <BookingSummary booking={currentLesson} />
+            </div>
+          )}
+          <div className="mt-3">
+            <h3 className="text-sm font-semibold">Upcoming lessons</h3>
+            {futureLessons.length <= 1 ? (
+              <p className="mt-1 text-sm text-text-secondary">No further confirmed lessons.</p>
+            ) : (
+              <ul className="mt-1 divide-y divide-surface-border">
+                {futureLessons.slice(1, 3).map((booking) => (
+                  <li key={booking.reference} className="py-2">
+                    <BookingSummary booking={booking} />
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <div className="mt-3">
             <h3 className="text-sm font-semibold">Upcoming request holds</h3>
@@ -267,6 +299,29 @@ export default async function TutorDashboardPage() {
           </p>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+function BookingSummary({ booking }: { booking: TutorScheduledBooking }) {
+  const date = new Intl.DateTimeFormat('en-NZ', {
+    timeZone: booking.timeZone,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+  return (
+    <div className="mt-1">
+      <p className="font-semibold">
+        {booking.subjectDisplayName} with {booking.studentPreferredName}
+      </p>
+      <p className="text-sm text-text-secondary">{date.format(booking.scheduledStartAt)}</p>
+      <p className="text-xs text-text-secondary">
+        {booking.lessonFormatCode === 'in_person' ? 'In person' : 'Online'} · Confirmed
+      </p>
     </div>
   );
 }
