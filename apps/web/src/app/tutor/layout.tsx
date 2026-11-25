@@ -6,7 +6,7 @@ import type { TopNavItem } from '@/lib/parent/nav';
 /** The six approved sections. Unbuilt sections remain visible but inert. */
 const TUTOR_NAV: readonly TopNavItem[] = [
   { label: 'Home', href: '/tutor', exact: true },
-  { label: 'Calendar', href: '/tutor/calendar', comingSoon: true },
+  { label: 'Calendar', href: '/tutor/calendar' },
   { label: 'Students', href: '/tutor/students', comingSoon: true },
   { label: 'Lessons', href: '/tutor/lessons', comingSoon: true },
   { label: 'Earnings', href: '/tutor/earnings', comingSoon: true },
