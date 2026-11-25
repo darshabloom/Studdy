@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+# Run from the repository root, including when committing from a subdirectory.
+cd "$(git rev-parse --show-toplevel)"
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "Studdy pre-commit: pnpm is required (see documentation/implementation/development-workflow.md)." >&2
+  exit 1
+fi
+
+echo "Studdy pre-commit: checking formatting, lint and TypeScript…"
+pnpm format
+pnpm lint
+pnpm typecheck
