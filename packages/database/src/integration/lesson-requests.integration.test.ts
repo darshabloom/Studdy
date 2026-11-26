@@ -2417,6 +2417,63 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       }
     };
 
+    it('releases expired standalone holds without releasing live or confirmed reservations', async () => {
+      const fixture = await buildFixture(`standalone-expiry-${randomUUID().slice(0, 8)}`);
+      const now = new Date();
+      const startAt = future(240);
+      const endAt = new Date(startAt.getTime() + 60 * 60_000);
+      const { sql, db } = createDatabaseClient();
+      try {
+        const rows = await db
+          .insert(tutorTimeReservations)
+          .values(
+            fixture.tutors.map((tutor, index) => ({
+              tutorProfileId: tutor.tutorProfileId,
+              startAt,
+              endAt,
+              effectiveEndAt: endAt,
+              gapMinutes: 0,
+              statusCode: 'active',
+              reservationTypeCode: index === 2 ? 'booking_confirmed' : 'request_hold',
+              expiresAt:
+                index === 2 ? null : new Date(now.getTime() + (index === 0 ? -1 : 1) * 60_000),
+            })),
+          )
+          .returning({
+            id: tutorTimeReservations.id,
+            tutorId: tutorTimeReservations.tutorProfileId,
+          });
+        const expired = rows.find((row) => row.tutorId === fixture.tutors[0]!.tutorProfileId)!;
+        const ids = rows.map((row) => row.id);
+
+        await expireOverdueRequests({ correlationId: `cor_${randomUUID()}`, now });
+        await expireOverdueRequests({ correlationId: `cor_${randomUUID()}`, now });
+
+        const holds = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(inArray(tutorTimeReservations.id, ids));
+        const released = holds.find((row) => row.id === expired.id)!;
+        expect(released.statusCode).toBe('released');
+        expect(released.releasedAt?.getTime()).toBe(now.getTime());
+        expect(holds.filter((row) => row.statusCode === 'active')).toHaveLength(2);
+
+        // The database, not just the projection, now permits reuse of the slot.
+        await db.insert(tutorTimeReservations).values({
+          tutorProfileId: fixture.tutors[0]!.tutorProfileId,
+          startAt,
+          endAt,
+          effectiveEndAt: endAt,
+          gapMinutes: 0,
+          statusCode: 'active',
+          reservationTypeCode: 'request_hold',
+          expiresAt: new Date(now.getTime() + 60_000),
+        });
+      } finally {
+        await sql.end();
+      }
+    });
+
     it('releases an accepted hold the family never chose', async () => {
       // §8.2: the selection window lapsed. The tutor gets their calendar back
       // rather than holding it on the chance a decision arrives later.
