@@ -1,5 +1,6 @@
 import { serve } from 'inngest/next';
 import { inngest } from '@/inngest/client';
+import { schedulerMode } from '@/inngest/scheduler-mode';
 import { drainOutboxScheduled } from '@/inngest/functions/drain-outbox';
 import { expireRequestsScheduled } from '@/inngest/functions/expire-requests';
 import { reconcilePaymentsScheduled } from '@/inngest/functions/reconcile-payments';
@@ -49,12 +50,24 @@ export const dynamic = 'force-dynamic';
  */
 export const maxDuration = 300;
 
+const mode = schedulerMode(
+  process.env.STUDDY_ENVIRONMENT,
+  process.env.STUDDY_ENABLE_EXPIRY_SCHEDULER,
+  process.env.VERCEL_ENV,
+  process.env.VERCEL_GIT_COMMIT_REF,
+);
+
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [
-    expireRequestsScheduled,
-    reconcilePaymentsScheduled,
-    drainOutboxScheduled,
-    settleRefundsScheduled,
-  ],
+  functions:
+    mode === 'all'
+      ? [
+          expireRequestsScheduled,
+          reconcilePaymentsScheduled,
+          drainOutboxScheduled,
+          settleRefundsScheduled,
+        ]
+      : mode === 'expiry-only'
+        ? [expireRequestsScheduled]
+        : [],
 });
