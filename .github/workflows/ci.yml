@@ -27,7 +27,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm format
+      - name: Check formatting
+        id: formatting
+        run: pnpm format
+      - name: Show exact formatting corrections
+        if: failure() && steps.formatting.outcome == 'failure'
+        run: |
+          pnpm format:fix
+          git --no-pager diff --no-ext-diff -- .
       - run: pnpm test
       - run: pnpm check:rls
       - run: pnpm build

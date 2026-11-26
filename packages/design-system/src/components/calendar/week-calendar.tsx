@@ -79,6 +79,8 @@ export interface WeekCalendarProps {
   mode?: WeekCalendarMode;
   /** Mini drops labels and shrinks rows; it still shows real geometry. */
   density?: 'mini' | 'comfortable';
+  /** Opt-in seven-column phone layout for read-only schedules. */
+  compactMobile?: boolean;
   /**
    * Pixels per hour, overriding the comfortable default.
    *
@@ -139,6 +141,7 @@ export function WeekCalendar({
   window,
   mode = 'read',
   density = 'comfortable',
+  compactMobile = false,
   hourHeight,
   stepMinutes = 30,
   dayLabels,
@@ -167,6 +170,7 @@ export function WeekCalendar({
     ? MINI_BODY_HEIGHT
     : Math.round((spanMinutes / 60) * (hourHeight ?? COMFORTABLE_HOUR_HEIGHT));
   const editable = mode === 'edit';
+  const compact = compactMobile && mode === 'read' && !mini;
 
   // One template for both grids, so a heading always sits above its own column.
   const columnTemplate = `${mini ? '0px' : '3.5rem'} repeat(7, minmax(0, 1fr))`;
@@ -228,13 +232,22 @@ export function WeekCalendar({
       role="group"
       aria-label={ariaLabel}
     >
-      {/* Seven columns need room to stay legible; below that the week scrolls. */}
-      <div className={clsx('overflow-x-auto', mini && 'text-[10px]')}>
-        <div className={mini ? '' : 'min-w-[44rem]'}>
+      {/* Read-only tutor calendars fit seven days on phones; editing grids retain their scroll room. */}
+      <div
+        className={clsx(
+          compact ? 'overflow-x-hidden sm:overflow-x-auto' : 'overflow-x-auto',
+          mini && 'text-[10px]',
+        )}
+      >
+        <div className={mini ? '' : compact ? 'min-w-0 sm:min-w-[44rem]' : 'min-w-[44rem]'}>
           {/* Day headings, held above the scrolling hours. */}
           <div
-            className="sticky top-0 z-10 grid border-b border-surface-border bg-surface-card-secondary"
-            style={{ gridTemplateColumns: columnTemplate }}
+            className={clsx(
+              'sticky top-0 z-10 grid border-b border-surface-border bg-surface-card-secondary',
+              compact &&
+                'grid-cols-[2.5rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]',
+            )}
+            style={compact ? undefined : { gridTemplateColumns: columnTemplate }}
           >
             {/*
              * The gutter track, ALWAYS rendered — including in mini, where it
@@ -256,15 +269,40 @@ export function WeekCalendar({
                 className={clsx(
                   'min-w-0 truncate border-l border-surface-border text-center font-medium first:border-l-0',
                   mini ? 'py-1 text-[10px] text-text-muted' : 'py-2 text-xs text-text-secondary',
+                  compact && 'px-0 py-1 sm:py-2',
                   now !== undefined && now.dayIndex === dayIndex && 'text-brand-purple-deep',
                 )}
               >
-                {label}
+                {compact ? (
+                  <>
+                    <span className="block sm:hidden" aria-hidden="true">
+                      {label.slice(0, 1)}
+                    </span>
+                    <span className="block text-[11px] sm:hidden" aria-hidden="true">
+                      {label.match(/\d+/)?.[0] ?? ''}
+                    </span>
+                    <span className="hidden sm:inline">{label}</span>
+                    <span className="sr-only sm:hidden">{label}</span>
+                  </>
+                ) : (
+                  label
+                )}
               </div>
             ))}
           </div>
 
-          <div className="grid" style={{ gridTemplateColumns: columnTemplate, height: bodyHeight }}>
+          <div
+            className={clsx(
+              'grid',
+              compact &&
+                'grid-cols-[2.5rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]',
+            )}
+            style={
+              compact
+                ? { height: bodyHeight }
+                : { gridTemplateColumns: columnTemplate, height: bodyHeight }
+            }
+          >
             {/*
              * The gutter track, ALWAYS occupied — exactly as in the header.
              *
@@ -290,7 +328,7 @@ export function WeekCalendar({
                     <span
                       key={minute}
                       className={clsx(
-                        'absolute right-2 whitespace-nowrap text-[11px] tabular-nums text-text-muted',
+                        'absolute right-1 whitespace-nowrap text-[9px] tabular-nums text-text-muted sm:right-2 sm:text-[11px]',
                         atTop
                           ? 'translate-y-0'
                           : atBottom
@@ -395,11 +433,17 @@ export function WeekCalendar({
                           'group/block absolute overflow-hidden border text-left',
                           mini
                             ? 'inset-x-px rounded-[2px]'
-                            : 'inset-x-1 rounded-[var(--radius-gentle)] pl-2 pr-1',
+                            : compact
+                              ? 'inset-x-px rounded-[3px] px-0.5 sm:inset-x-1 sm:rounded-[var(--radius-gentle)] sm:pl-2 sm:pr-1'
+                              : 'inset-x-1 rounded-[var(--radius-gentle)] pl-2 pr-1',
                           roleClasses[role],
                           interactive &&
                             'cursor-pointer transition-[filter] hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-purple',
-                          mini ? 'text-[9px] leading-none' : 'text-[11px] leading-tight',
+                          mini
+                            ? 'text-[9px] leading-none'
+                            : compact
+                              ? 'text-[9px] leading-tight sm:text-[11px]'
+                              : 'text-[11px] leading-tight',
                         )}
                         style={{
                           top: `${String(position.topPercent)}%`,
@@ -418,7 +462,16 @@ export function WeekCalendar({
                         )}
 
                         {roomForLabel && block.label !== undefined ? (
-                          <span className="block truncate pt-0.5 font-medium">{block.label}</span>
+                          <span
+                            className={clsx(
+                              'block pt-0.5 font-medium',
+                              compact
+                                ? 'line-clamp-3 break-words [overflow-wrap:anywhere] sm:line-clamp-1'
+                                : 'truncate',
+                            )}
+                          >
+                            {block.label}
+                          </span>
                         ) : null}
                         {roomForLabel && block.count !== undefined ? (
                           <span className="block truncate">{block.count}</span>

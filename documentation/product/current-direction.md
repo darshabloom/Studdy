@@ -38,3 +38,7 @@ Historical booking, payment and instant-booking specifications conflict; reconci
 For each material decision record ID, date, status (proposed/approved/superseded), exact decision, evidence, superseded IDs and affected specifications/tests. Update the current specification in the same change. Never silently resolve conflicting product requirements. Initial approved decisions are the bullets above and cited SC stories.
 
 References: https://app.shortcut.com/studdy/story/60 ; https://app.shortcut.com/studdy/story/42 ; https://app.shortcut.com/studdy/story/62
+
+## Tutor calendar mobile design decision (26 November 2026)
+
+Approved from owner preview feedback: fit Monday–Sunday simultaneously on a phone. Calendar lesson cards prioritise the student's preferred name, followed by the subject on a separate secondary line; truncate the subject before sacrificing the name. Name-first label refinement is deferred to Tutor workspace visual refinement, without blocking T01b.2 functional acceptance. Existing time geometry and role distinctions must be retained.
