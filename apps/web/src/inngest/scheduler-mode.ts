@@ -11,9 +11,7 @@ export function schedulerMode(
   gitBranch: string | undefined,
 ): SchedulerMode {
   if (vercelEnvironment === 'preview') {
-    return environment === 'development' &&
-      gitBranch === 'development' &&
-      expiryEnabled === 'true'
+    return environment === 'development' && gitBranch === 'development' && expiryEnabled === 'true'
       ? 'expiry-only'
       : 'disabled';
   }
