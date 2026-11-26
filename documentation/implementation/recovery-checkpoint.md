@@ -217,7 +217,6 @@ This closes the T00 scoped verification gates, not the public-launch security re
 - Hosted fixtures: SERVICE-T01B-TEST-01 draft, version, three Mathematics subject sections for existing fictional Charlie/Jamie/Sam, LR-T01B-TEST-1..5, TREQ-T01B-TEST-1..5, reservations and BK-T01B-TEST-1..5. Three confirmed 26–28 Nov, cancelled and pending-payment 26 Nov. Zero-value, no payment IDs, no published services. Daniel TUTOR-T01B-TEST-02 active/unlisted development_seed, zero bookings; no safeguarding approval. Retain for Calendar testing, exclude from future production and clean only linked fixture rows in FK order. No database reset. No main release. Feature OAuth cleanup pending.
 - Next T01b.2 read-only weekly Calendar and Home mini-calendar, bounded week query, clear confirmed/availability/hold distinctions, previous/next/current week, active tutor scope and tests. Verify stable development deployment and branch cleanup separately. Final visual refinement and broader T02 editing remain deferred.
 
-
 ## T01b.2 resumed verification and functional fix — 25 November 2026
 
 **Status: IN PROGRESS. PR #74 targets `development`, not `main`. Do not merge until the outstanding mobile and role checks are accepted and the final PR head passes required CI.**
@@ -230,7 +229,6 @@ This closes the T00 scoped verification gates, not the public-launch security re
 - At last check, PR head `bb57057ff0583abbd96dd357abf8bf42c0cf3b99` GitHub CI workflow run `45537123942` IN_PROGRESS and matching Vercel deployment `dpl_BaPq4sPLQUjhKowo3yiYww4ukgSE` BUILDING. Do not claim green/READY based on earlier SHA. No merge done.
 - Preview Google OAuth review: feature branch has four branch-specific variables `STUDDY_GOOGLE_AUTH_ENABLED`, `STUDDY_ENVIRONMENT`, `NEXT_PUBLIC_STUDDY_ENVIRONMENT` and `NEXT_PUBLIC_SITE_URL`; Supabase callback allowlist also needs feature branch origin. Simplification proposal (not implemented): test on protected stable `development` alias and keep branch previews for anonymous/HTTP checks, or use a single pre-authorised protected preview hostname with an explicit safe redirect strategy. Never add broad wildcard OAuth callbacks or weaken SSO merely for convenience. Record design/security approval before changing provider config.
 - **Next:** await final CI/READY exact SHA, request owner mobile screenshot and opening/hold/role checks on commit-matched protected preview; fix actionable failures; re-run CI; merge PR #74 to `development` only after acceptance; verify development alias SHA and screens; document exact merge/deployment and T02 Calendar + availability editing handover. Main remains an unreleased pre-launch baseline.
-
 
 ## T01b.2 mobile seven-day layout request — 26 November 2026
 
