@@ -282,7 +282,9 @@ export default async function TutorDashboardPage() {
                     title={`${timeLabel.format(lesson.scheduledStartAt)} · Confirmed`}
                     aria-label={`${timeLabel.format(lesson.scheduledStartAt)} · Confirmed lesson`}
                   >
-                    <span className="block truncate">{timeLabel.format(lesson.scheduledStartAt)}</span>
+                    <span className="block truncate">
+                      {timeLabel.format(lesson.scheduledStartAt)}
+                    </span>
                     <span className="hidden sm:block">Confirmed</span>
                   </span>
                 ))}
