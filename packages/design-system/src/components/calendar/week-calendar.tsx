@@ -284,7 +284,9 @@ export function WeekCalendar({
                     <span className="hidden sm:inline">{label}</span>
                     <span className="sr-only sm:hidden">{label}</span>
                   </>
-                ) : label}
+                ) : (
+                  label
+                )}
               </div>
             ))}
           </div>
@@ -437,7 +439,11 @@ export function WeekCalendar({
                           roleClasses[role],
                           interactive &&
                             'cursor-pointer transition-[filter] hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-purple',
-                          mini ? 'text-[9px] leading-none' : compact ? 'text-[9px] leading-tight sm:text-[11px]' : 'text-[11px] leading-tight',
+                          mini
+                            ? 'text-[9px] leading-none'
+                            : compact
+                              ? 'text-[9px] leading-tight sm:text-[11px]'
+                              : 'text-[11px] leading-tight',
                         )}
                         style={{
                           top: `${String(position.topPercent)}%`,
