@@ -992,7 +992,47 @@ export async function expireOverdueRequests(options: {
         .for('update', { skipLocked: true });
 
       const dueIds = due.map((row) => row.id);
+      // Unattached temporary holds have no request lifecycle to close. Their
+      // own explicit deadline is authoritative; a missing deadline is not.
+      // Keep the row for history and never release a confirmed reservation.
+      const standaloneHolds = await tx
+        .select({ id: tutorTimeReservations.id })
+        .from(tutorTimeReservations)
+        .where(
+          and(
+            isNull(tutorTimeReservations.tutorRequestId),
+            eq(tutorTimeReservations.reservationTypeCode, 'request_hold'),
+            eq(tutorTimeReservations.statusCode, 'active'),
+            lte(tutorTimeReservations.expiresAt, now),
+          ),
+        )
+        .limit(batchSize)
+        .for('update', { skipLocked: true });
+
       let releasedHolds = 0;
+      if (standaloneHolds.length > 0) {
+        const released = await tx
+          .update(tutorTimeReservations)
+          .set({
+            statusCode: 'released',
+            releasedAt: now,
+            releaseReasonCode: 'request_expired',
+            updatedAt: now,
+          })
+          .where(
+            and(
+              inArray(
+                tutorTimeReservations.id,
+                standaloneHolds.map((row) => row.id),
+              ),
+              eq(tutorTimeReservations.statusCode, 'active'),
+              eq(tutorTimeReservations.reservationTypeCode, 'request_hold'),
+              isNull(tutorTimeReservations.tutorRequestId),
+            ),
+          )
+          .returning({ id: tutorTimeReservations.id });
+        releasedHolds += released.length;
+      }
 
       if (dueIds.length > 0) {
         const expired = await tx
@@ -1024,7 +1064,7 @@ export async function expireOverdueRequests(options: {
             ),
           )
           .returning({ id: tutorTimeReservations.id });
-        releasedHolds = released.length;
+        releasedHolds += released.length;
 
         for (const row of expired) {
           await tx.insert(statusTransitions).values({
