@@ -15,21 +15,26 @@ bookableSlotsForTutors currently selects reservations by status_code='active' an
 ## Slices and acceptance
 
 ### T02a — Hold expiry and booking conflict integrity (SC-149; small/medium)
+
 1. Map creation, acceptance, selection, payment pending, timeout, withdraw and booking-confirmed paths, cron scheduling and reconciliation ownership.
 2. Make expired temporary-hold reconciliation server-authoritative and idempotent, at a transactional booking boundary, with appropriate sweep/retry integration. Keep reservation history and audit semantics; confirmed bookings remain reserved. Review null expiry and old records.
 3. Ensure both tutor calendar and family-facing bookable slots reflect the reconciled state. Protect active holds and payment processing; include race-safe expiry-vs-confirmation ordering.
 4. Tests: expired active hold vs live hold vs confirmed booking, overlapping concurrent requests, gap snapshot, cross-tutor isolation, clock boundaries/Asia? use Pacific/Auckland incl DST, retry/re-entry and malformed/legacy states. Four mandatory CI checks, SHA-matched protected preview, owner verification. Do not mutate shared hosted DB until safety rechecked.
 
 ### T02b — Recurring availability editing (small/medium)
+
 Review existing drag, resize, create and archive controls against domain validators and server-side ownership. Verify effective dates, repeat schedule, format, overlap, empty/error/loading and keyboard/mobile behaviour. Tests for other-tutor IDs and stale updates. Preserve existing editor.
 
 ### T02c — One-off availability and blocked periods (small/medium)
+
 Verify additions, removals, private notes and format scope; protect existing booked periods, show truthful state on conflicts and preserve history. Test cross-midnight, timezone, archived exceptions and privacy of family preview.
 
 ### T02d — Connected calendar projections (small)
+
 Keep Tutor Calendar, Home, availability editor and family-derived slots consistent after change, with cache revalidation as required. Preserve seven simultaneous mobile days and read-only booking geometry; avoid broad styling changes.
 
 ### T02e — Regression and close-out (medium)
+
 Validate all affected roles, current hosted synthetic tutor fixtures, empty/full states, permissions and concurrency; mandatory CI, protected verified development deployment and owner desktop/mobile acceptance. Document exact branch, PR, SHA, tests and evidence. Main release remains subject to AGENTS.md gates.
 
 ## Risk controls and scope boundaries
