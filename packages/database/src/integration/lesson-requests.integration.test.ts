@@ -2022,6 +2022,60 @@ describe.skipIf(!available)('tutor-facing projection privacy (integration)', () 
       expect(result.holdStatus).toBe('active');
     });
 
+    it('defers expiry while a payment row is locked by another transaction', async () => {
+      const scenario = await twoAcceptances(`pay-lock-${randomUUID().slice(0, 8)}`);
+      const facts = await winnerFacts(scenario.winner);
+      const selectedAt = minutesBefore(facts.startAt, 600);
+      await selectAcceptedTutorRequest({
+        reference: scenario.ilrReference,
+        studentProfileIds: scenario.studentProfileIds,
+        tutorRequestReference: scenario.winner,
+        actorUserId: scenario.fixture.requesterUserId,
+        correlationId: `cor_${randomUUID()}`,
+        now: selectedAt,
+      });
+      await writePaymentFor(scenario.winner, 'requires_payment');
+
+      const { sql, db } = createDatabaseClient();
+      const past = new Date(selectedAt.getTime() + 61 * 60_000);
+      try {
+        await db.transaction(async (tx) => {
+          await tx
+            .select({ id: payments.id })
+            .from(payments)
+            .where(eq(payments.tutorRequestId, facts.id))
+            .for('update');
+
+          await expireOverdueRequests({ correlationId: `cor_${randomUUID()}`, now: past });
+
+          const [hold] = await tx
+            .select()
+            .from(tutorTimeReservations)
+            .where(eq(tutorTimeReservations.tutorRequestId, facts.id));
+          expect(hold!.statusCode).toBe('active');
+
+          await tx
+            .update(payments)
+            .set({ statusCode: 'processing' })
+            .where(eq(payments.tutorRequestId, facts.id));
+        });
+
+        await expireOverdueRequests({ correlationId: `cor_${randomUUID()}`, now: past });
+        const [request] = await db
+          .select()
+          .from(tutorRequests)
+          .where(eq(tutorRequests.id, facts.id));
+        const [hold] = await db
+          .select()
+          .from(tutorTimeReservations)
+          .where(eq(tutorTimeReservations.tutorRequestId, facts.id));
+        expect(request!.statusCode).toBe('selected');
+        expect(hold!.statusCode).toBe('active');
+      } finally {
+        await sql.end();
+      }
+    });
+
     /** A terminal payment must not shield an abandoned request forever. */
     it('still lapses when the only payment failed, cancelled or expired', async () => {
       for (const terminal of ['failed', 'cancelled', 'expired']) {
