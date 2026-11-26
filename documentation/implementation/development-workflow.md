@@ -29,7 +29,6 @@ R01 repository/deployment audit; R02 recover Tutor design and functionality; R03
 
 T01 Home and navigation, real scheduled bookings; T02 Calendar and availability; T03 Students; T04 Lesson delivery and learning (split); T05 Earnings (confirm eligibility rules); T06 Resources; T07 Profile, services and onboarding (split). Sequence is proposed and may change with product owner feedback. Do not defer launch-critical security or safeguarding.
 
-
 ## Local pre-commit validation (T01b.2)
 
 Run once after cloning (and after any fresh clone) from the repository root:
