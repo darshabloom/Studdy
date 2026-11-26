@@ -1251,28 +1251,79 @@ export async function expireOverdueRequests(options: {
         )
         .limit(batchSize);
 
-      const overdueIds = overdueSelections.map((row) => row.id);
-      const lapsedSelections =
-        overdueIds.length === 0
-          ? []
-          : await tx
-              .update(tutorRequests)
-              .set({
-                statusCode: 'closed',
-                closedAt: now,
-                closeReasonCode: 'payment_window_lapsed',
-                updatedAt: now,
-              })
-              .where(
+      // The candidate query is only a hint. Fulfilment locks the payment
+      // before the ILR and reservation. Use the same order, skipping busy
+      // rows rather than waiting on an in-flight provider transaction.
+      const lapsedSelections: { id: string; ilrId: string }[] = [];
+      for (const candidate of overdueSelections) {
+        const paymentRows = await tx
+          .select({ id: payments.id })
+          .from(payments)
+          .where(eq(payments.tutorRequestId, candidate.id));
+        const lockedPayments = await tx
+          .select({ id: payments.id, status: payments.statusCode })
+          .from(payments)
+          .where(eq(payments.tutorRequestId, candidate.id))
+          .for('update', { skipLocked: true });
+        if (
+          lockedPayments.length !== paymentRows.length ||
+          lockedPayments.some((row) =>
+            PAYMENT_IN_FLIGHT_STATUSES.some((status) => status === row.status),
+          )
+        ) {
+          continue;
+        }
+
+        const [ilr] = await tx
+          .select({ id: intendedLessonRequests.id, status: intendedLessonRequests.statusCode })
+          .from(intendedLessonRequests)
+          .where(eq(intendedLessonRequests.id, candidate.ilrId))
+          .for('update', { skipLocked: true });
+        if (ilr?.status !== 'awaiting_payment') continue;
+
+        // Check again after taking the ILR lock, including any payment that
+        // appeared since the initial candidate query.
+        const currentPayments = await tx
+          .select({ id: payments.id, status: payments.statusCode })
+          .from(payments)
+          .where(eq(payments.tutorRequestId, candidate.id));
+        if (
+          currentPayments.some(
+            (row) =>
+              !lockedPayments.some((locked) => locked.id === row.id) ||
+              PAYMENT_IN_FLIGHT_STATUSES.some((status) => status === row.status),
+          )
+        ) {
+          continue;
+        }
+
+        const [closed] = await tx
+          .update(tutorRequests)
+          .set({
+            statusCode: 'closed',
+            closedAt: now,
+            closeReasonCode: 'payment_window_lapsed',
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(tutorRequests.id, candidate.id),
+              eq(tutorRequests.statusCode, 'selected'),
+              or(
                 and(
-                  inArray(tutorRequests.id, overdueIds),
-                  // Re-guarded rather than trusted: the select above is not a
-                  // lock, so a concurrent selection or fulfilment between the
-                  // two statements must lose here rather than be overwritten.
-                  eq(tutorRequests.statusCode, 'selected'),
+                  isNotNull(tutorRequests.paymentDeadlineAt),
+                  lte(tutorRequests.paymentDeadlineAt, now),
                 ),
-              )
-              .returning({ id: tutorRequests.id, ilrId: tutorRequests.intendedLessonRequestId });
+                and(
+                  isNull(tutorRequests.paymentDeadlineAt),
+                  lte(tutorRequests.acceptanceHoldExpiresAt, now),
+                ),
+              ),
+            ),
+          )
+          .returning({ id: tutorRequests.id, ilrId: tutorRequests.intendedLessonRequestId });
+        if (closed !== undefined) lapsedSelections.push(closed);
+      }
 
       if (lapsedSelections.length > 0) {
         const releasedSelected = await tx
@@ -1290,6 +1341,7 @@ export async function expireOverdueRequests(options: {
                 lapsedSelections.map((row) => row.id),
               ),
               eq(tutorTimeReservations.statusCode, 'active'),
+              eq(tutorTimeReservations.reservationTypeCode, 'request_hold'),
             ),
           )
           .returning({ id: tutorTimeReservations.id });
