@@ -19,6 +19,10 @@ import { Inngest } from 'inngest';
  * `NEXT_PUBLIC_*` — a signing key in the browser bundle would let anyone invoke
  * Studdy's scheduled work.
  */
+const hostedDevelopment =
+  process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_GIT_COMMIT_REF === 'development';
+
 export const inngest = new Inngest({
   id: 'studdy',
+  ...(hostedDevelopment ? { isDev: false } : {}),
 });
