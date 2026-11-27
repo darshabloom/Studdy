@@ -21,4 +21,8 @@ import { Inngest } from 'inngest';
  */
 export const inngest = new Inngest({
   id: 'studdy',
+  ...(process.env.VERCEL_ENV === 'preview' &&
+  process.env.VERCEL_GIT_COMMIT_REF === 'development'
+    ? { isDev: false }
+    : {}),
 });
