@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { serve, expiry, handler } = vi.hoisted(() => ({
@@ -50,9 +51,9 @@ describe('development scheduler endpoint', () => {
     vi.stubEnv(key, value);
     const route = await import('./route');
     for (const method of ['GET', 'POST', 'PUT'] as const) {
-      const request = new Request('https://example.test/api/inngest-development', { method });
+      const request = new NextRequest('https://example.test/api/inngest-development', { method });
       const response = await route[method](
-        request as Parameters<typeof route.GET>[0],
+        request,
         {} as Parameters<typeof route.GET>[1],
       );
       expect(response.status).toBe(404);
