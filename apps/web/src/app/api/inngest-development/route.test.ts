@@ -52,10 +52,7 @@ describe('development scheduler endpoint', () => {
     const route = await import('./route');
     for (const method of ['GET', 'POST', 'PUT'] as const) {
       const request = new NextRequest('https://example.test/api/inngest-development', { method });
-      const response = await route[method](
-        request,
-        {} as Parameters<typeof route.GET>[1],
-      );
+      const response = await route[method](request, {} as Parameters<typeof route.GET>[1]);
       expect(response.status).toBe(404);
     }
     expect(serve).not.toHaveBeenCalled();
