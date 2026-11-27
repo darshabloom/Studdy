@@ -49,9 +49,14 @@ describe('development scheduler endpoint', () => {
   ])('rejects all methods when %s is %s', async (key, value) => {
     vi.stubEnv(key, value);
     const route = await import('./route');
-    expect((await route.GET()).status).toBe(404);
-    expect((await route.POST()).status).toBe(404);
-    expect((await route.PUT()).status).toBe(404);
+    for (const method of ['GET', 'POST', 'PUT'] as const) {
+      const request = new Request('https://example.test/api/inngest-development', { method });
+      const response = await route[method](
+        request as Parameters<typeof route.GET>[0],
+        {} as Parameters<typeof route.GET>[1],
+      );
+      expect(response.status).toBe(404);
+    }
     expect(serve).not.toHaveBeenCalled();
   });
 
