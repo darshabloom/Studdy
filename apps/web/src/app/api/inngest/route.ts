@@ -67,7 +67,5 @@ export const { GET, POST, PUT } = serve({
           drainOutboxScheduled,
           settleRefundsScheduled,
         ]
-      : mode === 'expiry-only'
-        ? [expireRequestsScheduled]
-        : [],
+      : [],
 });
